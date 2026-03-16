@@ -11,15 +11,22 @@ Luego abrí market-scanner.html en tu browser.
 El servidor corre en http://localhost:5000
 """
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import yfinance as yf
 import pandas as pd
 import numpy as np
 import traceback
+import os
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)  # Permite que el HTML local llame al servidor
+
+# ─── SERVIR EL FRONTEND ───────────────────────────────────────────────────────
+
+@app.route('/')
+def serve_index():
+    return send_from_directory('.', 'index.html')
 
 # ─── INDICADORES TÉCNICOS ─────────────────────────────────────────────────────
 
