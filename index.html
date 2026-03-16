@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXUS SCANNER — Live</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#070b0f;--bg2:#0d1318;--bg3:#111921;--bg4:#172030;
+  --border:#1e2d3d;--border2:#253545;
+  --text:#c8d8e8;--text-dim:#5a7a8a;--text-bright:#e8f4ff;
+  --accent:#00d4ff;--accent2:#0099cc;
+  --green:#00e676;--green2:#00b84a;
+  --red:#ff3d5a;--red2:#cc1a30;
+  --yellow:#ffd600;--yellow2:#b39a00;
+  --purple:#b44aff;--orange:#ff8c00;
+  --mono:'JetBrains Mono',monospace;
+  --head:'Inter',sans-serif;
+  --body:'Inter',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--body);font-size:15px;min-height:100vh}
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.025) 2px,rgba(0,0,0,0.025) 4px);pointer-events:none;z-index:9999}
+
+/* TOPBAR */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;gap:12px;flex-wrap:wrap}
+.logo{font-family:var(--head);font-weight:900;font-size:26px;letter-spacing:4px;color:var(--accent);text-shadow:0 0 20px rgba(0,212,255,0.4);white-space:nowrap}
+.logo span{color:var(--text-dim);font-weight:300}
+.status-bar{display:flex;align-items:center;gap:18px;font-family:var(--mono);font-size:13px;flex-wrap:wrap}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 2s infinite}
+.dot.loading{background:var(--yellow);box-shadow:0 0 6px var(--yellow)}
+.dot.err{background:var(--red);box-shadow:0 0 6px var(--red);animation:none}
+.dot.off{background:var(--text-dim);box-shadow:none;animation:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+.clock{color:var(--accent)}
+.topbar-actions{display:flex;gap:8px;align-items:center;flex-shrink:0}
+
+/* SERVER STATUS BANNER */
+.server-banner{background:rgba(255,61,90,0.12);border:1px solid var(--red2);border-radius:2px;padding:10px 16px;font-family:var(--mono);font-size:13px;color:var(--red);line-height:1.7;margin-bottom:0}
+.server-banner.ok{background:rgba(0,230,118,0.08);border-color:var(--green2);color:var(--green)}
+.server-banner strong{color:var(--text-bright)}
+
+/* TICKER TAPE */
+.tape-wrap{background:var(--bg2);border-bottom:1px solid var(--border);overflow:hidden;height:26px;display:flex;align-items:center}
+.tape-inner{display:flex;gap:28px;white-space:nowrap;animation:tape 80s linear infinite;font-family:var(--mono);font-size:13px;padding:0 20px}
+@keyframes tape{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.ti{color:var(--text-dim)}.ti .s{color:var(--text-bright);margin-right:4px}.ti .u{color:var(--green)}.ti .d{color:var(--red)}
+
+/* LAYOUT */
+.layout{display:grid;grid-template-columns:255px 1fr;min-height:calc(100vh - 90px)}
+.sidebar{background:var(--bg2);border-right:1px solid var(--border);padding:14px;display:flex;flex-direction:column;gap:13px;overflow-y:auto;max-height:calc(100vh - 90px);position:sticky;top:60px}
+.content{padding:14px;display:flex;flex-direction:column;gap:14px;overflow-y:auto}
+
+/* SIDEBAR */
+.sb-label{font-family:var(--head);font-size:12px;font-weight:700;letter-spacing:3px;color:var(--text-dim);text-transform:uppercase;padding-bottom:5px;border-bottom:1px solid var(--border);margin-bottom:3px}
+.sb-section{display:flex;flex-direction:column;gap:7px}
+textarea.ti-area{background:var(--bg3);border:1px solid var(--border2);color:var(--text-bright);font-family:var(--mono);font-size:14px;padding:9px;resize:vertical;min-height:190px;width:100%;border-radius:2px;outline:none;line-height:1.9;transition:border-color .2s}
+textarea.ti-area:focus{border-color:var(--accent)}
+.sel{background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:6px 9px;border-radius:2px;font-family:var(--mono);font-size:13px;width:100%;outline:none}
+.sel:focus{border-color:var(--accent)}
+.range-wrap{display:flex;flex-direction:column;gap:2px}
+.range-wrap label{font-size:12px;color:var(--text-dim);letter-spacing:1px}
+.range-wrap input[type=range]{accent-color:var(--accent);width:100%;cursor:pointer}
+.btn{font-family:var(--head);font-weight:700;font-size:13px;letter-spacing:2px;text-transform:uppercase;padding:8px 14px;border:1px solid;cursor:pointer;transition:all .2s;background:transparent;border-radius:2px;white-space:nowrap}
+.btn-a{border-color:var(--accent);color:var(--accent)}.btn-a:hover{background:var(--accent);color:var(--bg)}
+.btn-g{border-color:var(--green);color:var(--green)}.btn-g:hover{background:var(--green);color:var(--bg)}
+.btn-r{border-color:var(--red);color:var(--red)}.btn-r:hover{background:var(--red);color:var(--bg)}
+.btn-y{border-color:var(--yellow);color:var(--yellow)}.btn-y:hover{background:var(--yellow);color:var(--bg)}
+.btn-sm{font-size:11px;padding:6px 11px;letter-spacing:1px}
+.btn-full{width:100%;text-align:center}
+
+/* PROGRESS BAR */
+.progress-wrap{background:var(--bg3);border:1px solid var(--border);border-radius:2px;height:5px;overflow:hidden;display:none}
+.progress-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .3s;width:0%}
+
+/* TABS */
+.tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:14px}
+.tab{font-family:var(--head);font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:9px 16px;cursor:pointer;color:var(--text-dim);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .2s}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab:hover{color:var(--text)}
+.tab-panel{display:none}.tab-panel.active{display:block}
+
+/* SCANNER CARDS */
+.sc-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
+.sc-card{background:var(--bg2);border:1px solid var(--border);border-radius:2px;padding:12px;position:relative;overflow:hidden}
+.sc-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.sc-card.c1::before{background:var(--green)}.sc-card.c2::before{background:var(--red)}
+.sc-card.c3::before{background:var(--yellow)}.sc-card.c4::before{background:var(--purple)}.sc-card.c5::before{background:var(--orange)}
+.sc-lbl{font-family:var(--head);font-size:12px;font-weight:700;letter-spacing:1.5px;color:var(--text-dim);margin-bottom:6px;text-transform:uppercase}
+.sc-num{font-family:var(--head);font-size:30px;font-weight:900;line-height:1}
+.c1 .sc-num{color:var(--green)}.c2 .sc-num{color:var(--red)}.c3 .sc-num{color:var(--yellow)}.c4 .sc-num{color:var(--purple)}.c5 .sc-num{color:var(--orange)}
+.sc-tags{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;font-family:var(--mono);font-size:12px}
+.sc-tag{background:rgba(255,255,255,0.04);border:1px solid var(--border);padding:1px 5px;border-radius:2px;color:var(--text-dim)}
+
+/* SUMMARY */
+.sum-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:14px}
+.sum-card{background:var(--bg2);border:1px solid var(--border);border-radius:2px;padding:10px 12px}
+.sum-lbl{font-family:var(--head);font-size:11px;font-weight:700;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase;margin-bottom:4px}
+.sum-val{font-family:var(--mono);font-size:24px;color:var(--text-bright)}
+.sum-sub{font-size:12px;color:var(--text-dim);font-family:var(--mono);margin-top:2px}
+
+/* TABLES */
+.tbl-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:2px;overflow:hidden;margin-bottom:4px}
+table.dt{width:100%;border-collapse:collapse;table-layout:fixed}
+table.dt th{background:var(--bg3);color:var(--text-dim);font-family:var(--head);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:8px 10px;text-align:right;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap}
+table.dt th:first-child{text-align:left}
+table.dt th:hover{color:var(--accent)}
+table.dt td{padding:7px 10px;text-align:right;border-bottom:1px solid rgba(30,45,61,0.5);font-family:var(--mono);font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+table.dt td:first-child{text-align:left}
+table.dt tr:last-child td{border-bottom:none}
+table.dt tr:hover td{background:rgba(0,212,255,0.04)}
+.chip{display:inline-block;padding:2px 7px;border-radius:2px;font-size:12px;font-family:var(--mono);border:1px solid}
+.cg{color:var(--green);border-color:var(--green2);background:rgba(0,230,118,0.08)}
+.cr{color:var(--red);border-color:var(--red2);background:rgba(255,61,90,0.08)}
+.cy{color:var(--yellow);border-color:var(--yellow2);background:rgba(255,214,0,0.08)}
+.rsi-wrap{display:flex;align-items:center;gap:5px;justify-content:flex-end}
+.rsi-bar{width:42px;height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;border:1px solid var(--border)}
+.rsi-fill{height:100%;border-radius:2px}
+.tk-cell{display:flex;align-items:center;gap:5px}
+.sec-bar{width:3px;height:18px;border-radius:2px;flex-shrink:0}
+.tk-sym{font-family:var(--head);font-weight:700;font-size:15px;color:var(--text-bright);letter-spacing:.5px}
+.tk-err{font-family:var(--mono);font-size:10px;color:var(--red)}
+.sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
+.sec-title{font-family:var(--head);font-size:15px;font-weight:900;letter-spacing:3px;text-transform:uppercase;color:var(--text-bright);display:flex;align-items:center;gap:8px}
+.sec-cnt{font-family:var(--mono);font-size:13px;color:var(--text-dim);background:var(--bg3);padding:2px 8px;border:1px solid var(--border);border-radius:2px}
+.movers-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mv-lbl{font-family:var(--head);font-size:12px;font-weight:700;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px}
+.exp-bar{display:flex;align-items:center;justify-content:space-between;background:var(--bg2);border:1px solid var(--border);border-radius:2px;padding:9px 13px;margin-top:4px}
+.exp-info{font-family:var(--mono);font-size:13px;color:var(--text-dim)}
+.exp-actions{display:flex;gap:8px}
+/* flash */
+@keyframes flu{0%{background:rgba(0,230,118,0.18)}100%{background:transparent}}
+@keyframes fld{0%{background:rgba(255,61,90,0.18)}100%{background:transparent}}
+.flu{animation:flu .8s forwards}.fld{animation:fld .8s forwards}
+/* TRADINGVIEW MODAL */
+.tv-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:1000;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.tv-modal-overlay.open{display:flex}
+.tv-modal{background:var(--bg2);border:1px solid var(--border2);border-radius:4px;width:90vw;max-width:1100px;height:82vh;display:flex;flex-direction:column;overflow:hidden}
+.tv-modal-header{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid var(--border);flex-shrink:0}
+.tv-modal-title{font-family:var(--head);font-weight:900;font-size:18px;letter-spacing:3px;color:var(--text-bright);display:flex;align-items:center;gap:10px}
+.tv-modal-sym{color:var(--accent)}
+.tv-modal-actions{display:flex;gap:8px;align-items:center}
+.tv-modal-body{flex:1;overflow:hidden}
+.tv-modal-body iframe{width:100%;height:100%;border:none;display:block}
+.tv-close{background:none;border:1px solid var(--border2);color:var(--text-dim);font-size:18px;cursor:pointer;padding:4px 10px;border-radius:2px;transition:all .15s;font-family:var(--mono);line-height:1}
+.tv-close:hover{border-color:var(--red);color:var(--red)}
+.tv-btn{display:inline-flex;align-items:center;gap:4px;background:rgba(0,212,255,0.08);border:1px solid var(--accent2);color:var(--accent);font-family:var(--mono);font-size:12px;padding:3px 8px;border-radius:2px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.tv-btn:hover{background:rgba(0,212,255,0.18)}
+/* SORT INDICATORS */
+table.dt th{position:relative}
+table.dt th .sort-icon{margin-left:5px;opacity:0.3;font-size:10px}
+table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color:var(--accent)}
+.ticker-manager{display:flex;flex-direction:column;gap:6px}
+.ticker-add-row{display:flex;gap:6px}
+.ticker-input{background:var(--bg3);border:1px solid var(--border2);color:var(--text-bright);font-family:var(--mono);font-size:14px;padding:7px 10px;border-radius:2px;outline:none;flex:1;text-transform:uppercase;transition:border-color .2s}
+.ticker-input:focus{border-color:var(--accent)}
+.ticker-input::placeholder{color:var(--text-dim);text-transform:none}
+.ticker-list{display:flex;flex-direction:column;gap:4px;max-height:280px;overflow-y:auto}
+.ticker-item{display:flex;align-items:center;justify-content:space-between;background:var(--bg3);border:1px solid var(--border);border-radius:2px;padding:5px 9px;transition:border-color .15s}
+.ticker-item:hover{border-color:var(--border2)}
+.ticker-item-sym{font-family:var(--head);font-weight:700;font-size:14px;color:var(--text-bright);letter-spacing:.5px}
+.ticker-item-remove{background:none;border:1px solid transparent;color:var(--text-dim);font-size:14px;cursor:pointer;padding:2px 6px;border-radius:2px;line-height:1;transition:all .15s;font-family:var(--mono)}
+.ticker-item-remove:hover{border-color:var(--red);color:var(--red);background:rgba(255,61,90,0.08)}
+.ticker-count{font-family:var(--mono);font-size:12px;color:var(--text-dim);text-align:center;padding:2px 0}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+@media(max-width:1100px){.sc-grid{grid-template-columns:repeat(3,1fr)}.sum-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:800px){.layout{grid-template-columns:1fr}.sidebar{max-height:none;position:relative}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">NEXUS <span>SCANNER</span></div>
+  <div class="status-bar">
+    <span><span class="dot off" id="dot"></span>&nbsp;<span id="stxt" style="color:var(--text-dim)">DESCONECTADO</span></span>
+    <span class="clock" id="clk">--:--:--</span>
+    <span style="color:var(--text-dim)">Próx. refresh: <span id="ctdn" style="color:var(--accent)">--</span>s</span>
+    <span id="progress-txt" style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">0 tickers</span>
+  </div>
+  <div class="topbar-actions">
+    <button class="btn btn-a btn-sm" onclick="doRefresh()">↺ REFRESH</button>
+    <button class="btn btn-y btn-sm" id="autoBtn" onclick="toggleAuto()">⏸ AUTO</button>
+  </div>
+</div>
+
+<!-- INSTRUCCIONES SI EL SERVIDOR NO ESTÁ CORRIENDO -->
+<div id="serverBanner" class="server-banner">
+  <strong>⚠ Servidor no detectado.</strong> Para obtener datos reales de Yahoo Finance:<br>
+  1. Abrí una terminal en la carpeta donde descargaste los archivos<br>
+  2. Ejecutá: <strong>pip install yfinance flask flask-cors pandas numpy</strong><br>
+  3. Luego: <strong>python server.py</strong><br>
+  4. Recargá esta página — el dashboard se conectará automáticamente.
+</div>
+
+<div class="tape-wrap"><div class="tape-inner" id="tape">Esperando datos...</div></div>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="sb-section">
+      <div class="sb-label">Tickers</div>
+      <div class="ticker-manager">
+        <div class="ticker-add-row">
+          <input class="ticker-input" id="tickerInputNew" placeholder="Ej: AAPL" maxlength="10"
+            onkeydown="if(event.key==='Enter')addTickerFromInput()">
+          <button class="btn btn-a btn-sm" onclick="addTickerFromInput()" title="Agregar ticker">＋</button>
+        </div>
+        <div class="ticker-list" id="tickerList"></div>
+        <div class="ticker-count" id="tickerCount">0 tickers</div>
+      </div>
+      <!-- textarea hidden para compatibilidad con el resto del código -->
+      <textarea class="ti-area" id="tickerBox" style="display:none"></textarea>
+      <button class="btn btn-a btn-full" onclick="loadAndRefresh()">▶ CARGAR TICKERS</button>
+      <div id="saveStatus" style="font-family:var(--mono);font-size:12px;color:var(--text-dim);text-align:center;height:14px"></div>
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <div id="loadStatus" style="font-family:var(--mono);font-size:12px;color:var(--text-dim);text-align:center"></div>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-label">Auto Refresh</div>
+      <select class="sel" id="interval">
+        <option value="60" selected>1 minuto</option>
+        <option value="300">5 minutos</option>
+        <option value="600">10 minutos</option>
+        <option value="1800">30 minutos</option>
+      </select>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-label">Filtros</div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:10px;color:var(--text-dim)">SECTOR</label>
+        <select class="sel" id="fSector" onchange="applyFilters()">
+          <option value="">Todos los sectores</option>
+          <option>ETF</option><option>Tecnología</option><option>Energía</option>
+          <option>Consumo</option><option>Salud</option><option>Industriales</option>
+          <option>Finanzas</option><option>Comunicación</option>
+          <option>Materiales</option><option>Utilities</option>
+        </select>
+      </div>
+      <div class="range-wrap">
+        <label>RSI MIN: <span id="rmiV" style="color:var(--accent)">0</span></label>
+        <input type="range" id="rmi" min="0" max="100" value="0" oninput="document.getElementById('rmiV').textContent=this.value;applyFilters()">
+      </div>
+      <div class="range-wrap">
+        <label>RSI MAX: <span id="rmxV" style="color:var(--accent)">100</span></label>
+        <input type="range" id="rmx" min="0" max="100" value="100" oninput="document.getElementById('rmxV').textContent=this.value;applyFilters()">
+      </div>
+      <div class="range-wrap">
+        <label>DIST EMA200 MIN: <span id="dmiV" style="color:var(--accent)">-50</span>%</label>
+        <input type="range" id="dmi" min="-50" max="50" value="-50" oninput="document.getElementById('dmiV').textContent=this.value;applyFilters()">
+      </div>
+      <div class="range-wrap">
+        <label>DIST EMA200 MAX: <span id="dmxV" style="color:var(--accent)">50</span>%</label>
+        <input type="range" id="dmx" min="-50" max="50" value="50" oninput="document.getElementById('dmxV').textContent=this.value;applyFilters()">
+      </div>
+      <button class="btn btn-r btn-full btn-sm" onclick="resetFilters()">✕ RESET FILTROS</button>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-label">Ordenar</div>
+      <select class="sel" id="sortBy" onchange="applyFilters()">
+        <option value="">Sector (default)</option>
+        <option value="rsi">RSI</option>
+        <option value="chgPct">% Cambio</option>
+        <option value="distEma200">Dist EMA200</option>
+        <option value="marketCap">Capitalización</option>
+        <option value="mom3m">Momentum 3M</option>
+        <option value="volume">Volumen</option>
+      </select>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-label">Exportar</div>
+      <button class="btn btn-g btn-full btn-sm" onclick="exportCSV()">⬇ EXPORTAR CSV</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('scanner',this)">SCANNER</div>
+      <div class="tab" onclick="switchTab('sectors',this)">SECTORES</div>
+      <div class="tab" onclick="switchTab('technical',this)">TÉCNICO</div>
+      <div class="tab" onclick="switchTab('all',this)">TODOS</div>
+    </div>
+
+    <!-- SCANNER TAB -->
+    <div class="tab-panel active" id="tab-scanner">
+      <div class="sum-grid">
+        <div class="sum-card"><div class="sum-lbl">Tickers</div><div class="sum-val" id="sTotal">0</div><div class="sum-sub">cargados</div></div>
+        <div class="sum-card"><div class="sum-lbl">Alcistas</div><div class="sum-val" style="color:var(--green)" id="sUp">0</div><div class="sum-sub">chg &gt; 0</div></div>
+        <div class="sum-card"><div class="sum-lbl">Bajistas</div><div class="sum-val" style="color:var(--red)" id="sDn">0</div><div class="sum-sub">chg &lt; 0</div></div>
+        <div class="sum-card"><div class="sum-lbl">RSI Prom</div><div class="sum-val" id="sRsi">--</div><div class="sum-sub">media</div></div>
+        <div class="sum-card"><div class="sum-lbl">Sobre EMA200</div><div class="sum-val" style="color:var(--green)" id="sAbove">0</div><div class="sum-sub">tickers</div></div>
+        <div class="sum-card"><div class="sum-lbl">Bajo EMA200</div><div class="sum-val" style="color:var(--red)" id="sBelow">0</div><div class="sum-sub">tickers</div></div>
+      </div>
+      <div class="sc-grid">
+        <div class="sc-card c1"><div class="sc-lbl">RSI &lt; 30 Sobrevendido</div><div class="sc-num" id="n1">0</div><div class="sc-tags" id="t1"></div></div>
+        <div class="sc-card c2"><div class="sc-lbl">RSI &gt; 70 Sobrecomprado</div><div class="sc-num" id="n2">0</div><div class="sc-tags" id="t2"></div></div>
+        <div class="sc-card c3"><div class="sc-lbl">Cerca Máximos (5%)</div><div class="sc-num" id="n3">0</div><div class="sc-tags" id="t3"></div></div>
+        <div class="sc-card c4"><div class="sc-lbl">Cerca EMA200 (±3%)</div><div class="sc-num" id="n4">0</div><div class="sc-tags" id="t4"></div></div>
+        <div class="sc-card c5"><div class="sc-lbl">Volumen Inusual 2x</div><div class="sc-num" id="n5">0</div><div class="sc-tags" id="t5"></div></div>
+      </div>
+      <div class="movers-grid">
+        <div>
+          <div class="mv-lbl">🟢 MAYORES SUBIDAS</div>
+          <div class="tbl-wrap"><table class="dt"><thead><tr>
+            <th style="width:80px">Ticker</th><th>Precio</th><th>% Día</th><th>RSI</th><th>Volumen</th>
+          </tr></thead><tbody id="bGain"></tbody></table></div>
+        </div>
+        <div>
+          <div class="mv-lbl">🔴 MAYORES CAÍDAS</div>
+          <div class="tbl-wrap"><table class="dt"><thead><tr>
+            <th style="width:80px">Ticker</th><th>Precio</th><th>% Día</th><th>RSI</th><th>Volumen</th>
+          </tr></thead><tbody id="bLoss"></tbody></table></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTORS TAB -->
+    <div class="tab-panel" id="tab-sectors"><div id="secContainer"></div></div>
+
+    <!-- TECHNICAL TAB -->
+    <div class="tab-panel" id="tab-technical">
+      <div class="tbl-wrap"><table class="dt" id="techTable">
+        <thead><tr>
+          <th style="width:90px" data-field="symbol" onclick="ts('symbol',this)">Ticker<span class="sort-icon">⇅</span></th>
+          <th data-field="price" onclick="ts('price',this)">Precio<span class="sort-icon">⇅</span></th>
+          <th data-field="chgPct" onclick="ts('chgPct',this)">% Día<span class="sort-icon">⇅</span></th>
+          <th data-field="rsi" onclick="ts('rsi',this)">RSI(14)<span class="sort-icon">⇅</span></th>
+          <th data-field="ema50" onclick="ts('ema50',this)">EMA 50<span class="sort-icon">⇅</span></th>
+          <th data-field="ema200" onclick="ts('ema200',this)">EMA 200<span class="sort-icon">⇅</span></th>
+          <th data-field="distEma50" onclick="ts('distEma50',this)">Dist EMA50%<span class="sort-icon">⇅</span></th>
+          <th data-field="distEma200" onclick="ts('distEma200',this)">Dist EMA200%<span class="sort-icon">⇅</span></th>
+          <th data-field="sma50" onclick="ts('sma50',this)">SMA 50<span class="sort-icon">⇅</span></th>
+          <th data-field="sma200" onclick="ts('sma200',this)">SMA 200<span class="sort-icon">⇅</span></th>
+          <th data-field="mom3m" onclick="ts('mom3m',this)">Mom 3M<span class="sort-icon">⇅</span></th>
+          <th data-field="mom6m" onclick="ts('mom6m',this)">Mom 6M<span class="sort-icon">⇅</span></th>
+          <th data-field="beta" onclick="ts('beta',this)">Beta<span class="sort-icon">⇅</span></th>
+          <th style="width:70px">Spark</th>
+          <th style="width:60px">Chart</th>
+        </tr></thead>
+        <tbody id="techBody"></tbody>
+      </table></div>
+    </div>
+
+    <!-- ALL TAB -->
+    <div class="tab-panel" id="tab-all">
+      <div class="tbl-wrap"><table class="dt">
+        <thead><tr>
+          <th style="width:80px" onclick="ts('symbol',this)">Ticker<span class="sort-icon">⇅</span></th>
+          <th onclick="ts('price',this)">Precio<span class="sort-icon">⇅</span></th>
+          <th onclick="ts('chgPct',this)">% Día<span class="sort-icon">⇅</span></th>
+          <th onclick="ts('rsi',this)">RSI<span class="sort-icon">⇅</span></th>
+          <th onclick="ts('distEma200',this)">Dist EMA200<span class="sort-icon">⇅</span></th>
+          <th onclick="ts('pe',this)">P/E<span class="sort-icon">⇅</span></th>
+          <th onclick="ts('marketCap',this)">Cap. Mkt<span class="sort-icon">⇅</span></th>
+          <th onclick="ts('volume',this)">Volumen<span class="sort-icon">⇅</span></th>
+          <th onclick="ts('avgVol20',this)">VolProm20<span class="sort-icon">⇅</span></th>
+          <th onclick="ts('beta',this)">Beta<span class="sort-icon">⇅</span></th>
+          <th onclick="ts('divYield',this)">Div%<span class="sort-icon">⇅</span></th>
+          <th onclick="ts('mom3m',this)">Mom3M<span class="sort-icon">⇅</span></th>
+          <th onclick="ts('mom6m',this)">Mom6M<span class="sort-icon">⇅</span></th>
+          <th>Spark</th>
+        </tr></thead>
+        <tbody id="allBody"></tbody>
+      </table></div>
+    </div>
+
+    <div class="exp-bar">
+      <div class="exp-info" id="expInfo">0 tickers | --</div>
+      <div class="exp-actions">
+        <button class="btn btn-g btn-sm" onclick="exportCSV()">⬇ CSV</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TRADINGVIEW MODAL -->
+<div class="tv-modal-overlay" id="tvModalOverlay" onclick="closeTVModal(event)">
+  <div class="tv-modal">
+    <div class="tv-modal-header">
+      <div class="tv-modal-title">
+        <span>📈</span>
+        <span class="tv-modal-sym" id="tvModalSym">--</span>
+        <span style="color:var(--text-dim);font-weight:300;font-size:14px">— TradingView</span>
+      </div>
+      <div class="tv-modal-actions">
+        <a id="tvOpenLink" href="#" target="_blank" class="btn btn-a btn-sm" style="text-decoration:none">↗ ABRIR EN TV</a>
+        <button class="tv-close" onclick="document.getElementById('tvModalOverlay').classList.remove('open')">✕</button>
+      </div>
+    </div>
+    <div class="tv-modal-body" id="tvModalBody"></div>
+  </div>
+</div>
+
+<script>
+var API = 'http://localhost:5000';
+
+var SECTORS = {
+  SPY:'ETF',QQQ:'ETF',XLE:'ETF',GLD:'ETF',TLT:'ETF',IWM:'ETF',DIA:'ETF',VTI:'ETF',
+  ARKK:'ETF',XLF:'ETF',XLK:'ETF',XLV:'ETF',XLI:'ETF',XLY:'ETF',XLP:'ETF',XLU:'ETF',XLB:'ETF',
+  AAPL:'Tecnología',MSFT:'Tecnología',NVDA:'Tecnología',GOOGL:'Tecnología',GOOG:'Tecnología',
+  META:'Tecnología',TSLA:'Tecnología',AMZN:'Tecnología',AMD:'Tecnología',INTC:'Tecnología',
+  CRM:'Tecnología',ORCL:'Tecnología',ADBE:'Tecnología',QCOM:'Tecnología',AVGO:'Tecnología',
+  NFLX:'Comunicación',DIS:'Comunicación',CMCSA:'Comunicación',T:'Comunicación',VZ:'Comunicación',
+  CVX:'Energía',XOM:'Energía',VIST:'Energía',COP:'Energía',EOG:'Energía',SLB:'Energía',OXY:'Energía',
+  JPM:'Finanzas',BAC:'Finanzas',WFC:'Finanzas',GS:'Finanzas',MS:'Finanzas',V:'Finanzas',MA:'Finanzas',
+  JNJ:'Salud',UNH:'Salud',LLY:'Salud',PFE:'Salud',ABBV:'Salud',MRK:'Salud',
+  WMT:'Consumo',COST:'Consumo',TGT:'Consumo',HD:'Consumo',MCD:'Consumo',NKE:'Consumo',PG:'Consumo',
+  CAT:'Industriales',BA:'Industriales',GE:'Industriales',HON:'Industriales',UPS:'Industriales',
+  FCX:'Materiales',NEM:'Materiales',LIN:'Materiales',
+  NEE:'Utilities',DUK:'Utilities',SO:'Utilities'
+};
+var SEC_COLOR={ETF:'#00d4ff',Tecnología:'#7c4dff',Energía:'#ff8c00',Consumo:'#00e5ff',Salud:'#69f0ae',Industriales:'#e0e0e0',Finanzas:'#ffd600',Comunicación:'#f48fb1',Materiales:'#a5d6a7',Utilities:'#80cbc4'};
+var SEC_ORDER=['ETF','Tecnología','Energía','Consumo','Salud','Industriales','Finanzas','Comunicación','Materiales','Utilities'];
+var SEC_ICON={ETF:'◈',Tecnología:'⬡',Energía:'⬟',Consumo:'⬠',Salud:'✚',Industriales:'⚙',Finanzas:'$',Comunicación:'◉',Materiales:'◆',Utilities:'⚡'};
+
+var allData=[], filtered=[], tickers=[];
+var autoOn=true, cdTimer=null, cdSecs=60;
+var tblSortF='', tblSortD=1;
+var serverOk=false;
+var prevPrices={};
+
+// ── CLOCK ─────────────────────────────────────────
+setInterval(function(){ document.getElementById('clk').textContent=new Date().toLocaleTimeString('es-AR'); },1000);
+
+// ── SERVER CHECK ──────────────────────────────────
+async function checkServer() {
+  try {
+    var r = await fetch(API+'/health', {signal: AbortSignal.timeout(2000)});
+    if (r.ok) {
+      serverOk = true;
+      document.getElementById('serverBanner').style.display = 'none';
+      setStatus('live','LIVE — Yahoo Finance');
+      return true;
+    }
+  } catch(e) {}
+  serverOk = false;
+  setStatus('err','SIN SERVIDOR');
+  return false;
+}
+
+function setStatus(st, txt) {
+  var dot = document.getElementById('dot');
+  dot.className = 'dot' + (st==='live'?'':st==='loading'?' loading':st==='err'?' err':' off');
+  document.getElementById('stxt').textContent = txt;
+  document.getElementById('stxt').style.color = st==='live'?'var(--green)':st==='loading'?'var(--yellow)':st==='err'?'var(--red)':'var(--text-dim)';
+}
+
+// ── AUTOSAVE ──────────────────────────────────────
+function saveTickers() {
+  localStorage.setItem('nexus_tickers', document.getElementById('tickerBox').value);
+  var el = document.getElementById('saveStatus');
+  el.textContent = '✓ Guardado';
+  el.style.color = 'var(--green)';
+  setTimeout(function(){ el.textContent = ''; }, 1500);
+}
+
+// ── CARGAR TICKERS COMPLETO (click del usuario) ─────────────────────────────
+// Descarga 1 año de historial y calcula todos los indicadores técnicos
+function loadAndRefresh() {
+  var nuevos = tickerList.slice();
+  if (!nuevos.length) return;
+  tickers = nuevos;
+  saveTickersFromList();
+  cargarCompleto();
+}
+
+async function cargarCompleto() {
+  if (!tickers.length) return;
+  var ok = await checkServer();
+  if (!ok) {
+    document.getElementById('loadStatus').textContent = 'Servidor no disponible. Iniciá server.py';
+    return;
+  }
+  setStatus('loading', 'CARGANDO...');
+  document.getElementById('progressWrap').style.display = 'block';
+  var total = tickers.length, done = 0;
+  var nuevaData = [];
+  for (var i = 0; i < tickers.length; i += 3) {
+    var batch = tickers.slice(i, i+3);
+    var results = await Promise.all(batch.map(fetchQuote));
+    results.forEach(function(r){ if(r) nuevaData.push(r); });
+    done += batch.length;
+    document.getElementById('progressFill').style.width = Math.round(done/total*100)+'%';
+    document.getElementById('loadStatus').textContent = 'Cargando '+done+'/'+total+'...';
+    document.getElementById('progress-txt').textContent = done+'/'+total+' tickers';
+  }
+  allData = nuevaData;
+  document.getElementById('progressWrap').style.display = 'none';
+  document.getElementById('loadStatus').textContent = '';
+  document.getElementById('progress-txt').textContent = allData.length+' tickers';
+  setStatus('live', 'LIVE — Yahoo Finance');
+  applyFilters();
+  buildTape();
+  startCountdown();
+  document.getElementById('expInfo').textContent = allData.length+' tickers | Cargado: '+new Date().toLocaleTimeString('es-AR');
+}
+
+// ── AUTO-REFRESH (solo precio, cambio% y volumen — no recarga historial) ──────
+// Mucho más rápido: no toca los indicadores técnicos ya calculados
+async function doRefresh() {
+  if (!allData.length) return;
+  var ok = await checkServer();
+  if (!ok) { setStatus('err','SIN SERVIDOR'); return; }
+  setStatus('loading', 'ACTUALIZANDO PRECIOS...');
+
+  for (var i = 0; i < allData.length; i += 5) {
+    var batch = allData.slice(i, i+5);
+    var results = await Promise.all(batch.map(function(d){ return fetchPrecio(d.symbol); }));
+    results.forEach(function(r, idx) {
+      if (!r) return;
+      var d = allData[i + idx];
+      d._flash  = r.price > d.price ? 'up' : r.price < d.price ? 'dn' : '';
+      d.price    = r.price;
+      d.chgPct   = r.chgPct;
+      d.volume   = r.volume;
+      d.prevClose= r.prevClose;
+    });
+  }
+
+  setStatus('live', 'LIVE — Yahoo Finance');
+  applyFilters();
+  buildTape();
+  startCountdown();
+  document.getElementById('expInfo').textContent =
+    allData.length+' tickers | Precios: '+new Date().toLocaleTimeString('es-AR');
+}
+
+// Fetch rápido: solo precio del día (sin historial de 1 año)
+async function fetchPrecio(sym) {
+  try {
+    var r = await fetch(API+'/precio?symbol='+sym, {signal: AbortSignal.timeout(8000)});
+    if (!r.ok) return null;
+    var d = await r.json();
+    return d.error ? null : d;
+  } catch(e) { return null; }
+}
+
+
+async function fetchQuote(sym) {
+  try {
+    var r = await fetch(API+'/quote?symbol='+sym, {signal: AbortSignal.timeout(15000)});
+    if (!r.ok) return null;
+    var d = await r.json();
+    if (d.error) return null;
+    // Añadir sector desde mapa local si falta
+    d.sector = SECTORS[sym] || 'Tecnología';
+    // Flash comparando con precio anterior
+    var prev = prevPrices[sym];
+    d._flash = prev ? (d.price > prev ? 'up' : d.price < prev ? 'dn' : '') : '';
+    prevPrices[sym] = d.price;
+    return d;
+  } catch(e) {
+    console.warn('Error fetching', sym, e.message);
+    return null;
+  }
+}
+
+// ── FILTERS ───────────────────────────────────────
+function applyFilters() {
+  var sec = document.getElementById('fSector').value;
+  var rmi = +document.getElementById('rmi').value;
+  var rmx = +document.getElementById('rmx').value;
+  var dmi = +document.getElementById('dmi').value;
+  var dmx = +document.getElementById('dmx').value;
+  var sb  = document.getElementById('sortBy').value;
+
+  filtered = allData.filter(function(d){
+    if(sec && d.sector!==sec) return false;
+    if(d.rsi!=null && (d.rsi<rmi || d.rsi>rmx)) return false;
+    if(d.distEma200!=null && (d.distEma200<dmi || d.distEma200>dmx)) return false;
+    return true;
+  });
+  if(sb){
+    filtered.sort(function(a,b){
+      var av=a[sb]!=null?a[sb]:-Infinity;
+      var bv=b[sb]!=null?b[sb]:-Infinity;
+      return bv-av;
+    });
+  }
+  renderAll();
+}
+
+function resetFilters(){
+  document.getElementById('fSector').value='';
+  document.getElementById('rmi').value=0;   document.getElementById('rmiV').textContent='0';
+  document.getElementById('rmx').value=100; document.getElementById('rmxV').textContent='100';
+  document.getElementById('dmi').value=-50; document.getElementById('dmiV').textContent='-50';
+  document.getElementById('dmx').value=50;  document.getElementById('dmxV').textContent='50';
+  document.getElementById('sortBy').value='';
+  applyFilters();
+}
+
+// ── RENDER ────────────────────────────────────────
+function renderAll(){ renderSummary();renderScanner();renderMovers();renderSectors();renderTech();renderAllTab(); }
+
+function renderSummary(){
+  var d=filtered;
+  document.getElementById('sTotal').textContent=d.length;
+  document.getElementById('sUp').textContent=d.filter(function(x){return x.chgPct>0}).length;
+  document.getElementById('sDn').textContent=d.filter(function(x){return x.chgPct<0}).length;
+  var rsis=d.map(function(x){return x.rsi}).filter(function(x){return x!=null});
+  document.getElementById('sRsi').textContent=rsis.length?f1(rsis.reduce(function(a,b){return a+b},0)/rsis.length):'--';
+  document.getElementById('sAbove').textContent=d.filter(function(x){return x.distEma200!=null&&x.distEma200>0}).length;
+  document.getElementById('sBelow').textContent=d.filter(function(x){return x.distEma200!=null&&x.distEma200<0}).length;
+}
+
+function renderScanner(){
+  var d=filtered;
+  setCard('1',d.filter(function(x){return x.rsi!=null&&x.rsi<30}));
+  setCard('2',d.filter(function(x){return x.rsi!=null&&x.rsi>70}));
+  setCard('3',d.filter(function(x){return x.distFromHigh!=null&&x.distFromHigh>-5}));
+  setCard('4',d.filter(function(x){return x.distEma200!=null&&Math.abs(x.distEma200)<3}));
+  setCard('5',d.filter(function(x){return x.avgVol20>0&&x.volume/x.avgVol20>2}));
+}
+function setCard(id,arr){
+  document.getElementById('n'+id).textContent=arr.length;
+  var el=document.getElementById('t'+id);
+  el.innerHTML=arr.length?arr.slice(0,8).map(function(d){return '<span class="sc-tag">'+d.symbol+'</span>'}).join(''):'<span style="color:var(--text-dim);font-size:10px;font-family:var(--mono)">ninguno</span>';
+}
+
+function renderMovers(){
+  var sorted=filtered.slice().sort(function(a,b){return b.chgPct-a.chgPct});
+  document.getElementById('bGain').innerHTML=sorted.slice(0,5).map(mRow).join('');
+  document.getElementById('bLoss').innerHTML=sorted.slice(-5).reverse().map(mRow).join('');
+}
+function mRow(d){
+  return '<tr class="'+(d._flash==='up'?'flu':d._flash==='dn'?'fld':'')+'">'+
+    '<td><div class="tk-cell"><div class="sec-bar" style="background:'+(SEC_COLOR[d.sector]||'#fff')+'"></div><span class="tk-sym">'+d.symbol+'</span></div></td>'+
+    '<td style="color:'+(d.chgPct>=0?'var(--green)':'var(--red)')+'">'+fp(d.price)+'</td>'+
+    '<td>'+chipChg(d.chgPct)+'</td><td>'+rsiCell(d.rsi)+'</td><td>'+fv(d.volume)+'</td></tr>';
+}
+
+function renderSectors(){
+  var grouped={};
+  filtered.forEach(function(d){ if(!grouped[d.sector])grouped[d.sector]=[];grouped[d.sector].push(d); });
+  var html=SEC_ORDER.filter(function(s){return grouped[s]&&grouped[s].length}).map(function(sec){
+    var col=SEC_COLOR[sec]||'#fff';
+    var rows=grouped[sec].map(function(d){
+      return '<tr class="'+(d._flash==='up'?'flu':d._flash==='dn'?'fld':'')+'">'+
+        '<td><div class="tk-cell"><div class="sec-bar" style="background:'+col+'"></div><span class="tk-sym">'+d.symbol+'</span></div></td>'+
+        '<td style="color:'+(d.chgPct>=0?'var(--green)':'var(--red)')+'">'+fp(d.price)+'</td>'+
+        '<td>'+chipChg(d.chgPct)+'</td>'+
+        '<td>'+rsiCell(d.rsi)+'</td>'+
+        '<td>'+fp(d.ema50)+'</td><td>'+fp(d.ema200)+'</td>'+
+        '<td>'+distCell(d.distEma200)+'</td>'+
+        '<td>'+(d.pe?f1(d.pe)+'x':'--')+'</td>'+
+        '<td>'+fcap(d.marketCap)+'</td>'+
+        '<td>'+fv(d.volume)+'</td></tr>';
+    }).join('');
+    return '<div style="margin-bottom:20px">'+
+      '<div class="sec-hdr"><div class="sec-title">'+
+      '<div class="sec-bar" style="background:'+col+';height:14px;width:3px;border-radius:2px"></div>'+
+      '<span style="color:'+col+'">'+SEC_ICON[sec]+'</span>'+sec.toUpperCase()+'</div>'+
+      '<div class="sec-cnt">'+grouped[sec].length+' ticker'+(grouped[sec].length>1?'s':'')+'</div></div>'+
+      '<div class="tbl-wrap"><table class="dt"><thead><tr>'+
+      '<th style="width:80px">Ticker</th><th>Precio</th><th>% Día</th><th>RSI(14)</th>'+
+      '<th>EMA 50</th><th>EMA 200</th><th>Dist EMA200</th><th>P/E</th><th>Cap. Mkt</th><th>Volumen</th>'+
+      '</tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+  }).join('');
+  document.getElementById('secContainer').innerHTML=html||'<div style="color:var(--text-dim);padding:30px;font-family:var(--mono);text-align:center">Cargá tickers y hacé click en ▶ CARGAR TICKERS</div>';
+}
+
+function renderTech(){
+  var rows=filtered.map(function(d){
+    return '<tr class="'+(d._flash==='up'?'flu':d._flash==='dn'?'fld'  :'')+'">'+
+      '<td><div class="tk-cell"><div class="sec-bar" style="background:'+(SEC_COLOR[d.sector]||'#fff')+'"></div><span class="tk-sym">'+d.symbol+'</span></div></td>'+
+      '<td style="color:'+(d.chgPct>=0?'var(--green)':'var(--red)')+'">'+fp(d.price)+'</td>'+
+      '<td>'+chipChg(d.chgPct)+'</td>'+
+      '<td>'+rsiCell(d.rsi)+'</td>'+
+      '<td>'+fp(d.ema50)+'</td><td>'+fp(d.ema200)+'</td>'+
+      '<td>'+distCell(d.distEma50)+'</td><td>'+distCell(d.distEma200)+'</td>'+
+      '<td>'+fp(d.sma50)+'</td><td>'+fp(d.sma200)+'</td>'+
+      '<td>'+momCell(d.mom3m)+'</td><td>'+momCell(d.mom6m)+'</td>'+
+      '<td>'+(d.beta?f2(d.beta):'--')+'</td>'+
+      '<td>'+doSpark(d.spark)+'</td>'+
+      '<td><button class="tv-btn" onclick="openTVChart(\''+d.symbol+'\')">📈</button></td>'+
+      '</tr>';
+  }).join('');
+  document.getElementById('techBody').innerHTML=rows||emptyRow(15);
+}
+
+function renderAllTab(){
+  var rows=filtered.map(function(d){
+    return '<tr class="'+(d._flash==='up'?'flu':d._flash==='dn'?'fld':'')+'">'+
+      '<td><div class="tk-cell"><div class="sec-bar" style="background:'+(SEC_COLOR[d.sector]||'#fff')+'"></div><span class="tk-sym">'+d.symbol+'</span></div></td>'+
+      '<td style="color:'+(d.chgPct>=0?'var(--green)':'var(--red)')+'">'+fp(d.price)+'</td>'+
+      '<td>'+chipChg(d.chgPct)+'</td>'+
+      '<td>'+rsiCell(d.rsi)+'</td>'+
+      '<td>'+distCell(d.distEma200)+'</td>'+
+      '<td>'+(d.pe?f1(d.pe)+'x':'--')+'</td>'+
+      '<td>'+fcap(d.marketCap)+'</td><td>'+fv(d.volume)+'</td><td>'+fv(d.avgVol20)+'</td>'+
+      '<td>'+(d.beta?f2(d.beta):'--')+'</td>'+
+      '<td>'+(d.divYield?f2(d.divYield)+'%':'--')+'</td>'+
+      '<td>'+momCell(d.mom3m)+'</td><td>'+momCell(d.mom6m)+'</td>'+
+      '<td>'+doSpark(d.spark)+'</td></tr>';
+  }).join('');
+  document.getElementById('allBody').innerHTML=rows||emptyRow(14);
+}
+
+// ── CELLS ─────────────────────────────────────────
+function rsiCell(rsi){
+  if(rsi==null)return '<span style="color:var(--text-dim)">--</span>';
+  var cls=rsi<30?'cg':rsi>70?'cr':'cy';
+  var bc=rsi<30?'var(--green)':rsi>70?'var(--red)':'var(--yellow)';
+  return '<div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill" style="width:'+rsi+'%;background:'+bc+'"></div></div><span class="chip '+cls+'">'+f1(rsi)+'</span></div>';
+}
+function distCell(v){
+  if(v==null)return '<span style="color:var(--text-dim)">--</span>';
+  var cls=v>10?'cg':v<0?'cr':'cy';
+  return '<span class="chip '+cls+'">'+(v>=0?'+':'')+f1(v)+'%</span>';
+}
+function momCell(v){
+  if(v==null)return '<span style="color:var(--text-dim)">--</span>';
+  return '<span style="color:'+(v>=0?'var(--green)':'var(--red)')+'">'+(v>=0?'+':'')+f1(v)+'%</span>';
+}
+function chipChg(v){
+  if(v==null)return '--';
+  var cls=v>1?'cg':v<-1?'cr':'cy';
+  return '<span class="chip '+cls+'">'+(v>=0?'+':'')+f2(v)+'%</span>';
+}
+function doSpark(data){
+  if(!data||data.length<2)return '--';
+  var w=60,h=20;
+  var mn=Math.min.apply(null,data),mx=Math.max.apply(null,data),r=mx-mn||1;
+  var pts=data.map(function(v,i){return (i/(data.length-1)*w)+','+(h-(v-mn)/r*h);}).join(' ');
+  var up=data[data.length-1]>=data[0];
+  return '<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><polyline points="'+pts+'" fill="none" stroke="'+(up?'var(--green)':'var(--red)')+'" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+}
+function emptyRow(cols){
+  return '<tr><td colspan="'+cols+'" style="text-align:center;color:var(--text-dim);padding:24px;font-family:var(--head);letter-spacing:2px;font-size:12px">SIN DATOS — INICIÁ EL SERVIDOR Y CARGÁ TICKERS</td></tr>';
+}
+
+// ── FORMAT ────────────────────────────────────────
+function f1(n){return n!=null?(+n).toFixed(1):'--';}
+function f2(n){return n!=null?(+n).toFixed(2):'--';}
+function fp(p){
+  if(p==null)return '--';
+  if(p>=1000)return p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return p.toFixed(2);
+}
+function fv(v){
+  if(!v)return '--';
+  if(v>=1e9)return (v/1e9).toFixed(1)+'B';
+  if(v>=1e6)return (v/1e6).toFixed(1)+'M';
+  if(v>=1e3)return (v/1e3).toFixed(0)+'K';
+  return String(v);
+}
+function fcap(c){
+  if(!c)return '--';
+  if(c>=1e12)return '$'+(c/1e12).toFixed(1)+'T';
+  if(c>=1e9)return '$'+(c/1e9).toFixed(0)+'B';
+  if(c>=1e6)return '$'+(c/1e6).toFixed(0)+'M';
+  return '$'+c.toFixed(0);
+}
+
+// ── TAPE ──────────────────────────────────────────
+function buildTape(){
+  var items=allData.map(function(d){
+    var s=d.chgPct>=0?'+':'';
+    var cls=d.chgPct>=0?'u':'d';
+    return '<span class="ti"><span class="s">'+d.symbol+'</span>'+fp(d.price)+' <span class="'+cls+'">'+s+f2(d.chgPct)+'%</span></span>';
+  });
+  document.getElementById('tape').innerHTML=items.concat(items).join('');
+}
+
+// ── COUNTDOWN ─────────────────────────────────────
+function startCountdown(){
+  if(cdTimer)clearInterval(cdTimer);
+  cdSecs=parseInt(document.getElementById('interval').value);
+  cdTimer=setInterval(function(){
+    cdSecs--;
+    document.getElementById('ctdn').textContent=cdSecs;
+    if(cdSecs<=0&&autoOn)doRefresh();
+  },1000);
+}
+
+function toggleAuto(){
+  autoOn=!autoOn;
+  var btn=document.getElementById('autoBtn');
+  btn.textContent=autoOn?'⏸ AUTO':'▶ AUTO';
+  btn.className='btn btn-sm '+(autoOn?'btn-y':'btn-a');
+}
+
+// ── TABS ──────────────────────────────────────────
+function switchTab(id,el){
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active')});
+  document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active')});
+  el.classList.add('active');
+  document.getElementById('tab-'+id).classList.add('active');
+}
+
+// ── TABLE SORT ────────────────────────────────────
+var lastSortEl = null;
+function ts(field, el){
+  if(tblSortF===field)tblSortD*=-1;
+  else{tblSortF=field;tblSortD=-1;}
+  var dir=tblSortD;
+  filtered.sort(function(a,b){
+    var av=a[field]!=null?a[field]:-Infinity;
+    var bv=b[field]!=null?b[field]:-Infinity;
+    if(typeof av==='string')return av.localeCompare(bv)*dir;
+    return(av-bv)*dir;
+  });
+  // update sort icons
+  if(lastSortEl) { lastSortEl.classList.remove('sort-asc','sort-desc'); var si=lastSortEl.querySelector('.sort-icon'); if(si)si.textContent='⇅'; }
+  if(el) {
+    el.classList.remove('sort-asc','sort-desc');
+    el.classList.add(dir===-1?'sort-desc':'sort-asc');
+    var si2=el.querySelector('.sort-icon');
+    if(si2)si2.textContent=dir===-1?'↓':'↑';
+    lastSortEl=el;
+  }
+  renderTech();renderAllTab();
+}
+
+// ── EXPORT ────────────────────────────────────────
+function exportCSV(){
+  var h=['Symbol','Sector','Price','Change%','RSI','EMA50','EMA200','DistEMA50%','DistEMA200%','SMA50','SMA200','Mom3M%','Mom6M%','Volume','AvgVol20','PE','MarketCap','Beta','DivYield%'];
+  var rows=filtered.map(function(d){
+    return[d.symbol,d.sector,fp(d.price),f2(d.chgPct),d.rsi?f1(d.rsi):'',
+      d.ema50?fp(d.ema50):'',d.ema200?fp(d.ema200):'',
+      d.distEma50?f2(d.distEma50):'',d.distEma200?f2(d.distEma200):'',
+      d.sma50?fp(d.sma50):'',d.sma200?fp(d.sma200):'',
+      d.mom3m?f2(d.mom3m):'',d.mom6m?f2(d.mom6m):'',
+      d.volume||'',d.avgVol20||'',d.pe?f2(d.pe):'',d.marketCap||'',
+      d.beta?f2(d.beta):'',d.divYield?f2(d.divYield):''];
+  });
+  var csv=[h].concat(rows).map(function(r){return r.join(',')}).join('\n');
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='nexus_scanner_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+}
+
+// ── TRADINGVIEW MODAL ─────────────────────────────
+function openTVChart(sym) {
+  document.getElementById('tvModalSym').textContent = sym;
+  document.getElementById('tvOpenLink').href = 'https://www.tradingview.com/chart/?symbol=' + sym;
+  var body = document.getElementById('tvModalBody');
+  body.innerHTML = '';
+  var theme = 'dark';
+  var src = 'https://s.tradingview.com/widgetembed/?frameElementId=tradingview_nexus'
+    + '&symbol=' + encodeURIComponent(sym)
+    + '&interval=D'
+    + '&hidesidetoolbar=0'
+    + '&hidetoptoolbar=0'
+    + '&symboledit=1'
+    + '&saveimage=1'
+    + '&toolbarbg=0d1318'
+    + '&studies=RSI%40tv-basicstudies%1FMACD%40tv-basicstudies%1FMA%40tv-basicstudies'
+    + '&theme=' + theme
+    + '&style=1'
+    + '&timezone=America%2FArgentina%2FBuenos_Aires'
+    + '&studies_overrides=%7B%7D'
+    + '&overrides=%7B%7D'
+    + '&enabled_features=%5B%5D'
+    + '&disabled_features=%5B%5D'
+    + '&locale=es'
+    + '&utm_source=nexus-scanner';
+  var iframe = document.createElement('iframe');
+  iframe.src = src;
+  iframe.style.width = '100%';
+  iframe.style.height = '100%';
+  iframe.style.border = 'none';
+  iframe.allowFullscreen = true;
+  body.appendChild(iframe);
+  document.getElementById('tvModalOverlay').classList.add('open');
+}
+
+function closeTVModal(e) {
+  if (e.target === document.getElementById('tvModalOverlay')) {
+    document.getElementById('tvModalOverlay').classList.remove('open');
+  }
+}
+
+// cerrar con Escape
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') document.getElementById('tvModalOverlay').classList.remove('open');
+});
+
+// ── TICKER MANAGER ────────────────────────────────
+var tickerList = ['SPY','QQQ','XLE','AAPL','NVDA','META','MSFT','GOOG','TSLA','AMZN','CVX','XOM','VIST','JPM','WMT','JNJ','GLD','TLT','AMD','NFLX'];
+
+function renderTickerList() {
+  var ul = document.getElementById('tickerList');
+  ul.innerHTML = tickerList.map(function(sym, i) {
+    return '<div class="ticker-item">' +
+      '<span class="ticker-item-sym">' + sym + '</span>' +
+      '<button class="ticker-item-remove" onclick="removeTicker(' + i + ')" title="Eliminar">✕</button>' +
+      '</div>';
+  }).join('');
+  document.getElementById('tickerCount').textContent = tickerList.length + ' ticker' + (tickerList.length !== 1 ? 's' : '');
+  // sync hidden textarea
+  document.getElementById('tickerBox').value = tickerList.join('\n');
+}
+
+function addTickerFromInput() {
+  var inp = document.getElementById('tickerInputNew');
+  var sym = inp.value.trim().toUpperCase().replace(/[^A-Z0-9.]/g,'');
+  if (!sym) return;
+  if (tickerList.indexOf(sym) !== -1) {
+    inp.style.borderColor = 'var(--yellow)';
+    setTimeout(function(){ inp.style.borderColor = ''; }, 1000);
+    inp.value = '';
+    return;
+  }
+  tickerList.push(sym);
+  renderTickerList();
+  saveTickersFromList();
+  inp.value = '';
+  inp.focus();
+  // scroll al final
+  var ul = document.getElementById('tickerList');
+  ul.scrollTop = ul.scrollHeight;
+}
+
+function removeTicker(idx) {
+  tickerList.splice(idx, 1);
+  renderTickerList();
+  saveTickersFromList();
+}
+
+function saveTickersFromList() {
+  localStorage.setItem('nexus_tickers', tickerList.join('\n'));
+  var el = document.getElementById('saveStatus');
+  el.textContent = '✓ Guardado';
+  el.style.color = 'var(--green)';
+  setTimeout(function(){ el.textContent = ''; }, 1500);
+}
+
+// ── AUTOSAVE (ahora dirigido al manager) ──────────
+window.onload = function() {
+  // Restaurar tickers guardados
+  var saved = localStorage.getItem('nexus_tickers');
+  if (saved && saved.trim()) {
+    var restored = saved.split('\n').map(function(t){ return t.trim().toUpperCase(); }).filter(Boolean);
+    if (restored.length) tickerList = restored;
+    var el = document.getElementById('saveStatus');
+    el.textContent = '\u21ba Lista restaurada';
+    el.style.color = 'var(--accent)';
+    setTimeout(function(){ el.textContent = ''; }, 2000);
+  }
+  renderTickerList();
+  checkServer().then(function(ok) {
+    if (ok) loadAndRefresh();
+  });
+};
+</script>
+</body>
+</html>
