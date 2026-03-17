@@ -18,7 +18,7 @@ import pandas as pd
 import numpy as np
 import traceback
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)  # Permite que el HTML local llame al servidor
 
 # ─── INDICADORES TÉCNICOS ─────────────────────────────────────────────────────
@@ -282,17 +282,16 @@ def get_precio():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/')
+def index():
+    from flask import send_from_directory
+    return send_from_directory('.', 'index.html')
+
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({'status': 'ok', 'message': 'NEXUS SCANNER proxy running'})
 
-
 if __name__ == '__main__':
-    print("\n" + "="*50)
-    print("  NEXUS SCANNER — Proxy Server")
-    print("="*50)
-    print("  Corriendo en: http://localhost:5000")
-    print("  Abrí market-scanner.html en tu browser")
-    print("  Ctrl+C para detener")
-    print("="*50 + "\n")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    import os
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
