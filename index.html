@@ -641,6 +641,10 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
         <label>DIST EMA200 MAX: <span id="dmxV" style="color:var(--accent)">50</span>%</label>
         <input type="range" id="dmx" min="-50" max="50" value="50" oninput="document.getElementById('dmxV').textContent=this.value;applyFilters()">
       </div>
+      <div class="range-wrap">
+        <label>ADX MIN (Tendencia): <span id="adxmiV" style="color:var(--accent)">0</span></label>
+        <input type="range" id="adxmi" min="0" max="60" value="0" oninput="document.getElementById('adxmiV').textContent=this.value;applyFilters()">
+      </div>
       <button class="btn btn-r btn-full btn-sm" onclick="resetFilters()">✕ RESET FILTROS</button>
     </div>
 
@@ -786,7 +790,10 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 </div><!-- /#appRoot -->
 
 <script>
-var API = 'http://localhost:5000';
+// Auto-detecta si estamos en Railway (producción) o local
+var API = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+  ? 'http://localhost:5000'
+  : (location.origin); // En Railway, el backend corre en el mismo dominio
 
 var SECTORS = {
   // ── ETF ──
@@ -880,7 +887,7 @@ setInterval(function(){ document.getElementById('clk').textContent=new Date().to
 // ── SERVER CHECK ──────────────────────────────────
 async function checkServer() {
   try {
-    var r = await fetch(API+'/health', {signal: AbortSignal.timeout(8000)});
+    var r = await fetch(API+'/health', {signal: AbortSignal.timeout(2000)});
     if (r.ok) {
       serverOk = true;
       document.getElementById('serverBanner').style.display = 'none';
@@ -1001,12 +1008,14 @@ function applyFilters() {
   var rmx = +document.getElementById('rmx').value;
   var dmi = +document.getElementById('dmi').value;
   var dmx = +document.getElementById('dmx').value;
+  var adxmi = +document.getElementById('adxmi').value;
   var sb  = document.getElementById('sortBy').value;
 
   filtered = allData.filter(function(d){
     if(sec && d.sector!==sec) return false;
     if(d.rsi!=null && (d.rsi<rmi || d.rsi>rmx)) return false;
     if(d.distEma200!=null && (d.distEma200<dmi || d.distEma200>dmx)) return false;
+    if(adxmi>0 && (d.adx==null || d.adx<adxmi)) return false;
     return true;
   });
   if(sb){
@@ -1025,6 +1034,7 @@ function resetFilters(){
   document.getElementById('rmx').value=100; document.getElementById('rmxV').textContent='100';
   document.getElementById('dmi').value=-50; document.getElementById('dmiV').textContent='-50';
   document.getElementById('dmx').value=50;  document.getElementById('dmxV').textContent='50';
+  document.getElementById('adxmi').value=0; document.getElementById('adxmiV').textContent='0';
   document.getElementById('sortBy').value='';
   applyFilters();
 }
@@ -1075,9 +1085,17 @@ function renderSectors(){
   var html=SEC_ORDER.filter(function(s){return grouped[s]&&grouped[s].length}).map(function(sec){
     var col=SEC_COLOR[sec]||'#fff';
     var secData=grouped[sec];
-    // Calcular P/E promedio del sector
+    // Calcular stats del sector
     var peVals=secData.map(function(d){return d.pe;}).filter(function(v){return v!=null&&v>0&&v<200;});
     var peAvg=peVals.length?(peVals.reduce(function(a,b){return a+b},0)/peVals.length):null;
+    var adxVals=secData.map(function(d){return d.adx;}).filter(function(v){return v!=null;});
+    var adxAvg=adxVals.length?(adxVals.reduce(function(a,b){return a+b},0)/adxVals.length):null;
+    var rsiVals=secData.map(function(d){return d.rsi;}).filter(function(v){return v!=null;});
+    var rsiAvg=rsiVals.length?(rsiVals.reduce(function(a,b){return a+b},0)/rsiVals.length):null;
+    var chgVals=secData.map(function(d){return d.chgPct;}).filter(function(v){return v!=null;});
+    var chgAvg=chgVals.length?(chgVals.reduce(function(a,b){return a+b},0)/chgVals.length):null;
+    var upCount=secData.filter(function(d){return d.chgPct>0;}).length;
+    var dnCount=secData.filter(function(d){return d.chgPct<0;}).length;
     var rows=secData.map(function(d){
       return '<tr class="'+(d._flash==='up'?'flu':d._flash==='dn'?'fld':'')+'">'+
         '<td><div class="tk-cell"><div class="sec-bar" style="background:'+col+'"></div><span class="tk-sym">'+d.symbol+'</span></div></td>'+
@@ -1091,13 +1109,29 @@ function renderSectors(){
         '<td>'+fcap(d.marketCap)+'</td>'+
         '<td>'+fv(d.volume)+'</td></tr>';
     }).join('');
+    // Mini heat bar: % alcistas vs bajistas
+    var heatPct=secData.length?Math.round(upCount/secData.length*100):0;
     return '<div style="margin-bottom:20px">'+
-      '<div class="sec-hdr"><div class="sec-title">'+
-      '<div class="sec-bar" style="background:'+col+';height:14px;width:3px;border-radius:2px"></div>'+
-      '<span style="color:'+col+'">'+SEC_ICON[sec]+'</span>'+sec.toUpperCase()+'</div>'+
-      '<div style="display:flex;align-items:center;gap:10px">'+
-      (peAvg?'<span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">P/E prom: <span style="color:var(--yellow)">'+f1(peAvg)+'x</span></span>':'') +
-      '<div class="sec-cnt">'+secData.length+' ticker'+(secData.length>1?'s':'')+'</div></div></div>'+
+      '<div class="sec-hdr">'+
+        '<div class="sec-title">'+
+          '<div class="sec-bar" style="background:'+col+';height:14px;width:3px;border-radius:2px"></div>'+
+          '<span style="color:'+col+'">'+SEC_ICON[sec]+'</span>'+sec.toUpperCase()+
+        '</div>'+
+        '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
+          (chgAvg!=null?'<span style="font-family:var(--mono);font-size:12px;color:'+(chgAvg>=0?'var(--green)':'var(--red)')+'">Día: '+(chgAvg>=0?'+':'')+f2(chgAvg)+'%</span>':'')+
+          (rsiAvg!=null?'<span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">RSI: <span style="color:var(--yellow)">'+f1(rsiAvg)+'</span></span>':'')+
+          (adxAvg!=null?'<span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">ADX: <span style="color:'+(adxAvg>=25?'var(--green)':adxAvg>=20?'var(--yellow)':'var(--red)')+'">'+f1(adxAvg)+'</span></span>':'')+
+          (peAvg?'<span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">P/E: <span style="color:var(--yellow)">'+f1(peAvg)+'x</span></span>':'')+
+          '<div style="display:flex;align-items:center;gap:4px;font-family:var(--mono);font-size:12px">'+
+            '<span style="color:var(--green)">▲'+upCount+'</span>'+
+            '<div style="width:50px;height:5px;background:rgba(255,61,90,0.4);border-radius:2px;overflow:hidden">'+
+              '<div style="width:'+heatPct+'%;height:100%;background:var(--green);border-radius:2px"></div>'+
+            '</div>'+
+            '<span style="color:var(--red)">▼'+dnCount+'</span>'+
+          '</div>'+
+          '<div class="sec-cnt">'+secData.length+' ticker'+(secData.length>1?'s':'')+'</div>'+
+        '</div>'+
+      '</div>'+
       '<div class="tbl-wrap"><table class="dt"><thead><tr>'+
       '<th style="width:80px">Ticker</th><th>Precio</th><th>% Día</th><th>RSI(14)</th>'+
       '<th>ADX(14)</th><th>EMA 50</th><th>EMA 200</th><th>Dist EMA200</th><th>P/E</th><th>Cap. Mkt</th><th>Volumen</th>'+
@@ -1275,4 +1309,103 @@ function ts(field, el){
 
 // ── EXPORT ────────────────────────────────────────
 function exportCSV(){
-  var h=['Symbol','Sector','Price','Change%','RSI','ADX','EMA50','EMA200','DistEMA50%','DistEMA200%','SMA50','SMA200','Mom3M%','Mom6M%','Volum
+  var h=['Symbol','Sector','Price','Change%','RSI','ADX','EMA50','EMA200','DistEMA50%','DistEMA200%','SMA50','SMA200','Mom3M%','Mom6M%','Volume','AvgVol20','PE','MarketCap','Beta','DivYield%'];
+  var rows=filtered.map(function(d){
+    return[d.symbol,d.sector,fp(d.price),f2(d.chgPct),d.rsi?f1(d.rsi):'',
+      d.adx?f1(d.adx):'',
+      d.ema50?fp(d.ema50):'',d.ema200?fp(d.ema200):'',
+      d.distEma50?f2(d.distEma50):'',d.distEma200?f2(d.distEma200):'',
+      d.sma50?fp(d.sma50):'',d.sma200?fp(d.sma200):'',
+      d.mom3m?f2(d.mom3m):'',d.mom6m?f2(d.mom6m):'',
+      d.volume||'',d.avgVol20||'',d.pe?f2(d.pe):'',d.marketCap||'',
+      d.beta?f2(d.beta):'',d.divYield?f2(d.divYield):''];
+  });
+  var csv=[h].concat(rows).map(function(r){return r.join(',')}).join('\n');
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='nexus_scanner_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+}
+
+// ── TRADINGVIEW MODAL ─────────────────────────────
+function openTVChart(sym) {
+  document.getElementById('tvModalSym').textContent = sym;
+  document.getElementById('tvOpenLink').href = 'https://www.tradingview.com/chart/?symbol=' + sym;
+  var body = document.getElementById('tvModalBody');
+  body.innerHTML = '';
+  var src = 'https://s.tradingview.com/widgetembed/?frameElementId=tradingview_nexus'
+    + '&symbol=' + encodeURIComponent(sym)
+    + '&interval=D&hidesidetoolbar=0&hidetoptoolbar=0&symboledit=1&saveimage=1'
+    + '&toolbarbg=0d1318&studies=RSI%40tv-basicstudies%1FMACD%40tv-basicstudies%1FMA%40tv-basicstudies'
+    + '&theme=dark&style=1&timezone=America%2FArgentina%2FBuenos_Aires'
+    + '&studies_overrides=%7B%7D&overrides=%7B%7D&enabled_features=%5B%5D'
+    + '&disabled_features=%5B%5D&locale=es&utm_source=nexus-scanner';
+  var iframe = document.createElement('iframe');
+  iframe.src = src;
+  iframe.style.width = '100%';
+  iframe.style.height = '100%';
+  iframe.style.border = 'none';
+  iframe.allowFullscreen = true;
+  body.appendChild(iframe);
+  document.getElementById('tvModalOverlay').classList.add('open');
+}
+
+function closeTVModal(e) {
+  if (e.target === document.getElementById('tvModalOverlay')) {
+    document.getElementById('tvModalOverlay').classList.remove('open');
+  }
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') document.getElementById('tvModalOverlay').classList.remove('open');
+});
+
+// ── TICKER MANAGER ────────────────────────────────
+window.renderTickerList = function() {
+  var ul = document.getElementById('tickerList');
+  if (!ul) return;
+  ul.innerHTML = window.tickerList.map(function(sym, i) {
+    return '<div class="ticker-item">' +
+      '<span class="ticker-item-sym">' + sym + '</span>' +
+      '<button class="ticker-item-remove" onclick="removeTicker(' + i + ')" title="Eliminar">✕</button>' +
+      '</div>';
+  }).join('');
+  document.getElementById('tickerCount').textContent = window.tickerList.length + ' ticker' + (window.tickerList.length !== 1 ? 's' : '');
+  document.getElementById('tickerBox').value = window.tickerList.join('\n');
+};
+
+function addTickerFromInput() {
+  var inp = document.getElementById('tickerInputNew');
+  var sym = inp.value.trim().toUpperCase().replace(/[^A-Z0-9.]/g,'');
+  if (!sym) return;
+  if (window.tickerList.indexOf(sym) !== -1) {
+    inp.style.borderColor = 'var(--yellow)';
+    setTimeout(function(){ inp.style.borderColor = ''; }, 1000);
+    inp.value = '';
+    return;
+  }
+  window.tickerList.push(sym);
+  window.renderTickerList();
+  saveTickersFromList();
+  inp.value = '';
+  inp.focus();
+  var ul = document.getElementById('tickerList');
+  ul.scrollTop = ul.scrollHeight;
+}
+
+function removeTicker(idx) {
+  window.tickerList.splice(idx, 1);
+  window.renderTickerList();
+  saveTickersFromList();
+}
+
+function saveTickersFromList() {
+  // Guardar en Firestore (nube) + localStorage como fallback
+  if (window.saveTickersCloud) window.saveTickersCloud(window.tickerList.slice());
+  localStorage.setItem('nexus_tickers', window.tickerList.join('\n'));
+}
+
+// No hacer window.onload — la app se inicia desde Firebase onAuthStateChanged
+</script>
+</body>
+</html>
