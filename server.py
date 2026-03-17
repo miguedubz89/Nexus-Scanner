@@ -11,22 +11,15 @@ Luego abrí market-scanner.html en tu browser.
 El servidor corre en http://localhost:5000
 """
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import yfinance as yf
 import pandas as pd
 import numpy as np
 import traceback
-import os
 
-app = Flask(__name__, static_folder='.', static_url_path='')
+app = Flask(__name__)
 CORS(app)  # Permite que el HTML local llame al servidor
-
-# ─── SERVIR EL FRONTEND ───────────────────────────────────────────────────────
-
-@app.route('/')
-def serve_index():
-    return send_from_directory('.', 'index.html')
 
 # ─── INDICADORES TÉCNICOS ─────────────────────────────────────────────────────
 
@@ -67,6 +60,75 @@ def momentum(closes, days):
         return None
     return round((closes[-1] / closes[-days] - 1) * 100, 2)
 
+def calc_adx(hist, period=14):
+    """
+    Average Directional Index (ADX) — Wilder's method.
+    Requiere columnas High, Low, Close en el DataFrame.
+    Interpretación:
+        < 20  → sin tendencia clara
+        20-25 → tendencia débil
+        25-50 → tendencia fuerte
+        > 50  → tendencia muy fuerte
+    """
+    try:
+        if len(hist) < period * 2 + 1:
+            return None
+
+        high  = hist['High'].values.astype(float)
+        low   = hist['Low'].values.astype(float)
+        close = hist['Close'].values.astype(float)
+
+        n = len(close)
+
+        # True Range
+        tr  = np.zeros(n)
+        pdm = np.zeros(n)   # +DM
+        ndm = np.zeros(n)   # -DM
+
+        for i in range(1, n):
+            hl  = high[i]  - low[i]
+            hpc = abs(high[i]  - close[i-1])
+            lpc = abs(low[i]   - close[i-1])
+            tr[i] = max(hl, hpc, lpc)
+
+            up   = high[i]  - high[i-1]
+            down = low[i-1] - low[i]
+            pdm[i] = up   if (up > down and up > 0)   else 0.0
+            ndm[i] = down if (down > up and down > 0) else 0.0
+
+        # Wilder smoothing (suma inicial + RMA)
+        atr  = np.zeros(n)
+        apdm = np.zeros(n)
+        andm = np.zeros(n)
+
+        atr[period]  = np.sum(tr[1:period+1])
+        apdm[period] = np.sum(pdm[1:period+1])
+        andm[period] = np.sum(ndm[1:period+1])
+
+        for i in range(period+1, n):
+            atr[i]  = atr[i-1]  - atr[i-1]/period  + tr[i]
+            apdm[i] = apdm[i-1] - apdm[i-1]/period + pdm[i]
+            andm[i] = andm[i-1] - andm[i-1]/period + ndm[i]
+
+        # +DI / -DI
+        pdi = np.where(atr > 0, 100 * apdm / atr, 0.0)
+        ndi = np.where(atr > 0, 100 * andm / atr, 0.0)
+
+        # DX
+        dx = np.where((pdi + ndi) > 0, 100 * np.abs(pdi - ndi) / (pdi + ndi), 0.0)
+
+        # ADX = Wilder smooth de DX
+        adx_arr = np.zeros(n)
+        adx_arr[2*period] = np.mean(dx[period:2*period+1])
+        for i in range(2*period+1, n):
+            adx_arr[i] = (adx_arr[i-1] * (period-1) + dx[i]) / period
+
+        result = adx_arr[-1]
+        return round(float(result), 2) if result > 0 else None
+
+    except Exception:
+        return None
+
 # ─── ENDPOINT PRINCIPAL ───────────────────────────────────────────────────────
 
 @app.route('/quote', methods=['GET'])
@@ -92,8 +154,9 @@ def get_quote():
         chg_pct = round((price - prev_close) / prev_close * 100, 2) if prev_close else 0
 
         # Indicadores técnicos
-        rsi = calc_rsi(closes)
-        ema50 = calc_ema(closes, 50)
+        rsi    = calc_rsi(closes)
+        adx    = calc_adx(hist)   # ADX usa High/Low/Close del DataFrame completo
+        ema50  = calc_ema(closes, 50)
         ema200 = calc_ema(closes, 200)
         sma50 = calc_sma(closes, 50)
         sma200 = calc_sma(closes, 200)
@@ -142,6 +205,7 @@ def get_quote():
             'prevClose':   prev_close,
             'chgPct':      chg_pct,
             'rsi':         rsi,
+            'adx':         adx,
             'ema50':       ema50,
             'ema200':      ema200,
             'sma50':       sma50,
@@ -231,5 +295,4 @@ if __name__ == '__main__':
     print("  Abrí market-scanner.html en tu browser")
     print("  Ctrl+C para detener")
     print("="*50 + "\n")
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=5000, debug=False)
