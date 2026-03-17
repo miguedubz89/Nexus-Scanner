@@ -641,10 +641,6 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
         <label>DIST EMA200 MAX: <span id="dmxV" style="color:var(--accent)">50</span>%</label>
         <input type="range" id="dmx" min="-50" max="50" value="50" oninput="document.getElementById('dmxV').textContent=this.value;applyFilters()">
       </div>
-      <div class="range-wrap">
-        <label>ADX MIN (Tendencia): <span id="adxmiV" style="color:var(--accent)">0</span></label>
-        <input type="range" id="adxmi" min="0" max="60" value="0" oninput="document.getElementById('adxmiV').textContent=this.value;applyFilters()">
-      </div>
       <button class="btn btn-r btn-full btn-sm" onclick="resetFilters()">✕ RESET FILTROS</button>
     </div>
 
@@ -790,79 +786,191 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 </div><!-- /#appRoot -->
 
 <script>
-// Auto-detecta si estamos en Railway (producción) o local
 var API = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
   ? 'http://localhost:5000'
-  : (location.origin); // En Railway, el backend corre en el mismo dominio
+  : location.origin;
 
 var SECTORS = {
   // ── ETF ──
   SPY:'ETF',QQQ:'ETF',XLE:'ETF',GLD:'ETF',TLT:'ETF',IWM:'ETF',DIA:'ETF',VTI:'ETF',
   ARKK:'ETF',XLF:'ETF',XLK:'ETF',XLV:'ETF',XLI:'ETF',XLY:'ETF',XLP:'ETF',XLU:'ETF',XLB:'ETF',
-  // ── Software ──
+  XLRE:'ETF',XLC:'ETF',GDX:'ETF',GDXJ:'ETF',SLV:'ETF',USO:'ETF',UNG:'ETF',
+  SOXX:'ETF',SMH:'ETF',HACK:'ETF',CIBR:'ETF',BOTZ:'ETF',ROBO:'ETF',
+  VNQ:'ETF',VNQI:'ETF',VWO:'ETF',EEM:'ETF',EFA:'ETF',FXI:'ETF',EWZ:'ETF',EWJ:'ETF',
+  HYG:'ETF',LQD:'ETF',BND:'ETF',AGG:'ETF',SHY:'ETF',IEF:'ETF',
+  SQQQ:'ETF',TQQQ:'ETF',SPXS:'ETF',SPXL:'ETF',UVXY:'ETF',VXX:'ETF',
+  BITX:'ETF',IBIT:'ETF',FBTC:'ETF',GBTC:'ETF',MCHI:'ETF',KWEB:'ETF',
+
+  // ── Software & Servicios Cloud ──
   MSFT:'Software',CRM:'Software',ORCL:'Software',ADBE:'Software',NOW:'Software',SNOW:'Software',
   PLTR:'Software',WDAY:'Software',INTU:'Software',PANW:'Software',FTNT:'Software',ZS:'Software',
+  CRWD:'Software',OKTA:'Software',DDOG:'Software',MDB:'Software',GTLB:'Software',
+  HUBS:'Software',TEAM:'Software',DOCN:'Software',NET:'Software',CFLT:'Software',
+  ESTC:'Software',ROP:'Software',ANSS:'Software',PTC:'Software',CDNS:'Software',
+  SNPS:'Software',IBM:'Software',ACN:'Software',SAP:'Software',UBER:'Software',LYFT:'Software',
+
   // ── Semiconductores ──
   NVDA:'Semiconductores',AMD:'Semiconductores',INTC:'Semiconductores',QCOM:'Semiconductores',
   AVGO:'Semiconductores',TSM:'Semiconductores',MU:'Semiconductores',AMAT:'Semiconductores',
   LRCX:'Semiconductores',KLAC:'Semiconductores',ASML:'Semiconductores',
+  ARM:'Semiconductores',MRVL:'Semiconductores',ON:'Semiconductores',WOLF:'Semiconductores',
+  SWKS:'Semiconductores',QRVO:'Semiconductores',TER:'Semiconductores',ENTG:'Semiconductores',
+  ONTO:'Semiconductores',ACLS:'Semiconductores',MPWR:'Semiconductores',NXPI:'Semiconductores',
+  MCHP:'Semiconductores',ADI:'Semiconductores',TXN:'Semiconductores',STM:'Semiconductores',
+
   // ── Hardware & Dispositivos ──
-  AAPL:'Hardware',DELL:'Hardware',HPQ:'Hardware',
+  AAPL:'Hardware',DELL:'Hardware',HPQ:'Hardware',HPE:'Hardware',
+  CSCO:'Hardware',FFIV:'Hardware',NTAP:'Hardware',WDC:'Hardware',STX:'Hardware',
+  PSTG:'Hardware',ZBRA:'Hardware',
+
   // ── E-commerce & Internet ──
   AMZN:'E-commerce',SHOP:'E-commerce',MELI:'E-commerce',BABA:'E-commerce',JD:'E-commerce',
+  PDD:'E-commerce',SE:'E-commerce',ETSY:'E-commerce',EBAY:'E-commerce',
+  CPNG:'E-commerce',WISH:'E-commerce',GLBE:'E-commerce',
+
   // ── Comunicación & Redes Sociales ──
   META:'Comunicación',GOOGL:'Comunicación',GOOG:'Comunicación',NFLX:'Comunicación',
   DIS:'Comunicación',CMCSA:'Comunicación',T:'Comunicación',VZ:'Comunicación',TMUS:'Comunicación',
-  SNAP:'Comunicación',PINS:'Comunicación',RDDT:'Comunicación',
+  SNAP:'Comunicación',PINS:'Comunicación',RDDT:'Comunicación',TWTR:'Comunicación',
+  SPOT:'Comunicación',WBD:'Comunicación',PARA:'Comunicación',FOX:'Comunicación',FOXA:'Comunicación',
+  LYV:'Comunicación',MTCH:'Comunicación',IAC:'Comunicación',LBRDA:'Comunicación',
+  CHTR:'Comunicación',LUMN:'Comunicación',DISH:'Comunicación',
+
   // ── Vehículos Eléctricos & Movilidad ──
-  TSLA:'Vehículos Eléctricos',RIVN:'Vehículos Eléctricos',LCID:'Vehículos Eléctricos',NIO:'Vehículos Eléctricos',LI:'Vehículos Eléctricos',
+  TSLA:'Vehículos Eléctricos',RIVN:'Vehículos Eléctricos',LCID:'Vehículos Eléctricos',
+  NIO:'Vehículos Eléctricos',LI:'Vehículos Eléctricos',XPEV:'Vehículos Eléctricos',
+  FSR:'Vehículos Eléctricos',GOEV:'Vehículos Eléctricos',
+
+  // ── Automotriz ──
+  F:'Automotriz',GM:'Automotriz',TM:'Automotriz',HMC:'Automotriz',STLA:'Automotriz',
+  RACE:'Automotriz',BWA:'Automotriz',LEA:'Automotriz',MGA:'Automotriz',
+
   // ── Energía ──
-  CVX:'Energía',XOM:'Energía',VIST:'Energía',COP:'Energía',EOG:'Energía',SLB:'Energía',OXY:'Energía',
-  BP:'Energía',SHEL:'Energía',PXD:'Energía',HAL:'Energía',
+  CVX:'Energía',XOM:'Energía',VIST:'Energía',COP:'Energía',EOG:'Energía',SLB:'Energía',
+  OXY:'Energía',BP:'Energía',SHEL:'Energía',HAL:'Energía',PXD:'Energía',
+  MPC:'Energía',VLO:'Energía',PSX:'Energía',HES:'Energía',DVN:'Energía',
+  FANG:'Energía',APA:'Energía',MRO:'Energía',KMI:'Energía',WMB:'Energía',
+  ET:'Energía',EPD:'Energía',ENB:'Energía',TRP:'Energía',
+
   // ── Consumo Discrecional ──
   HD:'Consumo Discrecional',MCD:'Consumo Discrecional',NKE:'Consumo Discrecional',
   SBUX:'Consumo Discrecional',TGT:'Consumo Discrecional',LOW:'Consumo Discrecional',
-  TJX:'Consumo Discrecional',BKNG:'Consumo Discrecional',
+  TJX:'Consumo Discrecional',BKNG:'Consumo Discrecional',CMG:'Consumo Discrecional',
+  ABNB:'Consumo Discrecional',EXPE:'Consumo Discrecional',MAR:'Consumo Discrecional',
+  HLT:'Consumo Discrecional',YUM:'Consumo Discrecional',DPZ:'Consumo Discrecional',
+  DKNG:'Consumo Discrecional',MGM:'Consumo Discrecional',WYNN:'Consumo Discrecional',
+  LVS:'Consumo Discrecional',RCL:'Consumo Discrecional',CCL:'Consumo Discrecional',
+  NCLH:'Consumo Discrecional',F:'Automotriz',ROST:'Consumo Discrecional',
+  BBY:'Consumo Discrecional',GPS:'Consumo Discrecional',M:'Consumo Discrecional',
+  W:'Consumo Discrecional',CVNA:'Consumo Discrecional',KMX:'Consumo Discrecional',
+
   // ── Consumo Básico ──
   WMT:'Consumo Básico',COST:'Consumo Básico',PG:'Consumo Básico',KO:'Consumo Básico',
   PEP:'Consumo Básico',PM:'Consumo Básico',MO:'Consumo Básico',CL:'Consumo Básico',
+  MDLZ:'Consumo Básico',KHC:'Consumo Básico',GIS:'Consumo Básico',K:'Consumo Básico',
+  HSY:'Consumo Básico',CAG:'Consumo Básico',SJM:'Consumo Básico',CPB:'Consumo Básico',
+  CHD:'Consumo Básico',EL:'Consumo Básico',KR:'Consumo Básico',SYY:'Consumo Básico',
+  ADM:'Consumo Básico',BG:'Consumo Básico',TSN:'Consumo Básico',HRL:'Consumo Básico',
+
   // ── Salud ──
   JNJ:'Salud',UNH:'Salud',LLY:'Salud',PFE:'Salud',ABBV:'Salud',MRK:'Salud',
   TMO:'Salud',ABT:'Salud',DHR:'Salud',ISRG:'Salud',MRNA:'Salud',REGN:'Salud',
+  AMGN:'Salud',GILD:'Salud',BIIB:'Salud',VRTX:'Salud',BMY:'Salud',
+  CVS:'Salud',CI:'Salud',HUM:'Salud',CNC:'Salud',ELV:'Salud',
+  BSX:'Salud',MDT:'Salud',EW:'Salud',SYK:'Salud',ZBH:'Salud',
+  DXCM:'Salud',PODD:'Salud',INCY:'Salud',ALNY:'Salud',SGEN:'Salud',
+  EXAS:'Salud',NTRA:'Salud',ILMN:'Salud',A:'Salud',IQV:'Salud',
+  MCK:'Salud',AHC:'Salud',GEHC:'Salud',RMD:'Salud',
+
   // ── Finanzas ──
   JPM:'Finanzas',BAC:'Finanzas',WFC:'Finanzas',GS:'Finanzas',MS:'Finanzas',
   V:'Finanzas',MA:'Finanzas',AXP:'Finanzas',BLK:'Finanzas',C:'Finanzas',
+  SCHW:'Finanzas',COF:'Finanzas',USB:'Finanzas',PNC:'Finanzas',TFC:'Finanzas',
+  SPGI:'Finanzas',MCO:'Finanzas',ICE:'Finanzas',CME:'Finanzas',CBOE:'Finanzas',
+  PYPL:'Finanzas',SQ:'Finanzas',AFRM:'Finanzas',SOFI:'Finanzas',NU:'Finanzas',
+  COIN:'Finanzas',HOOD:'Finanzas',MSTR:'Finanzas',
+  MET:'Finanzas',PRU:'Finanzas',AFL:'Finanzas',ALL:'Finanzas',TRV:'Finanzas',
+  MKTX:'Finanzas',NDAQ:'Finanzas',
+
   // ── Industriales ──
   CAT:'Industriales',BA:'Industriales',GE:'Industriales',HON:'Industriales',
   UPS:'Industriales',RTX:'Industriales',LMT:'Industriales',DE:'Industriales',
+  MMM:'Industriales',EMR:'Industriales',ETN:'Industriales',PH:'Industriales',
+  ROK:'Industriales',IR:'Industriales',XYL:'Industriales',GWW:'Industriales',
+  FAST:'Industriales',CHRW:'Industriales',EXPD:'Industriales',FDX:'Industriales',
+  DAL:'Industriales',UAL:'Industriales',AAL:'Industriales',LUV:'Industriales',
+  ALLE:'Industriales',RRX:'Industriales',AME:'Industriales',GNRC:'Industriales',
+  CARR:'Industriales',OTIS:'Industriales',TDG:'Industriales',HWM:'Industriales',
+  GEV:'Industriales',AXON:'Industriales',
+
   // ── Materiales ──
   FCX:'Materiales',NEM:'Materiales',LIN:'Materiales',APD:'Materiales',
+  ECL:'Materiales',DD:'Materiales',DOW:'Materiales',LYB:'Materiales',
+  PPG:'Materiales',SHW:'Materiales',ALB:'Materiales',GOLD:'Materiales',
+  AEM:'Materiales',WPM:'Materiales',PAAS:'Materiales',AG:'Materiales',
+  X:'Materiales',NUE:'Materiales',CLF:'Materiales',AA:'Materiales',
+  MP:'Materiales',CF:'Materiales',MOS:'Materiales',FMC:'Materiales',
+
   // ── Utilities ──
   NEE:'Utilities',DUK:'Utilities',SO:'Utilities',AEP:'Utilities',XEL:'Utilities',
+  EXC:'Utilities',SRE:'Utilities',D:'Utilities',PCG:'Utilities',ED:'Utilities',
+  WEC:'Utilities',ES:'Utilities',AWK:'Utilities',CMS:'Utilities',CNP:'Utilities',
+  NI:'Utilities',OGE:'Utilities',PNW:'Utilities',
+
   // ── Inmobiliario (REITs) ──
-  AMT:'REITs',PLD:'REITs',EQIX:'REITs',O:'REITs',VICI:'REITs'
+  AMT:'REITs',PLD:'REITs',EQIX:'REITs',O:'REITs',VICI:'REITs',
+  CCI:'REITs',SBAC:'REITs',DLR:'REITs',IRM:'REITs',PSA:'REITs',
+  EXR:'REITs',AVB:'REITs',EQR:'REITs',MAA:'REITs',UDR:'REITs',
+  CPT:'REITs',NNN:'REITs',WPC:'REITs',STORE:'REITs',
+  SPG:'REITs',MAC:'REITs',BXP:'REITs',VNO:'REITs',KIM:'REITs',
+
+  // ── Cripto & Blockchain ──
+  MSTR:'Finanzas',COIN:'Finanzas',HOOD:'Finanzas',MARA:'Cripto',
+  RIOT:'Cripto',CLSK:'Cripto',HUT:'Cripto',BTBT:'Cripto',CIFR:'Cripto',
+
+  // ── Inteligencia Artificial & Big Data ──
+  AI:'IA & Big Data',BBAI:'IA & Big Data',SOUN:'IA & Big Data',IREN:'IA & Big Data',
+  CIEN:'IA & Big Data',PATH:'IA & Big Data',AMBA:'IA & Big Data',
+
+  // ── Defensa & Aeroespacial ──
+  NOC:'Defensa',GD:'Defensa',L:'Defensa',HII:'Defensa',KTOS:'Defensa',
+  LDOS:'Defensa',BAH:'Defensa',SAIC:'Defensa',
+
+  // ── Biotech ──
+  BNTX:'Biotech',NVAX:'Biotech',SRPT:'Biotech',FOLD:'Biotech',
+  IONS:'Biotech',ARWR:'Biotech',RCKT:'Biotech',FATE:'Biotech',
+  NTLA:'Biotech',BEAM:'Biotech',CRSP:'Biotech',EDIT:'Biotech',
+
+  // ── Minería & Oro ──
+  GOLD:'Materiales',NEM:'Materiales',AEM:'Materiales',
+  KGC:'Materiales',AGI:'Materiales',AU:'Materiales',HMY:'Materiales',
 };
 var SEC_COLOR={
   ETF:'#00d4ff',
   Software:'#7c4dff',
   Semiconductores:'#aa00ff',
+  'IA & Big Data':'#e040fb',
   Hardware:'#6200ea',
   'E-commerce':'#00bcd4',
   Comunicación:'#f48fb1',
   'Vehículos Eléctricos':'#76ff03',
+  Automotriz:'#b0bec5',
   Energía:'#ff8c00',
   'Consumo Discrecional':'#00e5ff',
   'Consumo Básico':'#80deea',
   Salud:'#69f0ae',
+  Biotech:'#00bfa5',
   Finanzas:'#ffd600',
+  Cripto:'#f7931a',
+  Defensa:'#90a4ae',
   Industriales:'#e0e0e0',
   Materiales:'#a5d6a7',
   Utilities:'#80cbc4',
   REITs:'#ffab40',
   Otros:'#78909c'
 };
-var SEC_ORDER=['ETF','Software','Semiconductores','Hardware','E-commerce','Comunicación','Vehículos Eléctricos','Energía','Consumo Discrecional','Consumo Básico','Salud','Finanzas','Industriales','Materiales','Utilities','REITs','Otros'];
-var SEC_ICON={ETF:'◈',Software:'⬡',Semiconductores:'◎',Hardware:'⬢','E-commerce':'⬟',Comunicación:'◉','Vehículos Eléctricos':'⚡',Energía:'⬟','Consumo Discrecional':'⬠','Consumo Básico':'⬡',Salud:'✚',Finanzas:'$',Industriales:'⚙',Materiales:'◆',Utilities:'⚡',REITs:'⬛',Otros:'?'};
+var SEC_ORDER=['ETF','Software','Semiconductores','IA & Big Data','Hardware','E-commerce','Comunicación','Vehículos Eléctricos','Automotriz','Energía','Consumo Discrecional','Consumo Básico','Salud','Biotech','Finanzas','Cripto','Defensa','Industriales','Materiales','Utilities','REITs','Otros'];
+var SEC_ICON={ETF:'◈',Software:'⬡',Semiconductores:'◎','IA & Big Data':'◉',Hardware:'⬢','E-commerce':'⬟',Comunicación:'◉','Vehículos Eléctricos':'⚡',Automotriz:'◈',Energía:'⬟','Consumo Discrecional':'⬠','Consumo Básico':'⬡',Salud:'✚',Biotech:'◎',Finanzas:'$',Cripto:'◆',Defensa:'⬢',Industriales:'⚙',Materiales:'◆',Utilities:'⚡',REITs:'⬛',Otros:'?'};
 
 var allData=[], filtered=[], tickers=[];
 var autoOn=true, cdTimer=null, cdSecs=60;
@@ -1008,14 +1116,12 @@ function applyFilters() {
   var rmx = +document.getElementById('rmx').value;
   var dmi = +document.getElementById('dmi').value;
   var dmx = +document.getElementById('dmx').value;
-  var adxmi = +document.getElementById('adxmi').value;
   var sb  = document.getElementById('sortBy').value;
 
   filtered = allData.filter(function(d){
     if(sec && d.sector!==sec) return false;
     if(d.rsi!=null && (d.rsi<rmi || d.rsi>rmx)) return false;
     if(d.distEma200!=null && (d.distEma200<dmi || d.distEma200>dmx)) return false;
-    if(adxmi>0 && (d.adx==null || d.adx<adxmi)) return false;
     return true;
   });
   if(sb){
@@ -1034,7 +1140,6 @@ function resetFilters(){
   document.getElementById('rmx').value=100; document.getElementById('rmxV').textContent='100';
   document.getElementById('dmi').value=-50; document.getElementById('dmiV').textContent='-50';
   document.getElementById('dmx').value=50;  document.getElementById('dmxV').textContent='50';
-  document.getElementById('adxmi').value=0; document.getElementById('adxmiV').textContent='0';
   document.getElementById('sortBy').value='';
   applyFilters();
 }
@@ -1085,17 +1190,9 @@ function renderSectors(){
   var html=SEC_ORDER.filter(function(s){return grouped[s]&&grouped[s].length}).map(function(sec){
     var col=SEC_COLOR[sec]||'#fff';
     var secData=grouped[sec];
-    // Calcular stats del sector
+    // Calcular P/E promedio del sector
     var peVals=secData.map(function(d){return d.pe;}).filter(function(v){return v!=null&&v>0&&v<200;});
     var peAvg=peVals.length?(peVals.reduce(function(a,b){return a+b},0)/peVals.length):null;
-    var adxVals=secData.map(function(d){return d.adx;}).filter(function(v){return v!=null;});
-    var adxAvg=adxVals.length?(adxVals.reduce(function(a,b){return a+b},0)/adxVals.length):null;
-    var rsiVals=secData.map(function(d){return d.rsi;}).filter(function(v){return v!=null;});
-    var rsiAvg=rsiVals.length?(rsiVals.reduce(function(a,b){return a+b},0)/rsiVals.length):null;
-    var chgVals=secData.map(function(d){return d.chgPct;}).filter(function(v){return v!=null;});
-    var chgAvg=chgVals.length?(chgVals.reduce(function(a,b){return a+b},0)/chgVals.length):null;
-    var upCount=secData.filter(function(d){return d.chgPct>0;}).length;
-    var dnCount=secData.filter(function(d){return d.chgPct<0;}).length;
     var rows=secData.map(function(d){
       return '<tr class="'+(d._flash==='up'?'flu':d._flash==='dn'?'fld':'')+'">'+
         '<td><div class="tk-cell"><div class="sec-bar" style="background:'+col+'"></div><span class="tk-sym">'+d.symbol+'</span></div></td>'+
@@ -1109,29 +1206,13 @@ function renderSectors(){
         '<td>'+fcap(d.marketCap)+'</td>'+
         '<td>'+fv(d.volume)+'</td></tr>';
     }).join('');
-    // Mini heat bar: % alcistas vs bajistas
-    var heatPct=secData.length?Math.round(upCount/secData.length*100):0;
     return '<div style="margin-bottom:20px">'+
-      '<div class="sec-hdr">'+
-        '<div class="sec-title">'+
-          '<div class="sec-bar" style="background:'+col+';height:14px;width:3px;border-radius:2px"></div>'+
-          '<span style="color:'+col+'">'+SEC_ICON[sec]+'</span>'+sec.toUpperCase()+
-        '</div>'+
-        '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
-          (chgAvg!=null?'<span style="font-family:var(--mono);font-size:12px;color:'+(chgAvg>=0?'var(--green)':'var(--red)')+'">Día: '+(chgAvg>=0?'+':'')+f2(chgAvg)+'%</span>':'')+
-          (rsiAvg!=null?'<span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">RSI: <span style="color:var(--yellow)">'+f1(rsiAvg)+'</span></span>':'')+
-          (adxAvg!=null?'<span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">ADX: <span style="color:'+(adxAvg>=25?'var(--green)':adxAvg>=20?'var(--yellow)':'var(--red)')+'">'+f1(adxAvg)+'</span></span>':'')+
-          (peAvg?'<span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">P/E: <span style="color:var(--yellow)">'+f1(peAvg)+'x</span></span>':'')+
-          '<div style="display:flex;align-items:center;gap:4px;font-family:var(--mono);font-size:12px">'+
-            '<span style="color:var(--green)">▲'+upCount+'</span>'+
-            '<div style="width:50px;height:5px;background:rgba(255,61,90,0.4);border-radius:2px;overflow:hidden">'+
-              '<div style="width:'+heatPct+'%;height:100%;background:var(--green);border-radius:2px"></div>'+
-            '</div>'+
-            '<span style="color:var(--red)">▼'+dnCount+'</span>'+
-          '</div>'+
-          '<div class="sec-cnt">'+secData.length+' ticker'+(secData.length>1?'s':'')+'</div>'+
-        '</div>'+
-      '</div>'+
+      '<div class="sec-hdr"><div class="sec-title">'+
+      '<div class="sec-bar" style="background:'+col+';height:14px;width:3px;border-radius:2px"></div>'+
+      '<span style="color:'+col+'">'+SEC_ICON[sec]+'</span>'+sec.toUpperCase()+'</div>'+
+      '<div style="display:flex;align-items:center;gap:10px">'+
+      (peAvg?'<span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">P/E prom: <span style="color:var(--yellow)">'+f1(peAvg)+'x</span></span>':'') +
+      '<div class="sec-cnt">'+secData.length+' ticker'+(secData.length>1?'s':'')+'</div></div></div>'+
       '<div class="tbl-wrap"><table class="dt"><thead><tr>'+
       '<th style="width:80px">Ticker</th><th>Precio</th><th>% Día</th><th>RSI(14)</th>'+
       '<th>ADX(14)</th><th>EMA 50</th><th>EMA 200</th><th>Dist EMA200</th><th>P/E</th><th>Cap. Mkt</th><th>Volumen</th>'+
