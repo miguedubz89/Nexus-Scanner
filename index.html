@@ -880,7 +880,7 @@ setInterval(function(){ document.getElementById('clk').textContent=new Date().to
 // ── SERVER CHECK ──────────────────────────────────
 async function checkServer() {
   try {
-    var r = await fetch(API+'/health', {signal: AbortSignal.timeout(2000)});
+    var r = await fetch(API+'/health', {signal: AbortSignal.timeout(8000)});
     if (r.ok) {
       serverOk = true;
       document.getElementById('serverBanner').style.display = 'none';
