@@ -617,10 +617,12 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
         <label style="font-size:10px;color:var(--text-dim)">SECTOR</label>
         <select class="sel" id="fSector" onchange="applyFilters()">
           <option value="">Todos los sectores</option>
-          <option>ETF</option><option>Tecnología</option><option>Energía</option>
-          <option>Consumo</option><option>Salud</option><option>Industriales</option>
-          <option>Finanzas</option><option>Comunicación</option>
-          <option>Materiales</option><option>Utilities</option>
+          <option>ETF</option><option>Software</option><option>Semiconductores</option>
+          <option>Hardware</option><option>E-commerce</option><option>Comunicación</option>
+          <option>Vehículos Eléctricos</option><option>Energía</option>
+          <option>Consumo Discrecional</option><option>Consumo Básico</option>
+          <option>Salud</option><option>Finanzas</option><option>Industriales</option>
+          <option>Materiales</option><option>Utilities</option><option>REITs</option><option>Otros</option>
         </select>
       </div>
       <div class="range-wrap">
@@ -713,6 +715,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           <th data-field="price" onclick="ts('price',this)">Precio<span class="sort-icon">⇅</span></th>
           <th data-field="chgPct" onclick="ts('chgPct',this)">% Día<span class="sort-icon">⇅</span></th>
           <th data-field="rsi" onclick="ts('rsi',this)">RSI(14)<span class="sort-icon">⇅</span></th>
+          <th data-field="adx" onclick="ts('adx',this)">ADX(14)<span class="sort-icon">⇅</span></th>
           <th data-field="ema50" onclick="ts('ema50',this)">EMA 50<span class="sort-icon">⇅</span></th>
           <th data-field="ema200" onclick="ts('ema200',this)">EMA 200<span class="sort-icon">⇅</span></th>
           <th data-field="distEma50" onclick="ts('distEma50',this)">Dist EMA50%<span class="sort-icon">⇅</span></th>
@@ -737,6 +740,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           <th onclick="ts('price',this)">Precio<span class="sort-icon">⇅</span></th>
           <th onclick="ts('chgPct',this)">% Día<span class="sort-icon">⇅</span></th>
           <th onclick="ts('rsi',this)">RSI<span class="sort-icon">⇅</span></th>
+          <th onclick="ts('adx',this)">ADX<span class="sort-icon">⇅</span></th>
           <th onclick="ts('distEma200',this)">Dist EMA200<span class="sort-icon">⇅</span></th>
           <th onclick="ts('pe',this)">P/E<span class="sort-icon">⇅</span></th>
           <th onclick="ts('marketCap',this)">Cap. Mkt<span class="sort-icon">⇅</span></th>
@@ -782,26 +786,76 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 </div><!-- /#appRoot -->
 
 <script>
-var API = '';
+var API = 'http://localhost:5000';
 
 var SECTORS = {
+  // ── ETF ──
   SPY:'ETF',QQQ:'ETF',XLE:'ETF',GLD:'ETF',TLT:'ETF',IWM:'ETF',DIA:'ETF',VTI:'ETF',
   ARKK:'ETF',XLF:'ETF',XLK:'ETF',XLV:'ETF',XLI:'ETF',XLY:'ETF',XLP:'ETF',XLU:'ETF',XLB:'ETF',
-  AAPL:'Tecnología',MSFT:'Tecnología',NVDA:'Tecnología',GOOGL:'Tecnología',GOOG:'Tecnología',
-  META:'Tecnología',TSLA:'Tecnología',AMZN:'Tecnología',AMD:'Tecnología',INTC:'Tecnología',
-  CRM:'Tecnología',ORCL:'Tecnología',ADBE:'Tecnología',QCOM:'Tecnología',AVGO:'Tecnología',
-  NFLX:'Comunicación',DIS:'Comunicación',CMCSA:'Comunicación',T:'Comunicación',VZ:'Comunicación',
+  // ── Software ──
+  MSFT:'Software',CRM:'Software',ORCL:'Software',ADBE:'Software',NOW:'Software',SNOW:'Software',
+  PLTR:'Software',WDAY:'Software',INTU:'Software',PANW:'Software',FTNT:'Software',ZS:'Software',
+  // ── Semiconductores ──
+  NVDA:'Semiconductores',AMD:'Semiconductores',INTC:'Semiconductores',QCOM:'Semiconductores',
+  AVGO:'Semiconductores',TSM:'Semiconductores',MU:'Semiconductores',AMAT:'Semiconductores',
+  LRCX:'Semiconductores',KLAC:'Semiconductores',ASML:'Semiconductores',
+  // ── Hardware & Dispositivos ──
+  AAPL:'Hardware',DELL:'Hardware',HPQ:'Hardware',
+  // ── E-commerce & Internet ──
+  AMZN:'E-commerce',SHOP:'E-commerce',MELI:'E-commerce',BABA:'E-commerce',JD:'E-commerce',
+  // ── Comunicación & Redes Sociales ──
+  META:'Comunicación',GOOGL:'Comunicación',GOOG:'Comunicación',NFLX:'Comunicación',
+  DIS:'Comunicación',CMCSA:'Comunicación',T:'Comunicación',VZ:'Comunicación',TMUS:'Comunicación',
+  SNAP:'Comunicación',PINS:'Comunicación',RDDT:'Comunicación',
+  // ── Vehículos Eléctricos & Movilidad ──
+  TSLA:'Vehículos Eléctricos',RIVN:'Vehículos Eléctricos',LCID:'Vehículos Eléctricos',NIO:'Vehículos Eléctricos',LI:'Vehículos Eléctricos',
+  // ── Energía ──
   CVX:'Energía',XOM:'Energía',VIST:'Energía',COP:'Energía',EOG:'Energía',SLB:'Energía',OXY:'Energía',
-  JPM:'Finanzas',BAC:'Finanzas',WFC:'Finanzas',GS:'Finanzas',MS:'Finanzas',V:'Finanzas',MA:'Finanzas',
+  BP:'Energía',SHEL:'Energía',PXD:'Energía',HAL:'Energía',
+  // ── Consumo Discrecional ──
+  HD:'Consumo Discrecional',MCD:'Consumo Discrecional',NKE:'Consumo Discrecional',
+  SBUX:'Consumo Discrecional',TGT:'Consumo Discrecional',LOW:'Consumo Discrecional',
+  TJX:'Consumo Discrecional',BKNG:'Consumo Discrecional',
+  // ── Consumo Básico ──
+  WMT:'Consumo Básico',COST:'Consumo Básico',PG:'Consumo Básico',KO:'Consumo Básico',
+  PEP:'Consumo Básico',PM:'Consumo Básico',MO:'Consumo Básico',CL:'Consumo Básico',
+  // ── Salud ──
   JNJ:'Salud',UNH:'Salud',LLY:'Salud',PFE:'Salud',ABBV:'Salud',MRK:'Salud',
-  WMT:'Consumo',COST:'Consumo',TGT:'Consumo',HD:'Consumo',MCD:'Consumo',NKE:'Consumo',PG:'Consumo',
-  CAT:'Industriales',BA:'Industriales',GE:'Industriales',HON:'Industriales',UPS:'Industriales',
-  FCX:'Materiales',NEM:'Materiales',LIN:'Materiales',
-  NEE:'Utilities',DUK:'Utilities',SO:'Utilities'
+  TMO:'Salud',ABT:'Salud',DHR:'Salud',ISRG:'Salud',MRNA:'Salud',REGN:'Salud',
+  // ── Finanzas ──
+  JPM:'Finanzas',BAC:'Finanzas',WFC:'Finanzas',GS:'Finanzas',MS:'Finanzas',
+  V:'Finanzas',MA:'Finanzas',AXP:'Finanzas',BLK:'Finanzas',C:'Finanzas',
+  // ── Industriales ──
+  CAT:'Industriales',BA:'Industriales',GE:'Industriales',HON:'Industriales',
+  UPS:'Industriales',RTX:'Industriales',LMT:'Industriales',DE:'Industriales',
+  // ── Materiales ──
+  FCX:'Materiales',NEM:'Materiales',LIN:'Materiales',APD:'Materiales',
+  // ── Utilities ──
+  NEE:'Utilities',DUK:'Utilities',SO:'Utilities',AEP:'Utilities',XEL:'Utilities',
+  // ── Inmobiliario (REITs) ──
+  AMT:'REITs',PLD:'REITs',EQIX:'REITs',O:'REITs',VICI:'REITs'
 };
-var SEC_COLOR={ETF:'#00d4ff',Tecnología:'#7c4dff',Energía:'#ff8c00',Consumo:'#00e5ff',Salud:'#69f0ae',Industriales:'#e0e0e0',Finanzas:'#ffd600',Comunicación:'#f48fb1',Materiales:'#a5d6a7',Utilities:'#80cbc4'};
-var SEC_ORDER=['ETF','Tecnología','Energía','Consumo','Salud','Industriales','Finanzas','Comunicación','Materiales','Utilities'];
-var SEC_ICON={ETF:'◈',Tecnología:'⬡',Energía:'⬟',Consumo:'⬠',Salud:'✚',Industriales:'⚙',Finanzas:'$',Comunicación:'◉',Materiales:'◆',Utilities:'⚡'};
+var SEC_COLOR={
+  ETF:'#00d4ff',
+  Software:'#7c4dff',
+  Semiconductores:'#aa00ff',
+  Hardware:'#6200ea',
+  'E-commerce':'#00bcd4',
+  Comunicación:'#f48fb1',
+  'Vehículos Eléctricos':'#76ff03',
+  Energía:'#ff8c00',
+  'Consumo Discrecional':'#00e5ff',
+  'Consumo Básico':'#80deea',
+  Salud:'#69f0ae',
+  Finanzas:'#ffd600',
+  Industriales:'#e0e0e0',
+  Materiales:'#a5d6a7',
+  Utilities:'#80cbc4',
+  REITs:'#ffab40',
+  Otros:'#78909c'
+};
+var SEC_ORDER=['ETF','Software','Semiconductores','Hardware','E-commerce','Comunicación','Vehículos Eléctricos','Energía','Consumo Discrecional','Consumo Básico','Salud','Finanzas','Industriales','Materiales','Utilities','REITs','Otros'];
+var SEC_ICON={ETF:'◈',Software:'⬡',Semiconductores:'◎',Hardware:'⬢','E-commerce':'⬟',Comunicación:'◉','Vehículos Eléctricos':'⚡',Energía:'⬟','Consumo Discrecional':'⬠','Consumo Básico':'⬡',Salud:'✚',Finanzas:'$',Industriales:'⚙',Materiales:'◆',Utilities:'⚡',REITs:'⬛',Otros:'?'};
 
 var allData=[], filtered=[], tickers=[];
 var autoOn=true, cdTimer=null, cdSecs=60;
@@ -929,7 +983,7 @@ async function fetchQuote(sym) {
     if (!r.ok) return null;
     var d = await r.json();
     if (d.error) return null;
-    d.sector = SECTORS[sym] || 'Tecnología';
+    d.sector = SECTORS[sym] || 'Otros';
     var prev = prevPrices[sym];
     d._flash = prev ? (d.price > prev ? 'up' : d.price < prev ? 'dn' : '') : '';
     prevPrices[sym] = d.price;
@@ -1020,12 +1074,17 @@ function renderSectors(){
   filtered.forEach(function(d){ if(!grouped[d.sector])grouped[d.sector]=[];grouped[d.sector].push(d); });
   var html=SEC_ORDER.filter(function(s){return grouped[s]&&grouped[s].length}).map(function(sec){
     var col=SEC_COLOR[sec]||'#fff';
-    var rows=grouped[sec].map(function(d){
+    var secData=grouped[sec];
+    // Calcular P/E promedio del sector
+    var peVals=secData.map(function(d){return d.pe;}).filter(function(v){return v!=null&&v>0&&v<200;});
+    var peAvg=peVals.length?(peVals.reduce(function(a,b){return a+b},0)/peVals.length):null;
+    var rows=secData.map(function(d){
       return '<tr class="'+(d._flash==='up'?'flu':d._flash==='dn'?'fld':'')+'">'+
         '<td><div class="tk-cell"><div class="sec-bar" style="background:'+col+'"></div><span class="tk-sym">'+d.symbol+'</span></div></td>'+
         '<td style="color:'+(d.chgPct>=0?'var(--green)':'var(--red)')+'">'+fp(d.price)+'</td>'+
         '<td>'+chipChg(d.chgPct)+'</td>'+
         '<td>'+rsiCell(d.rsi)+'</td>'+
+        '<td>'+adxCell(d.adx)+'</td>'+
         '<td>'+fp(d.ema50)+'</td><td>'+fp(d.ema200)+'</td>'+
         '<td>'+distCell(d.distEma200)+'</td>'+
         '<td>'+(d.pe?f1(d.pe)+'x':'--')+'</td>'+
@@ -1036,10 +1095,12 @@ function renderSectors(){
       '<div class="sec-hdr"><div class="sec-title">'+
       '<div class="sec-bar" style="background:'+col+';height:14px;width:3px;border-radius:2px"></div>'+
       '<span style="color:'+col+'">'+SEC_ICON[sec]+'</span>'+sec.toUpperCase()+'</div>'+
-      '<div class="sec-cnt">'+grouped[sec].length+' ticker'+(grouped[sec].length>1?'s':'')+'</div></div>'+
+      '<div style="display:flex;align-items:center;gap:10px">'+
+      (peAvg?'<span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">P/E prom: <span style="color:var(--yellow)">'+f1(peAvg)+'x</span></span>':'') +
+      '<div class="sec-cnt">'+secData.length+' ticker'+(secData.length>1?'s':'')+'</div></div></div>'+
       '<div class="tbl-wrap"><table class="dt"><thead><tr>'+
       '<th style="width:80px">Ticker</th><th>Precio</th><th>% Día</th><th>RSI(14)</th>'+
-      '<th>EMA 50</th><th>EMA 200</th><th>Dist EMA200</th><th>P/E</th><th>Cap. Mkt</th><th>Volumen</th>'+
+      '<th>ADX(14)</th><th>EMA 50</th><th>EMA 200</th><th>Dist EMA200</th><th>P/E</th><th>Cap. Mkt</th><th>Volumen</th>'+
       '</tr></thead><tbody>'+rows+'</tbody></table></div></div>';
   }).join('');
   document.getElementById('secContainer').innerHTML=html||'<div style="color:var(--text-dim);padding:30px;font-family:var(--mono);text-align:center">Cargá tickers y hacé click en ▶ CARGAR TICKERS</div>';
@@ -1052,6 +1113,7 @@ function renderTech(){
       '<td style="color:'+(d.chgPct>=0?'var(--green)':'var(--red)')+'">'+fp(d.price)+'</td>'+
       '<td>'+chipChg(d.chgPct)+'</td>'+
       '<td>'+rsiCell(d.rsi)+'</td>'+
+      '<td>'+adxCell(d.adx)+'</td>'+
       '<td>'+fp(d.ema50)+'</td><td>'+fp(d.ema200)+'</td>'+
       '<td>'+distCell(d.distEma50)+'</td><td>'+distCell(d.distEma200)+'</td>'+
       '<td>'+fp(d.sma50)+'</td><td>'+fp(d.sma200)+'</td>'+
@@ -1061,7 +1123,7 @@ function renderTech(){
       '<td><button class="tv-btn" onclick="openTVChart(\''+d.symbol+'\')">📈</button></td>'+
       '</tr>';
   }).join('');
-  document.getElementById('techBody').innerHTML=rows||emptyRow(15);
+  document.getElementById('techBody').innerHTML=rows||emptyRow(16);
 }
 
 function renderAllTab(){
@@ -1071,6 +1133,7 @@ function renderAllTab(){
       '<td style="color:'+(d.chgPct>=0?'var(--green)':'var(--red)')+'">'+fp(d.price)+'</td>'+
       '<td>'+chipChg(d.chgPct)+'</td>'+
       '<td>'+rsiCell(d.rsi)+'</td>'+
+      '<td>'+adxCell(d.adx)+'</td>'+
       '<td>'+distCell(d.distEma200)+'</td>'+
       '<td>'+(d.pe?f1(d.pe)+'x':'--')+'</td>'+
       '<td>'+fcap(d.marketCap)+'</td><td>'+fv(d.volume)+'</td><td>'+fv(d.avgVol20)+'</td>'+
@@ -1079,7 +1142,7 @@ function renderAllTab(){
       '<td>'+momCell(d.mom3m)+'</td><td>'+momCell(d.mom6m)+'</td>'+
       '<td>'+doSpark(d.spark)+'</td></tr>';
   }).join('');
-  document.getElementById('allBody').innerHTML=rows||emptyRow(14);
+  document.getElementById('allBody').innerHTML=rows||emptyRow(15);
 }
 
 // ── CELLS ─────────────────────────────────────────
@@ -1093,6 +1156,19 @@ function distCell(v){
   if(v==null)return '<span style="color:var(--text-dim)">--</span>';
   var cls=v>10?'cg':v<0?'cr':'cy';
   return '<span class="chip '+cls+'">'+(v>=0?'+':'')+f1(v)+'%</span>';
+}
+function adxCell(v){
+  if(v==null)return '<span style="color:var(--text-dim)">--</span>';
+  // ADX: <20 sin tendencia, 20-25 tendencia débil, 25-50 tendencia fuerte, >50 muy fuerte
+  var cls, label;
+  if(v<20){cls='cr';label='Débil';}
+  else if(v<25){cls='cy';label='Mod';}
+  else if(v<50){cls='cg';label='Fuerte';}
+  else{cls='cg';label='Muy F.';}
+  return '<div style="display:flex;align-items:center;gap:4px;justify-content:flex-end">'+
+    '<div style="width:36px;height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;border:1px solid var(--border)">'+
+    '<div style="height:100%;width:'+Math.min(v,100)+'%;background:'+(v>=25?'var(--green)':v>=20?'var(--yellow)':'var(--red)')+';border-radius:2px"></div></div>'+
+    '<span class="chip '+cls+'" style="font-size:11px">'+f1(v)+'</span></div>';
 }
 function momCell(v){
   if(v==null)return '<span style="color:var(--text-dim)">--</span>';
@@ -1199,102 +1275,4 @@ function ts(field, el){
 
 // ── EXPORT ────────────────────────────────────────
 function exportCSV(){
-  var h=['Symbol','Sector','Price','Change%','RSI','EMA50','EMA200','DistEMA50%','DistEMA200%','SMA50','SMA200','Mom3M%','Mom6M%','Volume','AvgVol20','PE','MarketCap','Beta','DivYield%'];
-  var rows=filtered.map(function(d){
-    return[d.symbol,d.sector,fp(d.price),f2(d.chgPct),d.rsi?f1(d.rsi):'',
-      d.ema50?fp(d.ema50):'',d.ema200?fp(d.ema200):'',
-      d.distEma50?f2(d.distEma50):'',d.distEma200?f2(d.distEma200):'',
-      d.sma50?fp(d.sma50):'',d.sma200?fp(d.sma200):'',
-      d.mom3m?f2(d.mom3m):'',d.mom6m?f2(d.mom6m):'',
-      d.volume||'',d.avgVol20||'',d.pe?f2(d.pe):'',d.marketCap||'',
-      d.beta?f2(d.beta):'',d.divYield?f2(d.divYield):''];
-  });
-  var csv=[h].concat(rows).map(function(r){return r.join(',')}).join('\n');
-  var a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-  a.download='nexus_scanner_'+new Date().toISOString().slice(0,10)+'.csv';
-  a.click();
-}
-
-// ── TRADINGVIEW MODAL ─────────────────────────────
-function openTVChart(sym) {
-  document.getElementById('tvModalSym').textContent = sym;
-  document.getElementById('tvOpenLink').href = 'https://www.tradingview.com/chart/?symbol=' + sym;
-  var body = document.getElementById('tvModalBody');
-  body.innerHTML = '';
-  var src = 'https://s.tradingview.com/widgetembed/?frameElementId=tradingview_nexus'
-    + '&symbol=' + encodeURIComponent(sym)
-    + '&interval=D&hidesidetoolbar=0&hidetoptoolbar=0&symboledit=1&saveimage=1'
-    + '&toolbarbg=0d1318&studies=RSI%40tv-basicstudies%1FMACD%40tv-basicstudies%1FMA%40tv-basicstudies'
-    + '&theme=dark&style=1&timezone=America%2FArgentina%2FBuenos_Aires'
-    + '&studies_overrides=%7B%7D&overrides=%7B%7D&enabled_features=%5B%5D'
-    + '&disabled_features=%5B%5D&locale=es&utm_source=nexus-scanner';
-  var iframe = document.createElement('iframe');
-  iframe.src = src;
-  iframe.style.width = '100%';
-  iframe.style.height = '100%';
-  iframe.style.border = 'none';
-  iframe.allowFullscreen = true;
-  body.appendChild(iframe);
-  document.getElementById('tvModalOverlay').classList.add('open');
-}
-
-function closeTVModal(e) {
-  if (e.target === document.getElementById('tvModalOverlay')) {
-    document.getElementById('tvModalOverlay').classList.remove('open');
-  }
-}
-
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') document.getElementById('tvModalOverlay').classList.remove('open');
-});
-
-// ── TICKER MANAGER ────────────────────────────────
-window.renderTickerList = function() {
-  var ul = document.getElementById('tickerList');
-  if (!ul) return;
-  ul.innerHTML = window.tickerList.map(function(sym, i) {
-    return '<div class="ticker-item">' +
-      '<span class="ticker-item-sym">' + sym + '</span>' +
-      '<button class="ticker-item-remove" onclick="removeTicker(' + i + ')" title="Eliminar">✕</button>' +
-      '</div>';
-  }).join('');
-  document.getElementById('tickerCount').textContent = window.tickerList.length + ' ticker' + (window.tickerList.length !== 1 ? 's' : '');
-  document.getElementById('tickerBox').value = window.tickerList.join('\n');
-};
-
-function addTickerFromInput() {
-  var inp = document.getElementById('tickerInputNew');
-  var sym = inp.value.trim().toUpperCase().replace(/[^A-Z0-9.]/g,'');
-  if (!sym) return;
-  if (window.tickerList.indexOf(sym) !== -1) {
-    inp.style.borderColor = 'var(--yellow)';
-    setTimeout(function(){ inp.style.borderColor = ''; }, 1000);
-    inp.value = '';
-    return;
-  }
-  window.tickerList.push(sym);
-  window.renderTickerList();
-  saveTickersFromList();
-  inp.value = '';
-  inp.focus();
-  var ul = document.getElementById('tickerList');
-  ul.scrollTop = ul.scrollHeight;
-}
-
-function removeTicker(idx) {
-  window.tickerList.splice(idx, 1);
-  window.renderTickerList();
-  saveTickersFromList();
-}
-
-function saveTickersFromList() {
-  // Guardar en Firestore (nube) + localStorage como fallback
-  if (window.saveTickersCloud) window.saveTickersCloud(window.tickerList.slice());
-  localStorage.setItem('nexus_tickers', window.tickerList.join('\n'));
-}
-
-// No hacer window.onload — la app se inicia desde Firebase onAuthStateChanged
-</script>
-</body>
-</html>
+  var h=['Symbol','Sector','Price','Change%','RSI','ADX','EMA50','EMA200','DistEMA50%','DistEMA200%','SMA50','SMA200','Mom3M%','Mom6M%','Volum
