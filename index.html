@@ -1184,15 +1184,58 @@ function mRow(d){
     '<td>'+chipChg(d.chgPct)+'</td><td>'+rsiCell(d.rsi)+'</td><td>'+fv(d.volume)+'</td></tr>';
 }
 
+// Estado de ordenamiento por sector
+var secSortState = {}; // { 'ETF': {field:'rsi', dir:-1}, ... }
+
+function tsSec(sec, field) {
+  if (!secSortState[sec]) secSortState[sec] = {field:'', dir:-1};
+  var st = secSortState[sec];
+  if (st.field === field) { st.dir *= -1; } else { st.field = field; st.dir = -1; }
+  renderSectors();
+}
+
 function renderSectors(){
   var grouped={};
   filtered.forEach(function(d){ if(!grouped[d.sector])grouped[d.sector]=[];grouped[d.sector].push(d); });
   var html=SEC_ORDER.filter(function(s){return grouped[s]&&grouped[s].length}).map(function(sec){
     var col=SEC_COLOR[sec]||'#fff';
-    var secData=grouped[sec];
-    // Calcular P/E promedio del sector
+    var secData=grouped[sec].slice();
+
+    // Ordenar si hay estado de sort para este sector
+    var st=secSortState[sec];
+    if(st&&st.field){
+      var f=st.field, dir=st.dir;
+      secData.sort(function(a,b){
+        var av=a[f]!=null?a[f]:-Infinity;
+        var bv=b[f]!=null?b[f]:-Infinity;
+        if(typeof av==='string') return av.localeCompare(bv)*dir;
+        return (av-bv)*dir;
+      });
+    }
+
+    // Stats del sector
     var peVals=secData.map(function(d){return d.pe;}).filter(function(v){return v!=null&&v>0&&v<200;});
     var peAvg=peVals.length?(peVals.reduce(function(a,b){return a+b},0)/peVals.length):null;
+    var adxVals=secData.map(function(d){return d.adx;}).filter(function(v){return v!=null;});
+    var adxAvg=adxVals.length?(adxVals.reduce(function(a,b){return a+b},0)/adxVals.length):null;
+    var rsiVals=secData.map(function(d){return d.rsi;}).filter(function(v){return v!=null;});
+    var rsiAvg=rsiVals.length?(rsiVals.reduce(function(a,b){return a+b},0)/rsiVals.length):null;
+    var chgVals=secData.map(function(d){return d.chgPct;}).filter(function(v){return v!=null;});
+    var chgAvg=chgVals.length?(chgVals.reduce(function(a,b){return a+b},0)/chgVals.length):null;
+    var upCount=secData.filter(function(d){return d.chgPct>0;}).length;
+    var dnCount=secData.filter(function(d){return d.chgPct<0;}).length;
+    var heatPct=secData.length?Math.round(upCount/secData.length*100):0;
+
+    // Helper para icono de sort en header
+    function thIcon(field, label, w) {
+      var active = st&&st.field===field;
+      var icon = active ? (st.dir===-1?'↓':'↑') : '⇅';
+      var opacity = active ? '1' : '0.3';
+      var wStyle = w ? 'width:'+w+';' : '';
+      return '<th style="'+wStyle+'cursor:pointer;user-select:none" onclick="tsSec(\''+sec.replace(/'/g,"\\'")+ '\',\''+field+'\')">'
+        +label+'<span class="sort-icon" style="opacity:'+opacity+';color:'+(active?'var(--accent)':'inherit')+'">'+icon+'</span></th>';
+    }
+
     var rows=secData.map(function(d){
       return '<tr class="'+(d._flash==='up'?'flu':d._flash==='dn'?'fld':'')+'">'+
         '<td><div class="tk-cell"><div class="sec-bar" style="background:'+col+'"></div><span class="tk-sym">'+d.symbol+'</span></div></td>'+
@@ -1206,16 +1249,40 @@ function renderSectors(){
         '<td>'+fcap(d.marketCap)+'</td>'+
         '<td>'+fv(d.volume)+'</td></tr>';
     }).join('');
+
     return '<div style="margin-bottom:20px">'+
-      '<div class="sec-hdr"><div class="sec-title">'+
-      '<div class="sec-bar" style="background:'+col+';height:14px;width:3px;border-radius:2px"></div>'+
-      '<span style="color:'+col+'">'+SEC_ICON[sec]+'</span>'+sec.toUpperCase()+'</div>'+
-      '<div style="display:flex;align-items:center;gap:10px">'+
-      (peAvg?'<span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">P/E prom: <span style="color:var(--yellow)">'+f1(peAvg)+'x</span></span>':'') +
-      '<div class="sec-cnt">'+secData.length+' ticker'+(secData.length>1?'s':'')+'</div></div></div>'+
+      '<div class="sec-hdr">'+
+        '<div class="sec-title">'+
+          '<div class="sec-bar" style="background:'+col+';height:14px;width:3px;border-radius:2px"></div>'+
+          '<span style="color:'+col+'">'+SEC_ICON[sec]+'</span>'+sec.toUpperCase()+
+        '</div>'+
+        '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
+          (chgAvg!=null?'<span style="font-family:var(--mono);font-size:12px;color:'+(chgAvg>=0?'var(--green)':'var(--red)')+'">Día: '+(chgAvg>=0?'+':'')+f2(chgAvg)+'%</span>':'')+
+          (rsiAvg!=null?'<span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">RSI: <span style="color:var(--yellow)">'+f1(rsiAvg)+'</span></span>':'')+
+          (adxAvg!=null?'<span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">ADX: <span style="color:'+(adxAvg>=25?'var(--green)':adxAvg>=20?'var(--yellow)':'var(--red)')+'">'+f1(adxAvg)+'</span></span>':'')+
+          (peAvg?'<span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">P/E: <span style="color:var(--yellow)">'+f1(peAvg)+'x</span></span>':'')+
+          '<div style="display:flex;align-items:center;gap:4px;font-family:var(--mono);font-size:12px">'+
+            '<span style="color:var(--green)">▲'+upCount+'</span>'+
+            '<div style="width:50px;height:5px;background:rgba(255,61,90,0.4);border-radius:2px;overflow:hidden">'+
+              '<div style="width:'+heatPct+'%;height:100%;background:var(--green);border-radius:2px"></div>'+
+            '</div>'+
+            '<span style="color:var(--red)">▼'+dnCount+'</span>'+
+          '</div>'+
+          '<div class="sec-cnt">'+secData.length+' ticker'+(secData.length>1?'s':'')+'</div>'+
+        '</div>'+
+      '</div>'+
       '<div class="tbl-wrap"><table class="dt"><thead><tr>'+
-      '<th style="width:80px">Ticker</th><th>Precio</th><th>% Día</th><th>RSI(14)</th>'+
-      '<th>ADX(14)</th><th>EMA 50</th><th>EMA 200</th><th>Dist EMA200</th><th>P/E</th><th>Cap. Mkt</th><th>Volumen</th>'+
+      '<th style="width:80px">Ticker</th>'+
+      thIcon('price','Precio')+
+      thIcon('chgPct','% Día')+
+      thIcon('rsi','RSI(14)')+
+      thIcon('adx','ADX(14)')+
+      thIcon('ema50','EMA 50')+
+      thIcon('ema200','EMA 200')+
+      thIcon('distEma200','Dist EMA200')+
+      thIcon('pe','P/E')+
+      thIcon('marketCap','Cap. Mkt')+
+      thIcon('volume','Volumen')+
       '</tr></thead><tbody>'+rows+'</tbody></table></div></div>';
   }).join('');
   document.getElementById('secContainer').innerHTML=html||'<div style="color:var(--text-dim);padding:30px;font-family:var(--mono);text-align:center">Cargá tickers y hacé click en ▶ CARGAR TICKERS</div>';
