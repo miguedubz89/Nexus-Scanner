@@ -634,6 +634,7 @@ table.dt tr{transition:background .15s}
         <div class="progress-fill" id="progressFill"></div>
       </div>
       <div id="loadStatus" style="font-family:var(--mono);font-size:12px;color:var(--text-dim);text-align:center"></div>
+      <div id="failedTickers" style="display:none;background:rgba(255,61,90,0.06);border:1px solid var(--red2);border-radius:2px;padding:8px 10px;margin-top:2px"></div>
     </div>
 
     <div class="sb-section">
@@ -836,7 +837,7 @@ table.dt tr{transition:background .15s}
       </div>
       <div style="background:rgba(0,212,255,0.04);border:1px solid var(--border);border-radius:2px;padding:10px 14px;margin-bottom:14px;font-family:var(--mono);font-size:12px;color:var(--text-dim);line-height:1.7">
         💡 Los earnings se obtienen automáticamente de <span style="color:var(--accent)">Yahoo Finance</span> para todos los tickers de tu lista.
-        Presioná <span style="color:var(--yellow)">▶ CARGAR TICKERS</span> para actualizar.
+        Se actualizan al hacer <span style="color:var(--yellow)">▶ CARGAR TICKERS</span>. Si un ticker no tiene earnings próximos no aparece en la lista.
       </div>
       <div class="earnings-grid" id="earningsGrid">
         <div class="earnings-empty">Cargá tickers y presioná ▶ CARGAR TICKERS para ver los earnings.</div>
@@ -1126,24 +1127,49 @@ async function cargarCompleto() {
   document.getElementById('progressWrap').style.display = 'block';
   var total = tickers.length, done = 0;
   var nuevaData = [];
+  var failedList = [];
   for (var i = 0; i < tickers.length; i += 3) {
     var batch = tickers.slice(i, i+3);
     var results = await Promise.all(batch.map(fetchQuote));
-    results.forEach(function(r){ if(r) nuevaData.push(r); });
+    results.forEach(function(r, idx) {
+      if (r) { nuevaData.push(r); }
+      else   { failedList.push(batch[idx]); }
+    });
     done += batch.length;
     document.getElementById('progressFill').style.width = Math.round(done/total*100)+'%';
     document.getElementById('loadStatus').textContent = 'Cargando '+done+'/'+total+'...';
     document.getElementById('progress-txt').textContent = done+'/'+total+' tickers';
   }
   allData = nuevaData;
+  window._failedTickers = failedList;
   document.getElementById('progressWrap').style.display = 'none';
+  // Mostrar resumen con fallidos
+  var failedEl = document.getElementById('failedTickers');
+  if (failedList.length && failedEl) {
+    failedEl.style.display = 'block';
+    failedEl.innerHTML =
+      '<div style="font-family:var(--mono);font-size:11px;color:var(--red);margin-bottom:4px;letter-spacing:1px">⚠ ' + failedList.length + ' TICKER'+(failedList.length>1?'S':'')+' SIN DATOS:</div>' +
+      failedList.map(function(s){
+        return '<span style="display:inline-flex;align-items:center;gap:3px;background:rgba(255,61,90,0.1);border:1px solid var(--red2);border-radius:2px;padding:2px 6px;font-family:var(--mono);font-size:11px;color:var(--red);margin:2px">' +
+          s +
+          '<button onclick="removeBadTicker(\''+s+'\')" title="Eliminar" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:11px;padding:0 0 0 3px;line-height:1">✕</button>' +
+        '</span>';
+      }).join('') +
+      '<div style="margin-top:6px;font-family:var(--mono);font-size:10px;color:var(--text-dim)">Puede ser ticker incorrecto o sin datos en Yahoo Finance.</div>';
+  } else if (failedEl) {
+    failedEl.style.display = 'none';
+  }
+  var statusMsg = allData.length+' tickers';
+  if (failedList.length) statusMsg += ' ('+failedList.length+' fallido'+(failedList.length>1?'s':'')+')';
   document.getElementById('loadStatus').textContent = '';
-  document.getElementById('progress-txt').textContent = allData.length+' tickers';
+  document.getElementById('progress-txt').textContent = statusMsg;
   setStatus('live', 'LIVE — Yahoo Finance');
   applyFilters();
   buildTape();
   startCountdown();
   document.getElementById('expInfo').textContent = allData.length+' tickers | Cargado: '+new Date().toLocaleTimeString('es-AR');
+  // Fetch earnings from Yahoo Finance for all loaded tickers
+  fetchEarningsFromYahoo();
 }
 
 // ── AUTO-REFRESH ──────────────────────────────────
@@ -1820,14 +1846,11 @@ function renderEarnings() {
     if (!allSymbols.length) {
       grid.innerHTML = '<div class="earnings-empty">Cargá tickers y presioná ▶ CARGAR TICKERS para ver los earnings.</div>';
     } else {
-      grid.innerHTML = '<div class="earnings-empty" style="text-align:left;padding:20px">' +
-        '<div style="margin-bottom:10px;color:var(--yellow);font-size:13px">⚠ El servidor no retornó fechas de earnings para ningún ticker.</div>' +
-        '<div style="font-size:12px;margin-bottom:8px;color:var(--text-dim)">Para activar esta sección, el backend (<code style="color:var(--accent)">server.py</code>) debe incluir en la respuesta del endpoint <code style="color:var(--accent)">/quote</code>:</div>' +
-        '<pre style="font-size:12px;background:var(--bg3);padding:12px;border-radius:2px;border:1px solid var(--border);overflow-x:auto;color:var(--green)">' +
-        '"earningsDate": "2025-04-24",\n"earningsTiming": "bmo",  # bmo | amc | unk\n"name": "Apple Inc."' +
-        '</pre>' +
-        '<div style="margin-top:14px;font-size:11px;color:var(--text-dim)">Tickers activos (' + allSymbols.length + '): <span style="color:var(--accent)">' +
-        allSymbols.join(' · ') + '</span></div>' +
+      grid.innerHTML = '<div class="earnings-empty" style="text-align:center;padding:32px">' +
+        '<div style="font-size:28px;margin-bottom:12px">🔍</div>' +
+        '<div style="color:var(--text-bright);font-size:13px;margin-bottom:8px">No se encontraron earnings próximos</div>' +
+        '<div style="font-size:12px;color:var(--text-dim);line-height:1.8">Yahoo Finance no tiene fechas de earnings registradas<br>para los ' + allSymbols.length + ' tickers de tu lista en este momento.<br>' +
+        '<span style="color:var(--text-dim);font-size:11px">ETFs y acciones sin fecha de reportes no aparecen aquí.</span></div>' +
         '</div>';
     }
     return;
@@ -1904,6 +1927,102 @@ window.renderTickerList = function() {
 
 // Inicializar earnings al cargar
 renderEarnings();
+
+// ── REMOVE FAILED TICKER ──────────────────────────
+function removeBadTicker(sym) {
+  var idx = window.tickerList.indexOf(sym);
+  if (idx !== -1) {
+    window.tickerList.splice(idx, 1);
+    window.renderTickerList();
+    saveTickersFromList();
+  }
+  // Also hide from failed panel if no more fails
+  var failedEl = document.getElementById('failedTickers');
+  if (failedEl) {
+    var spans = failedEl.querySelectorAll('span');
+    spans.forEach(function(s){ if(s.textContent.trim().startsWith(sym)) s.remove(); });
+    if (!failedEl.querySelectorAll('span').length) failedEl.style.display='none';
+  }
+}
+
+// ── EARNINGS FROM YAHOO FINANCE (via yfinance proxy) ──
+// Intenta obtener earningsDate desde el endpoint /earnings del backend.
+// Si el backend no lo tiene, cae back a parsear el campo que ya viene en /quote.
+// También hace un fetch directo a Yahoo Finance query2 API (CORS-friendly via proxy).
+var earningsCache = {};
+
+async function fetchEarningsFromYahoo() {
+  if (!allData.length) return;
+  var grid = document.getElementById('earningsGrid');
+  if (grid) grid.innerHTML = '<div class="earnings-empty" style="color:var(--accent)">⏳ Buscando earnings en Yahoo Finance...</div>';
+
+  var syms = allData.map(function(d){ return d.yfSymbol || d.symbol; });
+  var fetched = 0;
+
+  // Fetch in small batches to avoid rate limits
+  for (var i = 0; i < syms.length; i++) {
+    var sym = syms[i];
+    var cleanSym = sym.replace(/\.BA$/i,'');
+    if (earningsCache[cleanSym]) { fetched++; continue; }
+
+    try {
+      // Try backend /earnings endpoint first
+      var r = await fetch(API + '/earnings?symbol=' + encodeURIComponent(sym), {signal: AbortSignal.timeout(5000)});
+      if (r.ok) {
+        var d = await r.json();
+        if (!d.error && d.earningsDate) {
+          earningsCache[cleanSym] = { date: d.earningsDate, timing: d.earningsTiming||'unk', name: d.name||cleanSym };
+          fetched++;
+          continue;
+        }
+      }
+    } catch(e) {}
+
+    // Fallback: Yahoo Finance query2 API (public, no API key needed)
+    try {
+      var url = 'https://query2.finance.yahoo.com/v10/finance/quoteSummary/' + encodeURIComponent(sym)
+              + '?modules=calendarEvents&corsDomain=finance.yahoo.com&formatted=false';
+      var r2 = await fetch(url, {signal: AbortSignal.timeout(6000), headers: {'Accept':'application/json'}});
+      if (r2.ok) {
+        var j = await r2.json();
+        var cal = j && j.quoteSummary && j.quoteSummary.result && j.quoteSummary.result[0] && j.quoteSummary.result[0].calendarEvents;
+        if (cal && cal.earnings && cal.earnings.earningsDate && cal.earnings.earningsDate.length) {
+          var ts = cal.earnings.earningsDate[0].raw || cal.earnings.earningsDate[0];
+          var dt = new Date(typeof ts === 'number' ? ts * 1000 : ts);
+          var dateStr = dt.toISOString().slice(0,10);
+          // earningsCallTime: 0=amc, 1=bmo (Yahoo convention varies, default unk)
+          var timing = 'unk';
+          if (cal.earnings.earningsCallTime) {
+            var t = cal.earnings.earningsCallTime.fmt || cal.earnings.earningsCallTime;
+            if (typeof t === 'string') {
+              if (t.toLowerCase().includes('before') || t === 'BMO') timing = 'bmo';
+              else if (t.toLowerCase().includes('after') || t === 'AMC') timing = 'amc';
+            }
+          }
+          // Get name from allData
+          var dataEntry = allData.find(function(x){ return (x.yfSymbol||x.symbol) === sym; });
+          earningsCache[cleanSym] = { date: dateStr, timing: timing, name: (dataEntry&&(dataEntry.name||dataEntry.longName)) || cleanSym };
+          fetched++;
+        }
+      }
+    } catch(e) {}
+
+    // Small delay to avoid hammering Yahoo
+    if (i % 5 === 4) await new Promise(function(res){ setTimeout(res, 300); });
+  }
+
+  // Inject earnings data back into allData
+  allData.forEach(function(d) {
+    var e = earningsCache[d.symbol];
+    if (e) {
+      d.earningsDate   = e.date;
+      d.earningsTiming = e.timing;
+      if (!d.name && e.name) d.name = e.name;
+    }
+  });
+
+  renderEarnings();
+}
 </script>
 </body>
 </html>
