@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NEXUS SCANNER — Live</title>
+<title>Dubz Monitor — Live</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
 
 <!-- ═══════════════════════════════════════════════════════════════════
@@ -480,6 +480,49 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 @media(max-width:1100px){.sc-grid{grid-template-columns:repeat(3,1fr)}.sum-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:800px){.layout{grid-template-columns:1fr}.sidebar{max-height:none;position:relative}}
+
+/* ══ SQUEEZE MOMENTUM ══ */
+.squeeze-on{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:2px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:1px;background:rgba(255,140,0,0.12);border:1px solid var(--orange);color:var(--orange)}
+.squeeze-off{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:2px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:1px;background:rgba(0,230,118,0.1);border:1px solid var(--green2);color:var(--green)}
+.sq-hist{display:inline-flex;align-items:flex-end;gap:1px;height:14px;margin-left:3px;vertical-align:middle}
+.sq-hist span{width:3px;border-radius:1px;display:inline-block}
+/* ══ ARS / MERVAL BADGES ══ */
+.ars-badge{display:inline-block;font-size:9px;font-family:var(--mono);font-weight:700;padding:1px 4px;border-radius:2px;background:rgba(100,200,255,0.1);border:1px solid rgba(100,200,255,0.3);color:var(--accent);letter-spacing:.5px;margin-left:3px;vertical-align:middle}
+.merval-badge{display:inline-block;font-size:9px;font-family:var(--mono);font-weight:700;padding:1px 4px;border-radius:2px;background:rgba(0,255,180,0.08);border:1px solid rgba(0,230,118,0.3);color:var(--green);letter-spacing:.5px;margin-left:3px;vertical-align:middle}
+/* ══ EARNINGS ══ */
+.earnings-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-bottom:14px}
+.earnings-card{background:var(--bg2);border:1px solid var(--border);border-radius:2px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;position:relative;overflow:hidden;transition:border-color .2s}
+.earnings-card:hover{border-color:var(--border2)}
+.earnings-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}
+.earnings-card.bmo::before{background:var(--green)}
+.earnings-card.amc::before{background:var(--yellow)}
+.earnings-card.unk::before{background:var(--text-dim)}
+.ec-top{display:flex;align-items:center;justify-content:space-between}
+.ec-sym{font-family:var(--head);font-weight:900;font-size:18px;color:var(--text-bright);letter-spacing:.5px}
+.ec-timing{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1.5px;padding:3px 7px;border-radius:2px;text-transform:uppercase}
+.ec-timing.bmo{background:rgba(0,230,118,0.1);border:1px solid var(--green2);color:var(--green)}
+.ec-timing.amc{background:rgba(255,214,0,0.1);border:1px solid var(--yellow2);color:var(--yellow)}
+.ec-timing.unk{background:rgba(90,122,138,0.1);border:1px solid var(--border2);color:var(--text-dim)}
+.ec-name{font-family:var(--mono);font-size:12px;color:var(--text-dim)}
+.ec-date{font-family:var(--mono);font-size:13px;color:var(--accent)}
+.ec-days.soon{color:var(--yellow)}
+.ec-days.today{color:var(--red);font-weight:700}
+.ec-days{font-family:var(--mono);font-size:11px;color:var(--text-dim)}
+.earnings-empty{text-align:center;color:var(--text-dim);padding:40px;font-family:var(--mono);font-size:13px;letter-spacing:2px}
+.earnings-add-row{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.earnings-add-row input,.earnings-add-row select{background:var(--bg3);border:1px solid var(--border2);color:var(--text-bright);font-family:var(--mono);font-size:13px;padding:7px 10px;border-radius:2px;outline:none;transition:border-color .2s}
+.earnings-add-row input:focus,.earnings-add-row select:focus{border-color:var(--accent)}
+/* ══ MERVAL SECTION ══ */
+.merval-header{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 14px;background:rgba(0,230,118,0.04);border:1px solid rgba(0,230,118,0.15);border-radius:2px}
+.merval-title{font-family:var(--head);font-weight:900;font-size:16px;letter-spacing:3px;color:var(--green);text-transform:uppercase}
+.merval-sub{font-family:var(--mono);font-size:11px;color:var(--text-dim);letter-spacing:1px}
+.currency-ars{color:var(--accent);font-size:11px;font-family:var(--mono)}
+/* ══ UX Hover ══ */
+table.dt tr{transition:background .15s}
+.sc-card{transition:border-color .2s,transform .15s}
+.sc-card:hover{border-color:var(--border2);transform:translateY(-1px)}
+.sum-card{transition:border-color .2s}
+.sum-card:hover{border-color:var(--border2)}
 </style>
 </head>
 <body>
@@ -489,7 +532,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 ══════════════════════════════════════════════════ -->
 <div id="loginOverlay">
   <div class="login-box">
-    <div class="login-logo">NEXUS <span>SCANNER</span></div>
+    <div class="login-logo">DUBZ <span>MONITOR</span></div>
     <div class="login-subtitle">Market Intelligence Platform</div>
 
     <div class="auth-form-title" id="authFormTitle">Iniciar Sesión</div>
@@ -540,7 +583,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
     </div>
 
     <div class="login-notice" style="background:rgba(0,212,255,0.06);border-color:var(--accent2);color:var(--accent)">
-      <strong>DubzTrading Scanner</strong> — Tus tickers se sincronizan en la nube por cuenta 🚀
+      <strong>Dubz Monitor</strong> — Tus tickers se sincronizan en la nube por cuenta 🚀
     </div>
   </div>
 </div>
@@ -551,7 +594,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 <div id="appRoot" style="display:none">
 
 <div class="topbar">
-  <div class="logo">NEXUS <span>SCANNER</span></div>
+  <div class="logo">DUBZ <span>MONITOR</span></div>
   <div class="status-bar">
     <span><span class="dot off" id="dot"></span>&nbsp;<span id="stxt" style="color:var(--text-dim)">DESCONECTADO</span></span>
     <span class="clock" id="clk">--:--:--</span>
@@ -669,6 +712,8 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
       <div class="tab" onclick="switchTab('sectors',this)">SECTORES</div>
       <div class="tab" onclick="switchTab('technical',this)">TÉCNICO</div>
       <div class="tab" onclick="switchTab('all',this)">TODOS</div>
+      <div class="tab" onclick="switchTab('merval',this)">MERVAL 🇦🇷</div>
+      <div class="tab" onclick="switchTab('earnings',this)">EARNINGS 📅</div>
     </div>
 
     <!-- SCANNER TAB -->
@@ -725,6 +770,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           <th data-field="mom3m" onclick="ts('mom3m',this)">Mom 3M<span class="sort-icon">⇅</span></th>
           <th data-field="mom6m" onclick="ts('mom6m',this)">Mom 6M<span class="sort-icon">⇅</span></th>
           <th data-field="beta" onclick="ts('beta',this)">Beta<span class="sort-icon">⇅</span></th>
+          <th style="width:80px">Squeeze</th>
           <th style="width:70px">Spark</th>
           <th style="width:60px">Chart</th>
         </tr></thead>
@@ -762,8 +808,61 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
         <button class="btn btn-g btn-sm" onclick="exportCSV()">⬇ CSV</button>
       </div>
     </div>
-  </div>
-</div>
+
+    <!-- MERVAL TAB -->
+    <div class="tab-panel" id="tab-merval">
+      <div class="merval-header">
+        <div>
+          <div class="merval-title">🇦🇷 MERVAL — Acciones Argentinas</div>
+          <div class="merval-sub">PRECIOS EN ARS · YAHOO FINANCE (.BA) · AUTO-DETECTADO</div>
+        </div>
+        <div style="margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--text-dim)" id="mervalStatus">—</div>
+      </div>
+      <div class="tbl-wrap"><table class="dt" id="mervalTable">
+        <thead><tr>
+          <th style="width:110px">Ticker</th>
+          <th>Precio (ARS)</th>
+          <th>% Día</th>
+          <th>RSI(14)</th>
+          <th>ADX(14)</th>
+          <th>EMA 50</th>
+          <th>EMA 200</th>
+          <th>Dist EMA200%</th>
+          <th>P/E</th>
+          <th>Volumen</th>
+          <th style="width:80px">Squeeze</th>
+          <th style="width:70px">Spark</th>
+          <th style="width:60px">Chart</th>
+        </tr></thead>
+        <tbody id="mervalBody"><tr><td colspan="13" style="text-align:center;color:var(--text-dim);padding:28px;font-family:var(--mono);font-size:12px;letter-spacing:2px">CARGÁ TICKERS ARGENTINOS (PAMP, GGAL, YPF…) Y PRESIONÁ ▶ CARGAR TICKERS</td></tr></tbody>
+      </table></div>
+    </div>
+
+    <!-- EARNINGS TAB -->
+    <div class="tab-panel" id="tab-earnings">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+        <div style="font-family:var(--head);font-weight:900;font-size:15px;letter-spacing:3px;color:var(--text-bright);text-transform:uppercase">📅 Calendario de Earnings</div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">Ordenado por fecha más cercana · Datos manuales o auto-detectados</div>
+      </div>
+      <!-- Agregar earnings manualmente -->
+      <div class="earnings-add-row">
+        <input id="eaTicker" placeholder="Ticker (ej: AAPL)" maxlength="10" style="width:120px;text-transform:uppercase" onkeydown="if(event.key==='Enter')addEarning()">
+        <input id="eaName" placeholder="Empresa (ej: Apple Inc.)" style="flex:1;min-width:160px">
+        <input id="eaDate" type="date" style="width:150px">
+        <select id="eaTiming">
+          <option value="bmo">Before Market (BMO)</option>
+          <option value="amc">After Market (AMC)</option>
+          <option value="unk">Sin confirmar</option>
+        </select>
+        <button class="btn btn-a btn-sm" onclick="addEarning()">＋ AGREGAR</button>
+        <button class="btn btn-r btn-sm" onclick="clearEarnings()">✕ LIMPIAR</button>
+      </div>
+      <div class="earnings-grid" id="earningsGrid">
+        <div class="earnings-empty">No hay earnings próximos.<br><span style="font-size:11px;opacity:.6">Usá el formulario de arriba para agregar o esperá la auto-detección.</span></div>
+      </div>
+    </div><!-- /#tab-earnings -->
+  </div><!-- /.content -->
+</div><!-- /.layout -->
 
 <!-- TRADINGVIEW MODAL -->
 <div class="tv-modal-overlay" id="tvModalOverlay" onclick="closeTVModal(event)">
@@ -967,10 +1066,11 @@ var SEC_COLOR={
   Materiales:'#a5d6a7',
   Utilities:'#80cbc4',
   REITs:'#ffab40',
-  Otros:'#78909c'
+  Otros:'#78909c',
+  MERVAL:'#00e676'
 };
-var SEC_ORDER=['ETF','Software','Semiconductores','IA & Big Data','Hardware','E-commerce','Comunicación','Vehículos Eléctricos','Automotriz','Energía','Consumo Discrecional','Consumo Básico','Salud','Biotech','Finanzas','Cripto','Defensa','Industriales','Materiales','Utilities','REITs','Otros'];
-var SEC_ICON={ETF:'◈',Software:'⬡',Semiconductores:'◎','IA & Big Data':'◉',Hardware:'⬢','E-commerce':'⬟',Comunicación:'◉','Vehículos Eléctricos':'⚡',Automotriz:'◈',Energía:'⬟','Consumo Discrecional':'⬠','Consumo Básico':'⬡',Salud:'✚',Biotech:'◎',Finanzas:'$',Cripto:'◆',Defensa:'⬢',Industriales:'⚙',Materiales:'◆',Utilities:'⚡',REITs:'⬛',Otros:'?'};
+var SEC_ORDER=['ETF','Software','Semiconductores','IA & Big Data','Hardware','E-commerce','Comunicación','Vehículos Eléctricos','Automotriz','Energía','Consumo Discrecional','Consumo Básico','Salud','Biotech','Finanzas','Cripto','Defensa','Industriales','Materiales','Utilities','REITs','MERVAL','Otros'];
+var SEC_ICON={ETF:'◈',Software:'⬡',Semiconductores:'◎','IA & Big Data':'◉',Hardware:'⬢','E-commerce':'⬟',Comunicación:'◉','Vehículos Eléctricos':'⚡',Automotriz:'◈',Energía:'⬟','Consumo Discrecional':'⬠','Consumo Básico':'⬡',Salud:'✚',Biotech:'◎',Finanzas:'$',Cripto:'◆',Defensa:'⬢',Industriales:'⚙',Materiales:'◆',Utilities:'⚡',REITs:'⬛',MERVAL:'🇦🇷',Otros:'?'};
 
 var allData=[], filtered=[], tickers=[];
 var autoOn=true, cdTimer=null, cdSecs=60;
@@ -1094,14 +1194,22 @@ async function fetchPrecio(sym) {
 
 async function fetchQuote(sym) {
   try {
-    var r = await fetch(API+'/quote?symbol='+sym, {signal: AbortSignal.timeout(15000)});
+    // Para tickers argentinos, usar sufijo .BA en Yahoo Finance
+    var yfSym = (typeof isArgentineTicker !== 'undefined' && isArgentineTicker(sym))
+      ? (sym.toUpperCase().endsWith('.BA') ? sym.toUpperCase() : sym.toUpperCase()+'.BA')
+      : sym;
+    var r = await fetch(API+'/quote?symbol='+encodeURIComponent(yfSym), {signal: AbortSignal.timeout(15000)});
     if (!r.ok) return null;
     var d = await r.json();
     if (d.error) return null;
-    d.sector = SECTORS[sym] || 'Otros';
-    var prev = prevPrices[sym];
+    // Normalizar symbol a display (sin .BA)
+    d.symbol = sym.replace(/\.BA$/i,'').toUpperCase();
+    d.yfSymbol = yfSym;
+    d.isArgentine = (typeof isArgentineTicker !== 'undefined') && isArgentineTicker(sym);
+    d.sector = d.isArgentine ? 'MERVAL' : (SECTORS[d.symbol] || 'Otros');
+    var prev = prevPrices[d.symbol];
     d._flash = prev ? (d.price > prev ? 'up' : d.price < prev ? 'dn' : '') : '';
-    prevPrices[sym] = d.price;
+    prevPrices[d.symbol] = d.price;
     return d;
   } catch(e) {
     console.warn('Error fetching', sym, e.message);
@@ -1301,11 +1409,12 @@ function renderTech(){
       '<td>'+fp(d.sma50)+'</td><td>'+fp(d.sma200)+'</td>'+
       '<td>'+momCell(d.mom3m)+'</td><td>'+momCell(d.mom6m)+'</td>'+
       '<td>'+(d.beta?f2(d.beta):'--')+'</td>'+
+      '<td>'+squeezeCell(d)+'</td>'+
       '<td>'+doSpark(d.spark)+'</td>'+
       '<td><button class="tv-btn" onclick="openTVChart(\''+d.symbol+'\')">📈</button></td>'+
       '</tr>';
   }).join('');
-  document.getElementById('techBody').innerHTML=rows||emptyRow(16);
+  document.getElementById('techBody').innerHTML=rows||emptyRow(17);
 }
 
 function renderAllTab(){
@@ -1471,7 +1580,7 @@ function exportCSV(){
   var csv=[h].concat(rows).map(function(r){return r.join(',')}).join('\n');
   var a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-  a.download='nexus_scanner_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.download='dubz_monitor_'+new Date().toISOString().slice(0,10)+'.csv';
   a.click();
 }
 
@@ -1481,13 +1590,13 @@ function openTVChart(sym) {
   document.getElementById('tvOpenLink').href = 'https://www.tradingview.com/chart/?symbol=' + sym;
   var body = document.getElementById('tvModalBody');
   body.innerHTML = '';
-  var src = 'https://s.tradingview.com/widgetembed/?frameElementId=tradingview_nexus'
+  var src = 'https://s.tradingview.com/widgetembed/?frameElementId=tradingview_dubz'
     + '&symbol=' + encodeURIComponent(sym)
     + '&interval=D&hidesidetoolbar=0&hidetoptoolbar=0&symboledit=1&saveimage=1'
     + '&toolbarbg=0d1318&studies=RSI%40tv-basicstudies%1FMACD%40tv-basicstudies%1FMA%40tv-basicstudies'
     + '&theme=dark&style=1&timezone=America%2FArgentina%2FBuenos_Aires'
     + '&studies_overrides=%7B%7D&overrides=%7B%7D&enabled_features=%5B%5D'
-    + '&disabled_features=%5B%5D&locale=es&utm_source=nexus-scanner';
+    + '&disabled_features=%5B%5D&locale=es&utm_source=dubz-monitor';
   var iframe = document.createElement('iframe');
   iframe.src = src;
   iframe.style.width = '100%';
@@ -1550,10 +1659,316 @@ function removeTicker(idx) {
 function saveTickersFromList() {
   // Guardar en Firestore (nube) + localStorage como fallback
   if (window.saveTickersCloud) window.saveTickersCloud(window.tickerList.slice());
-  localStorage.setItem('nexus_tickers', window.tickerList.join('\n'));
+  localStorage.setItem('dubz_tickers', window.tickerList.join('\n'));
 }
 
 // No hacer window.onload — la app se inicia desde Firebase onAuthStateChanged
+
+// ═══════════════════════════════════════════════════
+// NUEVAS FUNCIONALIDADES — DUBZ MONITOR
+// ═══════════════════════════════════════════════════
+
+// ── TICKERS ARGENTINOS (MERVAL) ───────────────────
+var MERVAL_TICKERS = ['PAMP','EDN','BYMA','GGAL','YPF','TXAR','LOMA','BMA','CEPU','COME','CRES','CTIO','DGCU2','FERR','FRAN','GARO','GBAN','GCLA','HARG','INVJ','IRSA','LEDE','LONG','METR','MIRG','MOLI','MORI','OEST','PAMP','PELC','POLL','RIGO','ROSE','SAMI','SEMI','SUPV','TECO2','TGNO4','TGSU2','TRAN','VALO','VENG','VIOL','WISN'];
+// Nombres conocidos para tickers argentinos
+var AR_NAMES = {
+  PAMP:'Pampa Energía',EDN:'Edenor',BYMA:'Bolsas y Mercados Arg.',GGAL:'Grupo Galicia',
+  YPF:'YPF S.A.',TXAR:'Ternium Argentina',LOMA:'Loma Negra',BMA:'Banco Macro',
+  CEPU:'Central Puerto',COME:'Sociedad Comercial del Plata',CRES:'Cresud',
+  CTIO:'Consultatio',FRAN:'Banco Francés (BBVA)',HARG:'Holcim Argentina',
+  IRSA:'IRSA Inversiones',LEDE:'Ledesma',METR:'Metrogas',MIRG:'Mirgor',
+  MOLI:'Molinos Río de la Plata',MORI:'Molinos Juan Semino',SUPV:'Supervielle',
+  TECO2:'Telecom Argentina',TGNO4:'Transportadora Gas del Norte',
+  TGSU2:'Transportadora Gas del Sur',TRAN:'Transener',VALO:'Grupo Supervielle',
+};
+
+function isArgentineTicker(sym) {
+  var clean = sym.replace(/\.BA$/i,'');
+  return MERVAL_TICKERS.indexOf(clean) !== -1 || sym.toUpperCase().endsWith('.BA');
+}
+
+function getYFSymbol(sym) {
+  // Si ya tiene .BA lo dejamos; si es argentino puro, agregamos .BA
+  if (sym.toUpperCase().endsWith('.BA')) return sym.toUpperCase();
+  var clean = sym.toUpperCase();
+  if (MERVAL_TICKERS.indexOf(clean) !== -1) return clean + '.BA';
+  return clean;
+}
+
+function getDisplaySym(sym) {
+  return sym.replace(/\.BA$/i,'').toUpperCase();
+}
+
+// ── DETECCIÓN Y SEPARACIÓN DE TICKERS ─────────────
+function splitTickers() {
+  var us = [], ar = [];
+  (window.tickerList || []).forEach(function(sym) {
+    if (isArgentineTicker(sym)) ar.push(sym);
+    else us.push(sym);
+  });
+  return { us: us, ar: ar };
+}
+
+// ── FETCH MERVAL (Yahoo Finance .BA via backend) ──
+async function fetchMerval() {
+  var split = splitTickers();
+  if (!split.ar.length) {
+    document.getElementById('mervalBody').innerHTML =
+      '<tr><td colspan="13" style="text-align:center;color:var(--text-dim);padding:28px;font-family:var(--mono);font-size:12px;letter-spacing:2px">NO HAY TICKERS ARGENTINOS — AGREGÁ PAMP, GGAL, YPF, EDN, TXAR…</td></tr>';
+    document.getElementById('mervalStatus').textContent = '0 tickers argentinos';
+    return;
+  }
+  document.getElementById('mervalStatus').textContent = 'Cargando ' + split.ar.length + ' tickers...';
+  var results = [];
+  for (var i = 0; i < split.ar.length; i++) {
+    var sym = split.ar[i];
+    var yfSym = getYFSymbol(sym);
+    try {
+      var r = await fetch(API + '/quote?symbol=' + encodeURIComponent(yfSym), {signal: AbortSignal.timeout(15000)});
+      if (!r.ok) throw new Error('no ok');
+      var d = await r.json();
+      if (!d.error) {
+        d.symbol = getDisplaySym(sym);
+        d.yfSymbol = yfSym;
+        d.isArgentine = true;
+        d.sector = 'MERVAL';
+        results.push(d);
+      }
+    } catch(e) {
+      // Si el backend no soporta .BA, intentar sin sufijo
+      try {
+        var r2 = await fetch(API + '/quote?symbol=' + encodeURIComponent(getDisplaySym(sym)), {signal: AbortSignal.timeout(10000)});
+        if (r2.ok) {
+          var d2 = await r2.json();
+          if (!d2.error) {
+            d2.symbol = getDisplaySym(sym);
+            d2.isArgentine = true;
+            d2.sector = 'MERVAL';
+            results.push(d2);
+          }
+        }
+      } catch(e2) {}
+    }
+  }
+  renderMerval(results);
+  document.getElementById('mervalStatus').textContent = results.length + ' tickers · ARS';
+}
+
+function renderMerval(data) {
+  if (!data || !data.length) {
+    document.getElementById('mervalBody').innerHTML =
+      '<tr><td colspan="13" style="text-align:center;color:var(--text-dim);padding:28px;font-family:var(--mono);font-size:12px">SIN DATOS — VERIFICÁ QUE EL SERVIDOR ESTÉ ACTIVO</td></tr>';
+    return;
+  }
+  var rows = data.map(function(d) {
+    return '<tr class="' + (d._flash==='up'?'flu':d._flash==='dn'?'fld':'') + '">' +
+      '<td><div class="tk-cell">' +
+        '<div class="sec-bar" style="background:var(--green)"></div>' +
+        '<span class="tk-sym">' + d.symbol + '</span>' +
+        '<span class="merval-badge">ARS</span>' +
+      '</div></td>' +
+      '<td style="color:' + (d.chgPct>=0?'var(--green)':'var(--red)') + '">' +
+        '<span class="currency-ars">$</span> ' + fpARS(d.price) +
+      '</td>' +
+      '<td>' + chipChg(d.chgPct) + '</td>' +
+      '<td>' + rsiCell(d.rsi) + '</td>' +
+      '<td>' + adxCell(d.adx) + '</td>' +
+      '<td>' + fpARS(d.ema50) + '</td>' +
+      '<td>' + fpARS(d.ema200) + '</td>' +
+      '<td>' + distCell(d.distEma200) + '</td>' +
+      '<td>' + (d.pe ? f1(d.pe)+'x' : '--') + '</td>' +
+      '<td>' + fv(d.volume) + '</td>' +
+      '<td>' + squeezeCell(d) + '</td>' +
+      '<td>' + doSpark(d.spark) + '</td>' +
+      '<td><button class="tv-btn" onclick="openTVChart(\'' + (d.yfSymbol||d.symbol) + '\')">📈</button></td>' +
+      '</tr>';
+  }).join('');
+  document.getElementById('mervalBody').innerHTML = rows;
+}
+
+// Formato precio ARS (sin decimales para precios grandes)
+function fpARS(n) {
+  if (n == null) return '--';
+  var v = +n;
+  if (v >= 1000) return v.toLocaleString('es-AR', {minimumFractionDigits:0, maximumFractionDigits:0});
+  return v.toFixed(2);
+}
+
+// ── SQUEEZE MOMENTUM INDICATOR ────────────────────
+// Cálculo simplificado: squeeze = BB width < KC width
+// Usa los datos disponibles (spark + volatilidad aproximada desde rsi/adx)
+function calcSqueeze(d) {
+  // Si tenemos spark, calculamos BB/KC approx
+  if (d.spark && d.spark.length >= 10) {
+    var data = d.spark;
+    var n = Math.min(20, data.length);
+    var slice = data.slice(-n);
+    var mean = slice.reduce(function(a,b){return a+b},0) / n;
+    var variance = slice.reduce(function(a,v){return a+(v-mean)*(v-mean)},0) / n;
+    var stddev = Math.sqrt(variance);
+    var bbWidth = (2 * stddev) / mean * 100;
+    // KC width proxy: ATR ≈ stddev * 1.5
+    var kcWidth = (1.5 * stddev) / mean * 100;
+    // Squeeze ON: BB inside KC (bbWidth < kcWidth)
+    var on = bbWidth < kcWidth;
+    // Mini histograma: últimos 8 valores centrados en media
+    var hist = data.slice(-8).map(function(v){ return v - mean; });
+    return { on: on, hist: hist, bbWidth: bbWidth };
+  }
+  // Sin datos suficientes
+  return null;
+}
+
+function squeezeCell(d) {
+  var sq = calcSqueeze(d);
+  if (!sq) return '<span style="color:var(--text-dim);font-family:var(--mono);font-size:11px">--</span>';
+  var maxH = Math.max.apply(null, sq.hist.map(Math.abs)) || 1;
+  var bars = sq.hist.map(function(v) {
+    var h = Math.max(2, Math.round(Math.abs(v)/maxH * 13));
+    var col = v >= 0 ? (sq.on ? 'var(--orange)' : 'var(--green)') : (sq.on ? 'var(--red2)' : 'var(--green2)');
+    return '<span style="height:' + h + 'px;background:' + col + ';opacity:0.85"></span>';
+  }).join('');
+  if (sq.on) {
+    return '<span class="squeeze-on">SQZ<span class="sq-hist">' + bars + '</span></span>';
+  } else {
+    return '<span class="squeeze-off">OFF<span class="sq-hist">' + bars + '</span></span>';
+  }
+}
+
+// ── EARNINGS CALENDAR ─────────────────────────────
+var earningsList = JSON.parse(localStorage.getItem('dubz_earnings') || '[]');
+
+function saveEarnings() {
+  localStorage.setItem('dubz_earnings', JSON.stringify(earningsList));
+}
+
+function addEarning() {
+  var sym = document.getElementById('eaTicker').value.trim().toUpperCase().replace(/[^A-Z0-9.]/g,'');
+  var name = document.getElementById('eaName').value.trim();
+  var date = document.getElementById('eaDate').value;
+  var timing = document.getElementById('eaTiming').value;
+  if (!sym || !date) {
+    document.getElementById('eaTicker').style.borderColor = 'var(--red)';
+    setTimeout(function(){ document.getElementById('eaTicker').style.borderColor = ''; }, 1200);
+    return;
+  }
+  // Evitar duplicados por ticker+fecha
+  var exists = earningsList.some(function(e){ return e.symbol===sym && e.date===date; });
+  if (!exists) {
+    earningsList.push({ symbol: sym, name: name || sym, date: date, timing: timing });
+    earningsList.sort(function(a,b){ return new Date(a.date) - new Date(b.date); });
+    saveEarnings();
+  }
+  document.getElementById('eaTicker').value = '';
+  document.getElementById('eaName').value = '';
+  document.getElementById('eaDate').value = '';
+  renderEarnings();
+}
+
+function removeEarning(idx) {
+  earningsList.splice(idx, 1);
+  saveEarnings();
+  renderEarnings();
+}
+
+function clearEarnings() {
+  if (!earningsList.length) return;
+  earningsList = [];
+  saveEarnings();
+  renderEarnings();
+}
+
+function renderEarnings() {
+  var grid = document.getElementById('earningsGrid');
+  if (!grid) return;
+  // Auto-detectar earnings desde tickers cargados (si el backend retorna earningsDate)
+  var autoEarnings = [];
+  allData.forEach(function(d) {
+    if (d.earningsDate) {
+      var alreadyManual = earningsList.some(function(e){ return e.symbol===d.symbol; });
+      if (!alreadyManual) {
+        autoEarnings.push({ symbol: d.symbol, name: d.name||d.symbol, date: d.earningsDate, timing: d.earningsTiming||'unk', auto: true });
+      }
+    }
+  });
+  var all = earningsList.concat(autoEarnings);
+  all.sort(function(a,b){ return new Date(a.date) - new Date(b.date); });
+  // Filtrar pasados (más de 2 días atrás)
+  var now = new Date();
+  now.setHours(0,0,0,0);
+  var cutoff = new Date(now); cutoff.setDate(cutoff.getDate() - 2);
+  var upcoming = all.filter(function(e){ return new Date(e.date) >= cutoff; });
+  if (!upcoming.length) {
+    grid.innerHTML = '<div class="earnings-empty">No hay earnings próximos.<br><span style="font-size:11px;opacity:.6">Usá el formulario de arriba para agregar o esperá la auto-detección.</span></div>';
+    return;
+  }
+  grid.innerHTML = upcoming.map(function(e, i) {
+    var eDate = new Date(e.date + 'T12:00:00');
+    var diffMs = eDate - now;
+    var diffDays = Math.round(diffMs / 86400000);
+    var daysLabel, daysClass;
+    if (diffDays === 0) { daysLabel = '🔴 HOY'; daysClass = 'today'; }
+    else if (diffDays === 1) { daysLabel = '⚡ MAÑANA'; daysClass = 'soon'; }
+    else if (diffDays <= 7) { daysLabel = 'en ' + diffDays + ' días'; daysClass = 'soon'; }
+    else if (diffDays < 0) { daysLabel = 'hace ' + Math.abs(diffDays) + ' días'; daysClass = ''; }
+    else { daysLabel = 'en ' + diffDays + ' días'; daysClass = ''; }
+    var timingLabel = { bmo:'Before Market', amc:'After Market', unk:'Sin confirmar' }[e.timing] || e.timing;
+    var manualIdx = e.auto ? -1 : earningsList.findIndex(function(x){ return x.symbol===e.symbol&&x.date===e.date; });
+    return '<div class="earnings-card ' + e.timing + '">' +
+      '<div class="ec-top">' +
+        '<span class="ec-sym">' + e.symbol + (e.auto?'<span class="ars-badge">AUTO</span>':'') + '</span>' +
+        '<span class="ec-timing ' + e.timing + '">' + timingLabel + '</span>' +
+      '</div>' +
+      '<div class="ec-name">' + e.name + '</div>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between">' +
+        '<div>' +
+          '<div class="ec-date">📅 ' + eDate.toLocaleDateString('es-AR',{weekday:'short',day:'numeric',month:'short',year:'numeric'}) + '</div>' +
+          '<div class="ec-days ' + daysClass + '">' + daysLabel + '</div>' +
+        '</div>' +
+        (!e.auto ? '<button onclick="removeEarning(' + manualIdx + ')" style="background:none;border:1px solid transparent;color:var(--text-dim);cursor:pointer;font-size:13px;padding:2px 6px;border-radius:2px;transition:all .15s;font-family:var(--mono)" onmouseover="this.style.borderColor=\'var(--red)\';this.style.color=\'var(--red)\'" onmouseout="this.style.borderColor=\'transparent\';this.style.color=\'var(--text-dim)\'">✕</button>' : '') +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+// ── OVERRIDE renderAll to include new sections ─────
+var _origRenderAll = renderAll;
+renderAll = function() {
+  _origRenderAll();
+  renderEarnings();
+  // Merval se renderiza solo cuando se cambia al tab
+};
+
+// ── OVERRIDE switchTab to trigger Merval load ─────
+var _origSwitchTab = switchTab;
+switchTab = function(id, el) {
+  _origSwitchTab(id, el);
+  if (id === 'merval') fetchMerval();
+  if (id === 'earnings') renderEarnings();
+};
+
+// ── TICKER HELPER: badge for Argentine tickers ───
+var _origRenderTickerList = window.renderTickerList;
+window.renderTickerList = function() {
+  var ul = document.getElementById('tickerList');
+  if (!ul) return;
+  ul.innerHTML = (window.tickerList || []).map(function(sym, i) {
+    var isAR = isArgentineTicker(sym);
+    return '<div class="ticker-item">' +
+      '<span class="ticker-item-sym">' + sym +
+        (isAR ? '<span class="merval-badge" style="margin-left:5px">ARS</span>' : '') +
+      '</span>' +
+      '<button class="ticker-item-remove" onclick="removeTicker(' + i + ')" title="Eliminar">✕</button>' +
+      '</div>';
+  }).join('');
+  var cnt = (window.tickerList||[]).length;
+  document.getElementById('tickerCount').textContent = cnt + ' ticker' + (cnt !== 1 ? 's' : '');
+  var tb = document.getElementById('tickerBox');
+  if (tb) tb.value = (window.tickerList||[]).join('\n');
+};
+
+// Inicializar earnings al cargar
+renderEarnings();
 </script>
 </body>
 </html>
