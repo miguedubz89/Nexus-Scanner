@@ -481,11 +481,6 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 @media(max-width:1100px){.sc-grid{grid-template-columns:repeat(3,1fr)}.sum-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:800px){.layout{grid-template-columns:1fr}.sidebar{max-height:none;position:relative}}
 
-/* ══ SQUEEZE MOMENTUM ══ */
-.squeeze-on{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:2px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:1px;background:rgba(255,140,0,0.12);border:1px solid var(--orange);color:var(--orange)}
-.squeeze-off{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:2px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:1px;background:rgba(0,230,118,0.1);border:1px solid var(--green2);color:var(--green)}
-.sq-hist{display:inline-flex;align-items:flex-end;gap:1px;height:14px;margin-left:3px;vertical-align:middle}
-.sq-hist span{width:3px;border-radius:1px;display:inline-block}
 /* ══ ARS / MERVAL BADGES ══ */
 .ars-badge{display:inline-block;font-size:9px;font-family:var(--mono);font-weight:700;padding:1px 4px;border-radius:2px;background:rgba(100,200,255,0.1);border:1px solid rgba(100,200,255,0.3);color:var(--accent);letter-spacing:.5px;margin-left:3px;vertical-align:middle}
 .merval-badge{display:inline-block;font-size:9px;font-family:var(--mono);font-weight:700;padding:1px 4px;border-radius:2px;background:rgba(0,255,180,0.08);border:1px solid rgba(0,230,118,0.3);color:var(--green);letter-spacing:.5px;margin-left:3px;vertical-align:middle}
@@ -509,9 +504,6 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 .ec-days.today{color:var(--red);font-weight:700}
 .ec-days{font-family:var(--mono);font-size:11px;color:var(--text-dim)}
 .earnings-empty{text-align:center;color:var(--text-dim);padding:40px;font-family:var(--mono);font-size:13px;letter-spacing:2px}
-.earnings-add-row{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
-.earnings-add-row input,.earnings-add-row select{background:var(--bg3);border:1px solid var(--border2);color:var(--text-bright);font-family:var(--mono);font-size:13px;padding:7px 10px;border-radius:2px;outline:none;transition:border-color .2s}
-.earnings-add-row input:focus,.earnings-add-row select:focus{border-color:var(--accent)}
 /* ══ MERVAL SECTION ══ */
 .merval-header{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 14px;background:rgba(0,230,118,0.04);border:1px solid rgba(0,230,118,0.15);border-radius:2px}
 .merval-title{font-family:var(--head);font-weight:900;font-size:16px;letter-spacing:3px;color:var(--green);text-transform:uppercase}
@@ -770,7 +762,6 @@ table.dt tr{transition:background .15s}
           <th data-field="mom3m" onclick="ts('mom3m',this)">Mom 3M<span class="sort-icon">⇅</span></th>
           <th data-field="mom6m" onclick="ts('mom6m',this)">Mom 6M<span class="sort-icon">⇅</span></th>
           <th data-field="beta" onclick="ts('beta',this)">Beta<span class="sort-icon">⇅</span></th>
-          <th style="width:80px">Squeeze</th>
           <th style="width:70px">Spark</th>
           <th style="width:60px">Chart</th>
         </tr></thead>
@@ -830,7 +821,6 @@ table.dt tr{transition:background .15s}
           <th>Dist EMA200%</th>
           <th>P/E</th>
           <th>Volumen</th>
-          <th style="width:80px">Squeeze</th>
           <th style="width:70px">Spark</th>
           <th style="width:60px">Chart</th>
         </tr></thead>
@@ -842,23 +832,14 @@ table.dt tr{transition:background .15s}
     <div class="tab-panel" id="tab-earnings">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
         <div style="font-family:var(--head);font-weight:900;font-size:15px;letter-spacing:3px;color:var(--text-bright);text-transform:uppercase">📅 Calendario de Earnings</div>
-        <div style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">Ordenado por fecha más cercana · Datos manuales o auto-detectados</div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--text-dim)" id="earningsSubtitle">Cargando earnings de tus tickers...</div>
       </div>
-      <!-- Agregar earnings manualmente -->
-      <div class="earnings-add-row">
-        <input id="eaTicker" placeholder="Ticker (ej: AAPL)" maxlength="10" style="width:120px;text-transform:uppercase" onkeydown="if(event.key==='Enter')addEarning()">
-        <input id="eaName" placeholder="Empresa (ej: Apple Inc.)" style="flex:1;min-width:160px">
-        <input id="eaDate" type="date" style="width:150px">
-        <select id="eaTiming">
-          <option value="bmo">Before Market (BMO)</option>
-          <option value="amc">After Market (AMC)</option>
-          <option value="unk">Sin confirmar</option>
-        </select>
-        <button class="btn btn-a btn-sm" onclick="addEarning()">＋ AGREGAR</button>
-        <button class="btn btn-r btn-sm" onclick="clearEarnings()">✕ LIMPIAR</button>
+      <div style="background:rgba(0,212,255,0.04);border:1px solid var(--border);border-radius:2px;padding:10px 14px;margin-bottom:14px;font-family:var(--mono);font-size:12px;color:var(--text-dim);line-height:1.7">
+        💡 Los earnings se obtienen automáticamente de <span style="color:var(--accent)">Yahoo Finance</span> para todos los tickers de tu lista.
+        Presioná <span style="color:var(--yellow)">▶ CARGAR TICKERS</span> para actualizar.
       </div>
       <div class="earnings-grid" id="earningsGrid">
-        <div class="earnings-empty">No hay earnings próximos.<br><span style="font-size:11px;opacity:.6">Usá el formulario de arriba para agregar o esperá la auto-detección.</span></div>
+        <div class="earnings-empty">Cargá tickers y presioná ▶ CARGAR TICKERS para ver los earnings.</div>
       </div>
     </div><!-- /#tab-earnings -->
   </div><!-- /.content -->
@@ -891,9 +872,18 @@ var API = (location.hostname === 'localhost' || location.hostname === '127.0.0.1
 
 var SECTORS = {
   // ── ETF ──
-  SPY:'ETF',QQQ:'ETF',XLE:'ETF',GLD:'ETF',TLT:'ETF',IWM:'ETF',DIA:'ETF',VTI:'ETF',
+  // ── Commodities (metales, energía física, uranio) ──
+  GLD:'Commodities',SLV:'Commodities',URA:'Commodities',
+  GDX:'Commodities',GDXJ:'Commodities',PPLT:'Commodities',PALL:'Commodities',
+  USO:'Commodities',UNG:'Commodities',BOIL:'Commodities',KOLD:'Commodities',
+  DBA:'Commodities',DBC:'Commodities',PDBC:'Commodities',CPER:'Commodities',
+  WEAT:'Commodities',CORN:'Commodities',SOYB:'Commodities',
+  IAU:'Commodities',SGOL:'Commodities',BAR:'Commodities',
+  NLR:'Commodities',CCJ:'Commodities',UUUU:'Commodities',DNN:'Commodities',
+
+  SPY:'ETF',QQQ:'ETF',XLE:'ETF',TLT:'ETF',IWM:'ETF',DIA:'ETF',VTI:'ETF',
   ARKK:'ETF',XLF:'ETF',XLK:'ETF',XLV:'ETF',XLI:'ETF',XLY:'ETF',XLP:'ETF',XLU:'ETF',XLB:'ETF',
-  XLRE:'ETF',XLC:'ETF',GDX:'ETF',GDXJ:'ETF',SLV:'ETF',USO:'ETF',UNG:'ETF',
+  XLRE:'ETF',XLC:'ETF',
   SOXX:'ETF',SMH:'ETF',HACK:'ETF',CIBR:'ETF',BOTZ:'ETF',ROBO:'ETF',
   VNQ:'ETF',VNQI:'ETF',VWO:'ETF',EEM:'ETF',EFA:'ETF',FXI:'ETF',EWZ:'ETF',EWJ:'ETF',
   HYG:'ETF',LQD:'ETF',BND:'ETF',AGG:'ETF',SHY:'ETF',IEF:'ETF',
@@ -1046,6 +1036,7 @@ var SECTORS = {
 };
 var SEC_COLOR={
   ETF:'#00d4ff',
+  Commodities:'#ffd700',
   Software:'#7c4dff',
   Semiconductores:'#aa00ff',
   'IA & Big Data':'#e040fb',
@@ -1069,8 +1060,8 @@ var SEC_COLOR={
   Otros:'#78909c',
   MERVAL:'#00e676'
 };
-var SEC_ORDER=['ETF','Software','Semiconductores','IA & Big Data','Hardware','E-commerce','Comunicación','Vehículos Eléctricos','Automotriz','Energía','Consumo Discrecional','Consumo Básico','Salud','Biotech','Finanzas','Cripto','Defensa','Industriales','Materiales','Utilities','REITs','MERVAL','Otros'];
-var SEC_ICON={ETF:'◈',Software:'⬡',Semiconductores:'◎','IA & Big Data':'◉',Hardware:'⬢','E-commerce':'⬟',Comunicación:'◉','Vehículos Eléctricos':'⚡',Automotriz:'◈',Energía:'⬟','Consumo Discrecional':'⬠','Consumo Básico':'⬡',Salud:'✚',Biotech:'◎',Finanzas:'$',Cripto:'◆',Defensa:'⬢',Industriales:'⚙',Materiales:'◆',Utilities:'⚡',REITs:'⬛',MERVAL:'🇦🇷',Otros:'?'};
+var SEC_ORDER=['ETF','Commodities','Software','Semiconductores','IA & Big Data','Hardware','E-commerce','Comunicación','Vehículos Eléctricos','Automotriz','Energía','Consumo Discrecional','Consumo Básico','Salud','Biotech','Finanzas','Cripto','Defensa','Industriales','Materiales','Utilities','REITs','MERVAL','Otros'];
+var SEC_ICON={ETF:'◈',Commodities:'⬡',Software:'⬡',Semiconductores:'◎','IA & Big Data':'◉',Hardware:'⬢','E-commerce':'⬟',Comunicación:'◉','Vehículos Eléctricos':'⚡',Automotriz:'◈',Energía:'⬟','Consumo Discrecional':'⬠','Consumo Básico':'⬡',Salud:'✚',Biotech:'◎',Finanzas:'$',Cripto:'◆',Defensa:'⬢',Industriales:'⚙',Materiales:'◆',Utilities:'⚡',REITs:'⬛',MERVAL:'🇦🇷',Otros:'?'};
 
 var allData=[], filtered=[], tickers=[];
 var autoOn=true, cdTimer=null, cdSecs=60;
@@ -1409,7 +1400,6 @@ function renderTech(){
       '<td>'+fp(d.sma50)+'</td><td>'+fp(d.sma200)+'</td>'+
       '<td>'+momCell(d.mom3m)+'</td><td>'+momCell(d.mom6m)+'</td>'+
       '<td>'+(d.beta?f2(d.beta):'--')+'</td>'+
-      '<td>'+squeezeCell(d)+'</td>'+
       '<td>'+doSpark(d.spark)+'</td>'+
       '<td><button class="tv-btn" onclick="openTVChart(\''+d.symbol+'\')">📈</button></td>'+
       '</tr>';
@@ -1778,7 +1768,6 @@ function renderMerval(data) {
       '<td>' + distCell(d.distEma200) + '</td>' +
       '<td>' + (d.pe ? f1(d.pe)+'x' : '--') + '</td>' +
       '<td>' + fv(d.volume) + '</td>' +
-      '<td>' + squeezeCell(d) + '</td>' +
       '<td>' + doSpark(d.spark) + '</td>' +
       '<td><button class="tv-btn" onclick="openTVChart(\'' + (d.yfSymbol||d.symbol) + '\')">📈</button></td>' +
       '</tr>';
@@ -1794,138 +1783,84 @@ function fpARS(n) {
   return v.toFixed(2);
 }
 
-// ── SQUEEZE MOMENTUM INDICATOR ────────────────────
-// Cálculo simplificado: squeeze = BB width < KC width
-// Usa los datos disponibles (spark + volatilidad aproximada desde rsi/adx)
-function calcSqueeze(d) {
-  // Si tenemos spark, calculamos BB/KC approx
-  if (d.spark && d.spark.length >= 10) {
-    var data = d.spark;
-    var n = Math.min(20, data.length);
-    var slice = data.slice(-n);
-    var mean = slice.reduce(function(a,b){return a+b},0) / n;
-    var variance = slice.reduce(function(a,v){return a+(v-mean)*(v-mean)},0) / n;
-    var stddev = Math.sqrt(variance);
-    var bbWidth = (2 * stddev) / mean * 100;
-    // KC width proxy: ATR ≈ stddev * 1.5
-    var kcWidth = (1.5 * stddev) / mean * 100;
-    // Squeeze ON: BB inside KC (bbWidth < kcWidth)
-    var on = bbWidth < kcWidth;
-    // Mini histograma: últimos 8 valores centrados en media
-    var hist = data.slice(-8).map(function(v){ return v - mean; });
-    return { on: on, hist: hist, bbWidth: bbWidth };
-  }
-  // Sin datos suficientes
-  return null;
-}
 
-function squeezeCell(d) {
-  var sq = calcSqueeze(d);
-  if (!sq) return '<span style="color:var(--text-dim);font-family:var(--mono);font-size:11px">--</span>';
-  var maxH = Math.max.apply(null, sq.hist.map(Math.abs)) || 1;
-  var bars = sq.hist.map(function(v) {
-    var h = Math.max(2, Math.round(Math.abs(v)/maxH * 13));
-    var col = v >= 0 ? (sq.on ? 'var(--orange)' : 'var(--green)') : (sq.on ? 'var(--red2)' : 'var(--green2)');
-    return '<span style="height:' + h + 'px;background:' + col + ';opacity:0.85"></span>';
-  }).join('');
-  if (sq.on) {
-    return '<span class="squeeze-on">SQZ<span class="sq-hist">' + bars + '</span></span>';
-  } else {
-    return '<span class="squeeze-off">OFF<span class="sq-hist">' + bars + '</span></span>';
-  }
-}
-
-// ── EARNINGS CALENDAR ─────────────────────────────
-var earningsList = JSON.parse(localStorage.getItem('dubz_earnings') || '[]');
-
-function saveEarnings() {
-  localStorage.setItem('dubz_earnings', JSON.stringify(earningsList));
-}
-
-function addEarning() {
-  var sym = document.getElementById('eaTicker').value.trim().toUpperCase().replace(/[^A-Z0-9.]/g,'');
-  var name = document.getElementById('eaName').value.trim();
-  var date = document.getElementById('eaDate').value;
-  var timing = document.getElementById('eaTiming').value;
-  if (!sym || !date) {
-    document.getElementById('eaTicker').style.borderColor = 'var(--red)';
-    setTimeout(function(){ document.getElementById('eaTicker').style.borderColor = ''; }, 1200);
-    return;
-  }
-  // Evitar duplicados por ticker+fecha
-  var exists = earningsList.some(function(e){ return e.symbol===sym && e.date===date; });
-  if (!exists) {
-    earningsList.push({ symbol: sym, name: name || sym, date: date, timing: timing });
-    earningsList.sort(function(a,b){ return new Date(a.date) - new Date(b.date); });
-    saveEarnings();
-  }
-  document.getElementById('eaTicker').value = '';
-  document.getElementById('eaName').value = '';
-  document.getElementById('eaDate').value = '';
-  renderEarnings();
-}
-
-function removeEarning(idx) {
-  earningsList.splice(idx, 1);
-  saveEarnings();
-  renderEarnings();
-}
-
-function clearEarnings() {
-  if (!earningsList.length) return;
-  earningsList = [];
-  saveEarnings();
-  renderEarnings();
-}
+// ── EARNINGS CALENDAR — AUTO desde tickerList ─────
+// Lee earningsDate / earningsTiming que retorna el backend en /quote
 
 function renderEarnings() {
   var grid = document.getElementById('earningsGrid');
   if (!grid) return;
-  // Auto-detectar earnings desde tickers cargados (si el backend retorna earningsDate)
-  var autoEarnings = [];
+
+  // Recolectar earnings de allData (backend debe retornar earningsDate en /quote)
+  var items = [];
   allData.forEach(function(d) {
     if (d.earningsDate) {
-      var alreadyManual = earningsList.some(function(e){ return e.symbol===d.symbol; });
-      if (!alreadyManual) {
-        autoEarnings.push({ symbol: d.symbol, name: d.name||d.symbol, date: d.earningsDate, timing: d.earningsTiming||'unk', auto: true });
-      }
+      items.push({
+        symbol: d.symbol,
+        name:   d.name || d.longName || d.symbol,
+        date:   d.earningsDate,
+        timing: d.earningsTiming || 'unk'
+      });
     }
   });
-  var all = earningsList.concat(autoEarnings);
-  all.sort(function(a,b){ return new Date(a.date) - new Date(b.date); });
-  // Filtrar pasados (más de 2 días atrás)
-  var now = new Date();
-  now.setHours(0,0,0,0);
-  var cutoff = new Date(now); cutoff.setDate(cutoff.getDate() - 2);
-  var upcoming = all.filter(function(e){ return new Date(e.date) >= cutoff; });
-  if (!upcoming.length) {
-    grid.innerHTML = '<div class="earnings-empty">No hay earnings próximos.<br><span style="font-size:11px;opacity:.6">Usá el formulario de arriba para agregar o esperá la auto-detección.</span></div>';
+
+  items.sort(function(a,b){ return new Date(a.date) - new Date(b.date); });
+
+  var now = new Date(); now.setHours(0,0,0,0);
+  var cutoff = new Date(now); cutoff.setDate(cutoff.getDate() - 7);
+  items = items.filter(function(e){ return new Date(e.date) >= cutoff; });
+
+  var sub = document.getElementById('earningsSubtitle');
+  if (sub) sub.textContent = items.length
+    ? items.length + ' earnings encontrados de ' + allData.length + ' tickers cargados'
+    : allData.length ? 'Sin fechas de earnings — ver instrucciones abajo' : 'Cargá tickers y presioná ▶ CARGAR TICKERS';
+
+  if (!items.length) {
+    var allSymbols = allData.map(function(d){ return d.symbol; });
+    if (!allSymbols.length) {
+      grid.innerHTML = '<div class="earnings-empty">Cargá tickers y presioná ▶ CARGAR TICKERS para ver los earnings.</div>';
+    } else {
+      grid.innerHTML = '<div class="earnings-empty" style="text-align:left;padding:20px">' +
+        '<div style="margin-bottom:10px;color:var(--yellow);font-size:13px">⚠ El servidor no retornó fechas de earnings para ningún ticker.</div>' +
+        '<div style="font-size:12px;margin-bottom:8px;color:var(--text-dim)">Para activar esta sección, el backend (<code style="color:var(--accent)">server.py</code>) debe incluir en la respuesta del endpoint <code style="color:var(--accent)">/quote</code>:</div>' +
+        '<pre style="font-size:12px;background:var(--bg3);padding:12px;border-radius:2px;border:1px solid var(--border);overflow-x:auto;color:var(--green)">' +
+        '"earningsDate": "2025-04-24",\n"earningsTiming": "bmo",  # bmo | amc | unk\n"name": "Apple Inc."' +
+        '</pre>' +
+        '<div style="margin-top:14px;font-size:11px;color:var(--text-dim)">Tickers activos (' + allSymbols.length + '): <span style="color:var(--accent)">' +
+        allSymbols.join(' · ') + '</span></div>' +
+        '</div>';
+    }
     return;
   }
-  grid.innerHTML = upcoming.map(function(e, i) {
+
+  var timingLabel = { bmo:'Before Market (BMO)', amc:'After Market (AMC)', unk:'Sin confirmar' };
+
+  grid.innerHTML = items.map(function(e) {
     var eDate = new Date(e.date + 'T12:00:00');
     var diffMs = eDate - now;
     var diffDays = Math.round(diffMs / 86400000);
     var daysLabel, daysClass;
-    if (diffDays === 0) { daysLabel = '🔴 HOY'; daysClass = 'today'; }
-    else if (diffDays === 1) { daysLabel = '⚡ MAÑANA'; daysClass = 'soon'; }
-    else if (diffDays <= 7) { daysLabel = 'en ' + diffDays + ' días'; daysClass = 'soon'; }
-    else if (diffDays < 0) { daysLabel = 'hace ' + Math.abs(diffDays) + ' días'; daysClass = ''; }
-    else { daysLabel = 'en ' + diffDays + ' días'; daysClass = ''; }
-    var timingLabel = { bmo:'Before Market', amc:'After Market', unk:'Sin confirmar' }[e.timing] || e.timing;
-    var manualIdx = e.auto ? -1 : earningsList.findIndex(function(x){ return x.symbol===e.symbol&&x.date===e.date; });
+    if (diffDays === 0)       { daysLabel = '🔴 HOY';                              daysClass = 'today'; }
+    else if (diffDays === 1)  { daysLabel = '⚡ MAÑANA';                           daysClass = 'soon';  }
+    else if (diffDays <= 7)   { daysLabel = 'en ' + diffDays + ' días';            daysClass = 'soon';  }
+    else if (diffDays < 0)    { daysLabel = 'hace ' + Math.abs(diffDays) + ' días';daysClass = '';      }
+    else                      { daysLabel = 'en ' + diffDays + ' días';            daysClass = '';      }
+    var secCol = SEC_COLOR[SECTORS[e.symbol] || ''] || '#78909c';
     return '<div class="earnings-card ' + e.timing + '">' +
       '<div class="ec-top">' +
-        '<span class="ec-sym">' + e.symbol + (e.auto?'<span class="ars-badge">AUTO</span>':'') + '</span>' +
-        '<span class="ec-timing ' + e.timing + '">' + timingLabel + '</span>' +
+        '<div style="display:flex;align-items:center;gap:6px">' +
+          '<div class="sec-bar" style="background:' + secCol + ';height:20px"></div>' +
+          '<span class="ec-sym">' + e.symbol + '</span>' +
+        '</div>' +
+        '<span class="ec-timing ' + e.timing + '">' + (timingLabel[e.timing]||e.timing) + '</span>' +
       '</div>' +
       '<div class="ec-name">' + e.name + '</div>' +
-      '<div style="display:flex;align-items:center;justify-content:space-between">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px">' +
         '<div>' +
-          '<div class="ec-date">📅 ' + eDate.toLocaleDateString('es-AR',{weekday:'short',day:'numeric',month:'short',year:'numeric'}) + '</div>' +
+          '<div class="ec-date">📅 ' + eDate.toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) + '</div>' +
           '<div class="ec-days ' + daysClass + '">' + daysLabel + '</div>' +
         '</div>' +
-        (!e.auto ? '<button onclick="removeEarning(' + manualIdx + ')" style="background:none;border:1px solid transparent;color:var(--text-dim);cursor:pointer;font-size:13px;padding:2px 6px;border-radius:2px;transition:all .15s;font-family:var(--mono)" onmouseover="this.style.borderColor=\'var(--red)\';this.style.color=\'var(--red)\'" onmouseout="this.style.borderColor=\'transparent\';this.style.color=\'var(--text-dim)\'">✕</button>' : '') +
+        '<button class="tv-btn" onclick="openTVChart(\'' + e.symbol + '\')">📈</button>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -1936,8 +1871,8 @@ var _origRenderAll = renderAll;
 renderAll = function() {
   _origRenderAll();
   renderEarnings();
-  // Merval se renderiza solo cuando se cambia al tab
 };
+
 
 // ── OVERRIDE switchTab to trigger Merval load ─────
 var _origSwitchTab = switchTab;
