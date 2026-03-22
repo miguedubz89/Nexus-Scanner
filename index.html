@@ -424,13 +424,13 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 .tape-inner{display:flex;gap:28px;white-space:nowrap;animation:tape 80s linear infinite;font-family:var(--mono);font-size:13px;padding:0 20px}
 @keyframes tape{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 .ti{color:var(--text-dim)}.ti .s{color:var(--text-bright);margin-right:4px}.ti .u{color:var(--green)}.ti .d{color:var(--red)}
-.layout{display:grid;grid-template-columns:255px 1fr;min-height:calc(100vh - 90px);transition:grid-template-columns .28s ease}
+.layout{display:grid;grid-template-columns:255px 1fr;min-height:calc(100vh - 90px)}
+.sidebar{background:var(--bg2);border-right:1px solid var(--border);padding:14px;display:flex;flex-direction:column;gap:13px;overflow-y:auto;overflow-x:hidden;max-height:calc(100vh - 90px);position:sticky;top:60px;width:255px;min-width:255px;transition:width .28s ease,min-width .28s ease,padding .28s ease,opacity .28s ease,border-color .28s ease}
+.sidebar.collapsed{width:0;min-width:0;padding:0;opacity:0;pointer-events:none;border-color:transparent;overflow:hidden}
 .layout.sidebar-hidden{grid-template-columns:0px 1fr}
-.sidebar{background:var(--bg2);border-right:1px solid var(--border);padding:14px;display:flex;flex-direction:column;gap:13px;overflow-y:auto;max-height:calc(100vh - 90px);position:sticky;top:60px;overflow-x:hidden;transition:padding .28s ease,opacity .28s ease;min-width:0}
-.layout.sidebar-hidden .sidebar{padding:0;opacity:0;pointer-events:none}
 .sidebar-toggle{position:fixed;left:255px;top:50%;transform:translateY(-50%);z-index:200;background:var(--bg3);border:1px solid var(--border2);border-left:none;color:var(--accent);cursor:pointer;padding:8px 4px;border-radius:0 4px 4px 0;font-size:14px;line-height:1;transition:left .28s ease,background .15s;display:flex;align-items:center}
 .sidebar-toggle:hover{background:var(--bg4);color:var(--text-bright)}
-.layout.sidebar-hidden .sidebar-toggle{left:0px}
+.sidebar-toggle.collapsed{left:0px}
 .content{padding:14px;display:flex;flex-direction:column;gap:14px;overflow-y:auto}
 .sb-label{font-family:var(--head);font-size:12px;font-weight:700;letter-spacing:3px;color:var(--text-dim);text-transform:uppercase;padding-bottom:5px;border-bottom:1px solid var(--border);margin-bottom:3px}
 .sb-section{display:flex;flex-direction:column;gap:7px}
@@ -859,11 +859,14 @@ var API = (location.hostname === 'localhost' || location.hostname === '127.0.0.1
 
 // ── SIDEBAR TOGGLE ─────────────────────────────────
 function toggleSidebar() {
-  var layout = document.getElementById('mainLayout');
-  var btn = document.getElementById('sidebarToggle');
-  var hidden = layout.classList.toggle('sidebar-hidden');
-  btn.textContent = hidden ? '▶' : '◀';
-  btn.title = hidden ? 'Mostrar panel' : 'Ocultar panel';
+  var layout  = document.getElementById('mainLayout');
+  var sidebar = layout.querySelector('.sidebar');
+  var btn     = document.getElementById('sidebarToggle');
+  var isCollapsed = sidebar.classList.toggle('collapsed');
+  btn.classList.toggle('collapsed', isCollapsed);
+  layout.classList.toggle('sidebar-hidden', isCollapsed);
+  btn.textContent = isCollapsed ? '▶' : '◀';
+  btn.title = isCollapsed ? 'Mostrar panel' : 'Ocultar panel';
 }
 
 // ── EARNINGS CALENDAR (via Yahoo Finance API pública) ─
