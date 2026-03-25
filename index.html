@@ -784,10 +784,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           <th data-field="distEma200" onclick="ts('distEma200',this)">Dist EMA200%<span class="sort-icon">⇅</span></th>
           <th data-field="mom3m" onclick="ts('mom3m',this)">Mom 3M<span class="sort-icon">⇅</span></th>
           <th data-field="mom12m" onclick="ts('mom12m',this)">Mom 12M (Anual)<span class="sort-icon">⇅</span></th>
-          <th style="width:110px">
-            Squeeze
-            <button id="sqzToggleBtn" onclick="toggleSqueeze(event)" style="margin-left:5px;font-size:10px;font-family:var(--mono);padding:1px 6px;border-radius:2px;cursor:pointer;border:1px solid var(--red2);background:rgba(255,61,90,0.12);color:var(--red);letter-spacing:1px;vertical-align:middle;transition:all .2s">OFF</button>
-          </th>
+          <th style="width:110px">Squeeze Mom</th>
           <th data-field="beta" onclick="ts('beta',this)">Beta<span class="sort-icon">⇅</span></th>
           <th style="width:70px">Spark</th>
           <th style="width:60px">Chart</th>
@@ -1935,25 +1932,9 @@ function saveTickersFromList() {
 }
 
 // ── SQUEEZE MOMENTUM ─────────────────────────────
-var squeezeOn = false;
+var squeezeOn = true;
 
-function toggleSqueeze(e) {
-  e.stopPropagation();
-  squeezeOn = !squeezeOn;
-  var btn = document.getElementById('sqzToggleBtn');
-  if (squeezeOn) {
-    btn.textContent = 'ON';
-    btn.style.borderColor = 'var(--green2)';
-    btn.style.background = 'rgba(0,230,118,0.12)';
-    btn.style.color = 'var(--green)';
-  } else {
-    btn.textContent = 'OFF';
-    btn.style.borderColor = 'var(--red2)';
-    btn.style.background = 'rgba(255,61,90,0.12)';
-    btn.style.color = 'var(--red)';
-  }
-  renderTech();
-}
+function toggleSqueeze(e) {}
 
 function calcSqueeze(d) {
   // Squeeze Momentum Indicator (LazyBear simplified)
@@ -1970,9 +1951,6 @@ function calcSqueeze(d) {
 }
 
 function squeezeCell(d) {
-  if (!squeezeOn) {
-    return '<span style="color:var(--text-dim);font-size:11px;font-family:var(--mono)">—</span>';
-  }
   var sq = calcSqueeze(d);
   if (!sq) return '<span style="color:var(--text-dim)">--</span>';
 
