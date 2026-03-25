@@ -782,10 +782,12 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           <th data-field="ema200" onclick="ts('ema200',this)">EMA 200<span class="sort-icon">⇅</span></th>
           <th data-field="distEma50" onclick="ts('distEma50',this)">Dist EMA50%<span class="sort-icon">⇅</span></th>
           <th data-field="distEma200" onclick="ts('distEma200',this)">Dist EMA200%<span class="sort-icon">⇅</span></th>
-          <th data-field="sma50" onclick="ts('sma50',this)">SMA 50<span class="sort-icon">⇅</span></th>
-          <th data-field="sma200" onclick="ts('sma200',this)">SMA 200<span class="sort-icon">⇅</span></th>
           <th data-field="mom3m" onclick="ts('mom3m',this)">Mom 3M<span class="sort-icon">⇅</span></th>
-          <th data-field="mom6m" onclick="ts('mom6m',this)">Mom 6M<span class="sort-icon">⇅</span></th>
+          <th data-field="mom12m" onclick="ts('mom12m',this)">Mom 12M (Anual)<span class="sort-icon">⇅</span></th>
+          <th style="width:110px">
+            Squeeze
+            <button id="sqzToggleBtn" onclick="toggleSqueeze(event)" style="margin-left:5px;font-size:10px;font-family:var(--mono);padding:1px 6px;border-radius:2px;cursor:pointer;border:1px solid var(--red2);background:rgba(255,61,90,0.12);color:var(--red);letter-spacing:1px;vertical-align:middle;transition:all .2s">OFF</button>
+          </th>
           <th data-field="beta" onclick="ts('beta',this)">Beta<span class="sort-icon">⇅</span></th>
           <th style="width:70px">Spark</th>
           <th style="width:60px">Chart</th>
@@ -1470,14 +1472,14 @@ function renderTech(){
       '<td>'+adxCell(d.adx)+'</td>'+
       '<td>'+fp(d.ema50)+'</td><td>'+fp(d.ema200)+'</td>'+
       '<td>'+distCell(d.distEma50)+'</td><td>'+distCell(d.distEma200)+'</td>'+
-      '<td>'+fp(d.sma50)+'</td><td>'+fp(d.sma200)+'</td>'+
-      '<td>'+momCell(d.mom3m)+'</td><td>'+momCell(d.mom6m)+'</td>'+
+      '<td>'+momCell(d.mom3m)+'</td><td>'+momCell(d.mom12m!=null?d.mom12m:d.mom6m)+'</td>'+
+      '<td>'+squeezeCell(d)+'</td>'+
       '<td>'+(d.beta?f2(d.beta):'--')+'</td>'+
       '<td>'+doSpark(d.spark)+'</td>'+
       '<td><button class="tv-btn" onclick="openTVChart(\''+d.symbol+'\')">📈</button></td>'+
       '</tr>';
   }).join('');
-  document.getElementById('techBody').innerHTML=rows||emptyRow(16);
+  document.getElementById('techBody').innerHTML=rows||emptyRow(15);
 }
 
 // ── MERVAL DETECTION ──────────────────────────────
@@ -1834,14 +1836,13 @@ function ts(field, el){
 
 // ── EXPORT ────────────────────────────────────────
 function exportCSV(){
-  var h=['Symbol','Sector','Price','Change%','RSI','ADX','EMA50','EMA200','DistEMA50%','DistEMA200%','SMA50','SMA200','Mom3M%','Mom6M%','Volume','AvgVol20','PE','MarketCap','Beta','DivYield%'];
+  var h=['Symbol','Sector','Price','Change%','RSI','ADX','EMA50','EMA200','DistEMA50%','DistEMA200%','Mom3M%','Mom12M%','Volume','AvgVol20','PE','MarketCap','Beta','DivYield%'];
   var rows=filtered.map(function(d){
     return[d.symbol,d.sector,fp(d.price),f2(d.chgPct),d.rsi?f1(d.rsi):'',
       d.adx?f1(d.adx):'',
       d.ema50?fp(d.ema50):'',d.ema200?fp(d.ema200):'',
       d.distEma50?f2(d.distEma50):'',d.distEma200?f2(d.distEma200):'',
-      d.sma50?fp(d.sma50):'',d.sma200?fp(d.sma200):'',
-      d.mom3m?f2(d.mom3m):'',d.mom6m?f2(d.mom6m):'',
+      d.mom3m?f2(d.mom3m):'',(d.mom12m!=null?d.mom12m:d.mom6m)?f2(d.mom12m!=null?d.mom12m:d.mom6m):'',
       d.volume||'',d.avgVol20||'',d.pe?f2(d.pe):'',d.marketCap||'',
       d.beta?f2(d.beta):'',d.divYield?f2(d.divYield):''];
   });
@@ -1931,6 +1932,67 @@ function saveTickersFromList() {
   // Guardar en Firestore (nube) + localStorage como fallback
   if (window.saveTickersCloud) window.saveTickersCloud(window.tickerList.slice());
   localStorage.setItem('nexus_tickers', window.tickerList.join('\n'));
+}
+
+// ── SQUEEZE MOMENTUM ─────────────────────────────
+var squeezeOn = false;
+
+function toggleSqueeze(e) {
+  e.stopPropagation();
+  squeezeOn = !squeezeOn;
+  var btn = document.getElementById('sqzToggleBtn');
+  if (squeezeOn) {
+    btn.textContent = 'ON';
+    btn.style.borderColor = 'var(--green2)';
+    btn.style.background = 'rgba(0,230,118,0.12)';
+    btn.style.color = 'var(--green)';
+  } else {
+    btn.textContent = 'OFF';
+    btn.style.borderColor = 'var(--red2)';
+    btn.style.background = 'rgba(255,61,90,0.12)';
+    btn.style.color = 'var(--red)';
+  }
+  renderTech();
+}
+
+function calcSqueeze(d) {
+  // Squeeze Momentum Indicator (LazyBear simplified)
+  // Uses: ema20, bb (via distEma50 proxy), kc (via adx proxy)
+  // We compute from available server data: price, ema50, ema200, rsi, adx
+  // Squeeze = BB inside KC → price momentum compressed
+  // Simplified: if ADX < 20 AND |distEma50| < 3% → Squeeze ON (compression)
+  // Momentum direction = distEma200 sign (above/below trend)
+  if (d.adx == null || d.distEma50 == null || d.distEma200 == null) return null;
+  var sqzOn  = d.adx < 22 && Math.abs(d.distEma50) < 3.5;
+  var sqzOff = d.adx >= 22 && Math.abs(d.distEma50) >= 3.5;
+  var mom    = d.distEma200; // momentum proxy: distance from trend
+  return { on: sqzOn, off: sqzOff, mom: mom };
+}
+
+function squeezeCell(d) {
+  if (!squeezeOn) {
+    return '<span style="color:var(--text-dim);font-size:11px;font-family:var(--mono)">—</span>';
+  }
+  var sq = calcSqueeze(d);
+  if (!sq) return '<span style="color:var(--text-dim)">--</span>';
+
+  // Dot color: yellow = squeeze on (compressed), cyan = squeeze off (released), gray = neutral
+  var dotColor = sq.on ? 'var(--yellow)' : 'var(--accent)';
+  var dotTitle = sq.on ? 'SQUEEZE ON — compresión' : 'SQUEEZE OFF — expansión';
+
+  // Histogram bars: 4 mini bars showing momentum intensity
+  var momVal = sq.mom;
+  var barColor = momVal >= 0 ? 'var(--green)' : 'var(--red)';
+  var intensity = Math.min(Math.abs(momVal) / 15, 1); // normalize to 15%
+  var barW = Math.max(4, Math.round(intensity * 32));
+
+  return '<div style="display:flex;align-items:center;gap:5px;justify-content:flex-end">' +
+    '<div style="display:flex;align-items:center;gap:2px">' +
+      '<div style="width:'+barW+'px;height:8px;background:'+barColor+';border-radius:1px;opacity:0.85"></div>' +
+      '<span style="font-family:var(--mono);font-size:11px;color:'+barColor+'">'+(momVal>=0?'+':'')+f1(momVal)+'%</span>' +
+    '</div>' +
+    '<div title="'+dotTitle+'" style="width:8px;height:8px;border-radius:50%;background:'+dotColor+';box-shadow:0 0 5px '+dotColor+';flex-shrink:0"></div>' +
+  '</div>';
 }
 
 // No hacer window.onload — la app se inicia desde Firebase onAuthStateChanged
