@@ -1936,40 +1936,56 @@ var squeezeOn = true;
 
 function toggleSqueeze(e) {}
 
-function calcSqueeze(d) {
-  // Squeeze Momentum Indicator (LazyBear simplified)
-  // Uses: ema20, bb (via distEma50 proxy), kc (via adx proxy)
-  // We compute from available server data: price, ema50, ema200, rsi, adx
-  // Squeeze = BB inside KC → price momentum compressed
-  // Simplified: if ADX < 20 AND |distEma50| < 3% → Squeeze ON (compression)
-  // Momentum direction = distEma200 sign (above/below trend)
-  if (d.adx == null || d.distEma50 == null || d.distEma200 == null) return null;
-  var sqzOn  = d.adx < 22 && Math.abs(d.distEma50) < 3.5;
-  var sqzOff = d.adx >= 22 && Math.abs(d.distEma50) >= 3.5;
-  var mom    = d.distEma200; // momentum proxy: distance from trend
-  return { on: sqzOn, off: sqzOff, mom: mom };
-}
-
 function squeezeCell(d) {
-  var sq = calcSqueeze(d);
-  if (!sq) return '<span style="color:var(--text-dim)">--</span>';
+  // Usa campos reales calculados por server.py (LazyBear TTM Squeeze)
+  var sqzOn  = d.sqzOn;
+  var sqzOff = d.sqzOff;
+  var mom    = d.sqzMom;
+  var momPrev= d.sqzMomPrev;
 
-  // Dot color: yellow = squeeze on (compressed), cyan = squeeze off (released), gray = neutral
-  var dotColor = sq.on ? 'var(--yellow)' : 'var(--accent)';
-  var dotTitle = sq.on ? 'SQUEEZE ON — compresión' : 'SQUEEZE OFF — expansión';
+  if (mom == null) return '<span style="color:var(--text-dim)">--</span>';
 
-  // Histogram bars: 4 mini bars showing momentum intensity
-  var momVal = sq.mom;
-  var barColor = momVal >= 0 ? 'var(--green)' : 'var(--red)';
-  var intensity = Math.min(Math.abs(momVal) / 15, 1); // normalize to 15%
-  var barW = Math.max(4, Math.round(intensity * 32));
+  // ── Color del punto (estado del squeeze) ──────
+  // Amarillo  = squeeze ON  (comprimido, energía acumulada)
+  // Cyan      = squeeze OFF (se acaba de liberar → posible ruptura)
+  // Gris      = sin squeeze (normal)
+  var dotColor, dotTitle;
+  if (sqzOn) {
+    dotColor = 'var(--yellow)';
+    dotTitle = 'SQUEEZE ON — compresión de volatilidad';
+  } else if (sqzOff) {
+    dotColor = 'var(--accent)';
+    dotTitle = 'SQUEEZE OFF — energía liberada';
+  } else {
+    dotColor = 'var(--text-dim)';
+    dotTitle = 'Sin squeeze';
+  }
+
+  // ── Color de la barra (dirección + cambio del momentum) ──
+  // Verde brillante  = positivo y subiendo
+  // Verde oscuro     = positivo y bajando
+  // Rojo brillante   = negativo y bajando (más negativo)
+  // Rojo oscuro      = negativo y subiendo (menos negativo)
+  var rising = momPrev != null ? mom >= momPrev : mom >= 0;
+  var barColor;
+  if (mom >= 0) {
+    barColor = rising ? 'var(--green)' : '#005c28';       // verde brillante / oscuro
+  } else {
+    barColor = !rising ? 'var(--red)'  : '#6b0010';       // rojo brillante / oscuro
+  }
+
+  // ── Barra de intensidad ──────────────────────
+  var absMax  = 5;   // rango normalización (ajustá si los valores son muy grandes)
+  var intensity = Math.min(Math.abs(mom) / absMax, 1);
+  var barW    = Math.max(3, Math.round(intensity * 36));
+  var sign    = mom >= 0 ? '+' : '';
 
   return '<div style="display:flex;align-items:center;gap:5px;justify-content:flex-end">' +
-    '<div style="display:flex;align-items:center;gap:2px">' +
-      '<div style="width:'+barW+'px;height:8px;background:'+barColor+';border-radius:1px;opacity:0.85"></div>' +
-      '<span style="font-family:var(--mono);font-size:11px;color:'+barColor+'">'+(momVal>=0?'+':'')+f1(momVal)+'%</span>' +
+    '<div style="display:flex;align-items:center;gap:3px">' +
+      '<div style="width:'+barW+'px;height:8px;background:'+barColor+';border-radius:1px"></div>' +
+      '<span style="font-family:var(--mono);font-size:11px;color:'+barColor+'">'+sign+f2(mom)+'</span>' +
     '</div>' +
-    '<div title="'+dotTitle+'" style="width:8px;height:8px;border-radius:50%;background:'+dotColor+';box-shadow:0 0 5px '+dotColor+';flex-shrink:0"></div>' +
+    '<div title="'+dotTitle+'" style="width:9px;height:9px;border-radius:50%;background:'+dotColor+';box-shadow:0 0 6px '+dotColor+';flex-shrink:0"></div>' +
   '</div>';
 }
 
