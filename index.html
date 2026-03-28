@@ -557,7 +557,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 ══════════════════════════════════════════════════ -->
 <div id="loginOverlay">
   <div class="login-box">
-    <div class="login-logo">NEXUS <span>SCANNER</span></div>
+    <div class="login-logo">DUBZ <span>MONITOR</span></div>
     <div class="login-subtitle">Market Intelligence Platform</div>
 
     <div class="auth-form-title" id="authFormTitle">Iniciar Sesión</div>
@@ -612,7 +612,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 <div id="appRoot" style="display:none">
 
 <div class="topbar">
-  <div class="logo">NEXUS <span>SCANNER</span></div>
+  <div class="logo">DUBZ <span>MONITOR</span></div>
   <div class="status-bar">
     <span><span class="dot off" id="dot"></span>&nbsp;<span id="stxt" style="color:var(--text-dim)">DESCONECTADO</span></span>
     <span class="clock" id="clk">--:--:--</span>
@@ -730,7 +730,6 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
       <div class="tab" onclick="switchTab('sectors',this)">SECTORES</div>
       <div class="tab" onclick="switchTab('technical',this)">TÉCNICO</div>
       <div class="tab" onclick="switchTab('all',this)">TODOS</div>
-      <div class="tab" onclick="switchTab('earnings',this)">📅 EARNINGS</div>
     </div>
 
     <!-- SCANNER TAB -->
@@ -778,11 +777,8 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           <th data-field="chgPct" onclick="ts('chgPct',this)">% Día<span class="sort-icon">⇅</span></th>
           <th data-field="rsi" onclick="ts('rsi',this)">RSI(14)<span class="sort-icon">⇅</span></th>
           <th data-field="adx" onclick="ts('adx',this)">ADX(14)<span class="sort-icon">⇅</span></th>
-          <th data-field="ema50" onclick="ts('ema50',this)">EMA 50<span class="sort-icon">⇅</span></th>
-          <th data-field="ema200" onclick="ts('ema200',this)">EMA 200<span class="sort-icon">⇅</span></th>
           <th data-field="distEma50" onclick="ts('distEma50',this)">Dist EMA50%<span class="sort-icon">⇅</span></th>
           <th data-field="distEma200" onclick="ts('distEma200',this)">Dist EMA200%<span class="sort-icon">⇅</span></th>
-          <th data-field="mom3m" onclick="ts('mom3m',this)">Mom 3M<span class="sort-icon">⇅</span></th>
           <th data-field="mom12m" onclick="ts('mom12m',this)">Mom 12M (Anual)<span class="sort-icon">⇅</span></th>
           <th style="width:110px">Squeeze Mom</th>
           <th data-field="beta" onclick="ts('beta',this)">Beta<span class="sort-icon">⇅</span></th>
@@ -870,14 +866,6 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
       </div>
     </div>
 
-    <!-- EARNINGS TAB -->
-    <div class="tab-panel" id="tab-earnings">
-      <div id="earningsContainer" style="display:flex;flex-direction:column;gap:10px">
-        <div style="color:var(--text-dim);padding:30px;font-family:var(--mono);text-align:center;font-size:13px">
-          Cargá tickers y hacé clic en ▶ CARGAR TICKERS para ver el calendario de earnings.
-        </div>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -1316,7 +1304,7 @@ function resetFilters(){
 }
 
 // ── RENDER ────────────────────────────────────────
-function renderAll(){ renderSummary();renderScanner();renderMovers();renderSectors();renderTech();renderAllTab();renderEarningsTab(); }
+function renderAll(){ renderSummary();renderScanner();renderMovers();renderSectors();renderTech();renderAllTab(); }
 
 function renderSummary(){
   var d=filtered;
@@ -1467,16 +1455,15 @@ function renderTech(){
       '<td>'+chipChg(d.chgPct)+'</td>'+
       '<td>'+rsiCell(d.rsi)+'</td>'+
       '<td>'+adxCell(d.adx)+'</td>'+
-      '<td>'+fp(d.ema50)+'</td><td>'+fp(d.ema200)+'</td>'+
       '<td>'+distCell(d.distEma50)+'</td><td>'+distCell(d.distEma200)+'</td>'+
-      '<td>'+momCell(d.mom3m)+'</td><td>'+momCell(d.mom12m!=null?d.mom12m:d.mom6m)+'</td>'+
+      '<td>'+momCell(d.mom12m!=null?d.mom12m:d.mom6m)+'</td>'+
       '<td>'+squeezeCell(d)+'</td>'+
       '<td>'+(d.beta?f2(d.beta):'--')+'</td>'+
       '<td>'+doSpark(d.spark)+'</td>'+
       '<td><button class="tv-btn" onclick="openTVChart(\''+d.symbol+'\')">📈</button></td>'+
       '</tr>';
   }).join('');
-  document.getElementById('techBody').innerHTML=rows||emptyRow(15);
+  document.getElementById('techBody').innerHTML=rows||emptyRow(12);
 }
 
 // ── MERVAL DETECTION ──────────────────────────────
@@ -1833,20 +1820,19 @@ function ts(field, el){
 
 // ── EXPORT ────────────────────────────────────────
 function exportCSV(){
-  var h=['Symbol','Sector','Price','Change%','RSI','ADX','EMA50','EMA200','DistEMA50%','DistEMA200%','Mom3M%','Mom12M%','Volume','AvgVol20','PE','MarketCap','Beta','DivYield%'];
+  var h=['Symbol','Sector','Price','Change%','RSI','ADX','DistEMA50%','DistEMA200%','Mom12M%','Volume','AvgVol20','PE','MarketCap','Beta','DivYield%'];
   var rows=filtered.map(function(d){
     return[d.symbol,d.sector,fp(d.price),f2(d.chgPct),d.rsi?f1(d.rsi):'',
       d.adx?f1(d.adx):'',
-      d.ema50?fp(d.ema50):'',d.ema200?fp(d.ema200):'',
       d.distEma50?f2(d.distEma50):'',d.distEma200?f2(d.distEma200):'',
-      d.mom3m?f2(d.mom3m):'',(d.mom12m!=null?d.mom12m:d.mom6m)?f2(d.mom12m!=null?d.mom12m:d.mom6m):'',
+      (d.mom12m!=null?d.mom12m:d.mom6m)?f2(d.mom12m!=null?d.mom12m:d.mom6m):'',
       d.volume||'',d.avgVol20||'',d.pe?f2(d.pe):'',d.marketCap||'',
       d.beta?f2(d.beta):'',d.divYield?f2(d.divYield):''];
   });
   var csv=[h].concat(rows).map(function(r){return r.join(',')}).join('\n');
   var a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-  a.download='nexus_scanner_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.download='dubz_monitor_'+new Date().toISOString().slice(0,10)+'.csv';
   a.click();
 }
 
