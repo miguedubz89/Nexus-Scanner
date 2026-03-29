@@ -810,11 +810,12 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
               <th onclick="tsMkt('ar','rsi',this)">RSI<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('ar','adx',this)">ADX<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('ar','distEma200',this)">Dist EMA200<span class="sort-icon">⇅</span></th>
-              <th onclick="tsMkt('ar','pe',this)">P/E<span class="sort-icon">⇅</span></th>
+              <th onclick="tsMkt('ar','peAvg',this)">P/E Prom Año<span class="sort-icon">⇅</span></th>
+              <th onclick="tsMkt('ar','pe',this)">P/E Actual<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('ar','volume',this)">Volumen<span class="sort-icon">⇅</span></th>
-              <th onclick="tsMkt('ar','avgVol20',this)">VolProm20<span class="sort-icon">⇅</span></th>
-              <th onclick="tsMkt('ar','mom3m',this)">Mom3M<span class="sort-icon">⇅</span></th>
+              <th onclick="tsMkt('ar','avgVol20',this)">Vol Prom 20<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('ar','mom6m',this)">Mom6M<span class="sort-icon">⇅</span></th>
+              <th onclick="tsMkt('ar','mom12m',this)">Mom Anual<span class="sort-icon">⇅</span></th>
               <th>Spark</th>
               <th style="width:55px">Chart</th>
             </tr></thead>
@@ -841,16 +842,16 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
               <th onclick="tsMkt('gl','rsi',this)">RSI<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','adx',this)">ADX<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','distEma200',this)">Dist EMA200<span class="sort-icon">⇅</span></th>
-              <th onclick="tsMkt('gl','pe',this)">P/E<span class="sort-icon">⇅</span></th>
+              <th onclick="tsMkt('gl','peAvg',this)">P/E Prom Año<span class="sort-icon">⇅</span></th>
+              <th onclick="tsMkt('gl','pe',this)">P/E Actual<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','marketCap',this)">Cap. Mkt<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','volume',this)">Volumen<span class="sort-icon">⇅</span></th>
-              <th onclick="tsMkt('gl','avgVol20',this)">VolProm20<span class="sort-icon">⇅</span></th>
+              <th onclick="tsMkt('gl','avgVol20',this)">Vol Prom 20<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','beta',this)">Beta<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','divYield',this)">Div%<span class="sort-icon">⇅</span></th>
-              <th onclick="tsMkt('gl','mom3m',this)">Mom3M<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','mom6m',this)">Mom6M<span class="sort-icon">⇅</span></th>
+              <th onclick="tsMkt('gl','mom12m',this)">Mom Anual<span class="sort-icon">⇅</span></th>
               <th>Spark</th>
-              <th style="width:80px">Earnings</th>
             </tr></thead>
             <tbody id="globalBody"></tbody>
           </table>
@@ -1087,6 +1088,7 @@ var SECTORS = {
   // ── Inteligencia Artificial & Big Data ──
   AI:'IA & Big Data',BBAI:'IA & Big Data',SOUN:'IA & Big Data',IREN:'IA & Big Data',
   CIEN:'IA & Big Data',PATH:'IA & Big Data',AMBA:'IA & Big Data',
+  SATL:'IA & Big Data',
 
   // ── Defensa & Aeroespacial ──
   NOC:'Defensa',GD:'Defensa',L:'Defensa',HII:'Defensa',KTOS:'Defensa',
@@ -1471,7 +1473,7 @@ var MERVAL_TICKERS = {
   // Con sufijo .BA — auto-detectados
   // Lista manual sin sufijo (para cuando el usuario los carga sin .BA)
   'GGAL':1,'YPFD':1,'YPF':1,'PAMP':1,'BMA':1,'SUPV':1,'CEPU':1,'EDN':1,
-  'LOMA':1,'COME':1,'BYMA':1,'ALUA':1,'BHIP':1,'BOLT':1,'BPAT':1,'BRIO':1,
+  'LOMA':1,'COME':1,'BYMA':1,'ALUA':1,'BHIP':1,'BOLT':1,'BPAT':1,'BRIO':1,'MOLI':1,'MORI':1,
   'CADO':1,'CAPX':1,'CARC':1,'CECO2':1,'CELU':1,'CGPA2':1,'CTIO':1,'CVH':1,
   'DGCE':1,'DGCU2':1,'DOME':1,'DYCA':1,'FERR':1,'FIPL':1,'GAMI':1,'GCDI':1,
   'GCLA':1,'GRIM':1,'HAVA':1,'HEBA':1,'IRSA':1,'LEDE':1,'LONG':1,'METR':1,
@@ -1584,16 +1586,17 @@ function renderAllTab() {
       '<td>'+rsiCell(d.rsi)+'</td>' +
       '<td>'+adxCell(d.adx)+'</td>' +
       '<td>'+distCell(d.distEma200)+'</td>' +
+      '<td>'+(d.peAvg!=null?'<span style="color:var(--text-dim)">'+f1(d.peAvg)+'x</span>':'<span style="color:var(--text-dim)">--</span>')+'</td>' +
       '<td>'+(d.pe?f1(d.pe)+'x':'--')+'</td>' +
       '<td>'+fv(d.volume)+'</td>' +
       '<td>'+fv(d.avgVol20)+'</td>' +
-      '<td>'+momCell(d.mom3m)+'</td>' +
       '<td>'+momCell(d.mom6m)+'</td>' +
+      '<td>'+momCell(d.mom12m)+'</td>' +
       '<td>'+doSpark(d.spark)+'</td>' +
       '<td><button class="tv-btn" onclick="openTVChart(\''+d.symbol+'\')">📈</button></td>' +
       '</tr>';
   }).join('');
-  document.getElementById('mervalBody').innerHTML = arRows || emptyRow(13);
+  document.getElementById('mervalBody').innerHTML = arRows || emptyRow(14);
 
   // ── Render GLOBAL rows
   var glRows = glData.map(function(d) {
@@ -1606,16 +1609,16 @@ function renderAllTab() {
       '<td>'+rsiCell(d.rsi)+'</td>' +
       '<td>'+adxCell(d.adx)+'</td>' +
       '<td>'+distCell(d.distEma200)+'</td>' +
+      '<td>'+(d.peAvg!=null?'<span style="color:var(--text-dim)">'+f1(d.peAvg)+'x</span>':'<span style="color:var(--text-dim)">--</span>')+'</td>' +
       '<td>'+(d.pe?f1(d.pe)+'x':'--')+'</td>' +
       '<td>'+fcap(d.marketCap)+'</td>' +
       '<td>'+fv(d.volume)+'</td>' +
       '<td>'+fv(d.avgVol20)+'</td>' +
       '<td>'+(d.beta?f2(d.beta):'--')+'</td>' +
       '<td>'+(d.divYield?f2(d.divYield)+'%':'--')+'</td>' +
-      '<td>'+momCell(d.mom3m)+'</td>' +
       '<td>'+momCell(d.mom6m)+'</td>' +
+      '<td>'+momCell(d.mom12m)+'</td>' +
       '<td>'+doSpark(d.spark)+'</td>' +
-      '<td style="text-align:center;font-family:var(--mono);font-size:12px">'+formatEarningsDate(d.symbol)+'</td>' +
       '</tr>';
   }).join('');
   document.getElementById('globalBody').innerHTML = glRows || emptyRow(16);
