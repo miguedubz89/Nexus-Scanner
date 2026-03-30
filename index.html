@@ -548,6 +548,49 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 .mkt-stats{display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-family:var(--mono);font-size:12px}
 .mkt-section .tbl-wrap{border-radius:0 0 2px 2px;border-top:none}
 .ars-tag{display:inline-block;background:rgba(255,214,0,0.1);border:1px solid var(--yellow2);color:var(--yellow);font-family:var(--mono);font-size:9px;padding:1px 4px;border-radius:2px;letter-spacing:1px;vertical-align:middle;margin-left:3px;line-height:1.4}
+
+/* ══════════════════════════════════════
+   CANSLIM / FUNDAMENTALS COLUMN
+══════════════════════════════════════ */
+.canslim-toggle-btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:5px 12px;border-radius:2px;cursor:pointer;
+  font-family:var(--mono);font-weight:600;font-size:11px;
+  letter-spacing:1.5px;text-transform:uppercase;
+  border:1px solid var(--purple);color:var(--purple);
+  background:transparent;transition:all .18s;
+}
+.canslim-toggle-btn:hover{background:rgba(180,74,255,0.12)}
+.canslim-toggle-btn.active{background:rgba(180,74,255,0.18);color:#d488ff;border-color:#d488ff}
+.canslim-col{transition:opacity .25s}
+.canslim-col.hidden{display:none!important}
+.canslim-cell{
+  display:flex;flex-direction:column;align-items:flex-end;gap:3px;
+  min-width:110px;
+}
+.canslim-score{
+  display:flex;align-items:center;gap:5px;
+}
+.canslim-badge{
+  font-family:var(--mono);font-size:12px;font-weight:700;
+  padding:2px 7px;border-radius:2px;letter-spacing:1px;
+}
+.canslim-badge.strong{background:rgba(0,230,118,0.15);color:var(--green);border:1px solid var(--green2)}
+.canslim-badge.moderate{background:rgba(255,214,0,0.12);color:var(--yellow);border:1px solid var(--yellow2)}
+.canslim-badge.weak{background:rgba(255,61,90,0.12);color:var(--red);border:1px solid var(--red2)}
+.canslim-dots{display:flex;gap:2px;align-items:center}
+.canslim-dot{width:7px;height:7px;border-radius:50%}
+.canslim-links{display:flex;gap:5px;margin-top:1px}
+.canslim-link{
+  font-family:var(--mono);font-size:9px;letter-spacing:.5px;
+  padding:1px 5px;border-radius:2px;text-decoration:none;
+  border:1px solid var(--border2);color:var(--text-dim);
+  transition:all .15s;white-space:nowrap;
+}
+.canslim-link:hover{border-color:var(--accent);color:var(--accent)}
+.canslim-link.sws:hover{border-color:#7c4dff;color:#b47eff}
+.canslim-link.ms:hover{border-color:var(--orange);color:var(--orange)}
+.canslim-header-wrap{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px}
 </style>
 </head>
 <body>
@@ -770,6 +813,10 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 
     <!-- TECHNICAL TAB -->
     <div class="tab-panel" id="tab-technical">
+      <div class="canslim-header-wrap">
+        <button class="canslim-toggle-btn" id="canslimToggleBtn" onclick="toggleCanslim()">◈ FUNDAMENTALES / CANSLIM</button>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">Score basado en momentum, precio, RSI · Links a SimplyWall.st &amp; MarketScreener</span>
+      </div>
       <div class="tbl-wrap"><table class="dt" id="techTable">
         <thead><tr>
           <th style="width:90px" data-field="symbol" onclick="ts('symbol',this)">Ticker<span class="sort-icon">⇅</span></th>
@@ -784,6 +831,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           <th data-field="beta" onclick="ts('beta',this)">Beta<span class="sort-icon">⇅</span></th>
           <th style="width:70px">Spark</th>
           <th style="width:60px">Chart</th>
+          <th class="canslim-col hidden" style="min-width:130px" title="Score CANSLIM estimado + links a analisis fundamental">&#9670; CANSLIM</th>
         </tr></thead>
         <tbody id="techBody"></tbody>
       </table></div>
@@ -851,6 +899,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
               <th onclick="tsMkt('gl','mom6m',this)">Mom6M<span class="sort-icon">⇅</span></th>
               <th>Spark</th>
               <th style="width:80px">Earnings</th>
+              <th class="canslim-col hidden" style="min-width:130px">&#9670; CANSLIM</th>
             </tr></thead>
             <tbody id="globalBody"></tbody>
           </table>
@@ -1460,10 +1509,11 @@ function renderTech(){
       '<td>'+squeezeCell(d)+'</td>'+
       '<td>'+(d.beta?f2(d.beta):'--')+'</td>'+
       '<td>'+doSpark(d.spark)+'</td>'+
-      '<td><button class="tv-btn" onclick="openTVChart(\''+d.symbol+'\')">📈</button></td>'+
+      '<td><button class="tv-btn" onclick="openTVChart(\''+d.symbol+'\')">&#128200;</button></td>'+
+      '<td class="canslim-col hidden">'+canslimCell(d)+'</td>'+
       '</tr>';
   }).join('');
-  document.getElementById('techBody').innerHTML=rows||emptyRow(12);
+  document.getElementById('techBody').innerHTML=rows||emptyRow(13);
 }
 
 // ── MERVAL DETECTION ──────────────────────────────
@@ -1616,6 +1666,7 @@ function renderAllTab() {
       '<td>'+momCell(d.mom6m)+'</td>' +
       '<td>'+doSpark(d.spark)+'</td>' +
       '<td style="text-align:center;font-family:var(--mono);font-size:12px">'+formatEarningsDate(d.symbol)+'</td>' +
+      '<td class="canslim-col hidden">'+canslimCell(d)+'</td>' +
       '</tr>';
   }).join('');
   document.getElementById('globalBody').innerHTML = glRows || emptyRow(16);
@@ -1972,6 +2023,101 @@ function squeezeCell(d) {
       '<span style="font-family:var(--mono);font-size:11px;color:'+barColor+'">'+sign+f2(mom)+'</span>' +
     '</div>' +
     '<div title="'+dotTitle+'" style="width:9px;height:9px;border-radius:50%;background:'+dotColor+';box-shadow:0 0 6px '+dotColor+';flex-shrink:0"></div>' +
+  '</div>';
+}
+
+// ── CANSLIM SCORE ─────────────────────────────────
+// Calcula un score estimado CANSLIM con los datos disponibles:
+// C = Current Earnings: proxy via PE bajo + momentum positivo
+// A = Annual Earnings: proxy via mom12m fuerte (>25%)
+// N = New Highs: distFromHigh > -5% (cerca de máximos)
+// S = Supply/Demand: volumen > volumen promedio
+// L = Leader: RSI > 60 + distEma200 > 0
+// I = Institutional: marketCap grande (proxy)
+// M = Market: distEma200 > 0 (sobre EMA200)
+
+var canslimVisible = false;
+
+function toggleCanslim() {
+  canslimVisible = !canslimVisible;
+  var btn = document.getElementById('canslimToggleBtn');
+  if (btn) {
+    btn.classList.toggle('active', canslimVisible);
+    btn.textContent = (canslimVisible ? '◈ OCULTAR FUNDAMENTALES' : '◈ FUNDAMENTALES / CANSLIM');
+  }
+  document.querySelectorAll('.canslim-col').forEach(function(el) {
+    el.classList.toggle('hidden', !canslimVisible);
+  });
+}
+
+function canslimScore(d) {
+  // Cada criterio vale 1 punto (max 7)
+  var score = 0;
+  var hits = [];
+
+  // C — Earnings actuales: PE razonable (5-40) + momentum positivo hoy
+  if (d.pe && d.pe > 5 && d.pe < 40 && d.chgPct > 0) { score++; hits.push({l:'C',ok:true}); }
+  else { hits.push({l:'C',ok:false}); }
+
+  // A — Earnings anuales: momentum 12M > 20%
+  var m12 = d.mom12m != null ? d.mom12m : d.mom6m;
+  if (m12 != null && m12 > 20) { score++; hits.push({l:'A',ok:true}); }
+  else { hits.push({l:'A',ok:false}); }
+
+  // N — New product/high: cerca de máximos (distFromHigh > -15%)
+  if (d.distFromHigh != null && d.distFromHigh > -15) { score++; hits.push({l:'N',ok:true}); }
+  else { hits.push({l:'N',ok:false}); }
+
+  // S — Supply/Demand: volumen > 1.2x promedio
+  if (d.avgVol20 && d.volume && d.volume > d.avgVol20 * 1.2) { score++; hits.push({l:'S',ok:true}); }
+  else { hits.push({l:'S',ok:false}); }
+
+  // L — Leader: RSI > 55 y sobre EMA200
+  if (d.rsi && d.rsi > 55 && d.distEma200 != null && d.distEma200 > 0) { score++; hits.push({l:'L',ok:true}); }
+  else { hits.push({l:'L',ok:false}); }
+
+  // I — Institutional: proxy MarketCap > 2B
+  if (d.marketCap && d.marketCap > 2e9) { score++; hits.push({l:'I',ok:true}); }
+  else { hits.push({l:'I',ok:false}); }
+
+  // M — Market direction: sobre EMA200
+  if (d.distEma200 != null && d.distEma200 > 0) { score++; hits.push({l:'M',ok:true}); }
+  else { hits.push({l:'M',ok:false}); }
+
+  return { score: score, hits: hits };
+}
+
+function canslimCell(d) {
+  var result = canslimScore(d);
+  var score = result.score;
+  var hits = result.hits;
+
+  // Badge de calidad
+  var badgeCls, badgeTxt;
+  if (score >= 5) { badgeCls = 'strong'; badgeTxt = score+'/7 ★'; }
+  else if (score >= 3) { badgeCls = 'moderate'; badgeTxt = score+'/7 ~'; }
+  else { badgeCls = 'weak'; badgeTxt = score+'/7 ✗'; }
+
+  // Dots CANSLIM
+  var dots = hits.map(function(h) {
+    var col = h.ok ? 'var(--green)' : 'rgba(255,61,90,0.35)';
+    return '<div class="canslim-dot" title="'+h.l+(h.ok?' ✓':' ✗')+'" style="background:'+col+'"></div>';
+  }).join('');
+
+  // Links externos — SimplyWall.st y MarketScreener
+  var sym = d.symbol.replace('.BA','');
+  var swsUrl = 'https://simplywall.st/stocks/us/'+sym.toLowerCase();
+  var msUrl  = 'https://www.marketscreener.com/quote/stock/'+sym+'/';
+
+  return '<div class="canslim-cell">'+
+    '<div class="canslim-score">'+
+      '<span class="canslim-badge '+badgeCls+'">'+badgeTxt+'</span>'+
+      '<div class="canslim-dots">'+dots+'</div>'+
+    '</div>'+
+    '<div class="canslim-links">'+
+      '<a class="canslim-link sws" href="'+swsUrl+'" target="_blank" rel="noopener">SWS</a>'+
+      '<a class="canslim-link ms"  href="'+msUrl+'"  target="_blank" rel="noopener">MS</a>'+
+    '</div>'+
   '</div>';
 }
 
