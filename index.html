@@ -813,10 +813,6 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 
     <!-- TECHNICAL TAB -->
     <div class="tab-panel" id="tab-technical">
-      <div class="canslim-header-wrap">
-        <button class="canslim-toggle-btn" id="canslimToggleBtn" onclick="toggleCanslim()">◈ FUNDAMENTALES / CANSLIM</button>
-        <span style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">Score basado en momentum, precio, RSI · Links a SimplyWall.st &amp; MarketScreener</span>
-      </div>
       <div class="tbl-wrap"><table class="dt" id="techTable">
         <thead><tr>
           <th style="width:90px" data-field="symbol" onclick="ts('symbol',this)">Ticker<span class="sort-icon">⇅</span></th>
@@ -831,7 +827,6 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           <th data-field="beta" onclick="ts('beta',this)">Beta<span class="sort-icon">⇅</span></th>
           <th style="width:70px">Spark</th>
           <th style="width:60px">Chart</th>
-          <th class="canslim-col hidden" style="min-width:130px" title="Score CANSLIM estimado + links a analisis fundamental">&#9670; CANSLIM</th>
         </tr></thead>
         <tbody id="techBody"></tbody>
       </table></div>
@@ -863,8 +858,8 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
               <th onclick="tsMkt('ar','avgVol20',this)">VolProm20<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('ar','mom3m',this)">Mom3M<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('ar','mom6m',this)">Mom6M<span class="sort-icon">⇅</span></th>
-              <th>Spark</th>
               <th style="width:55px">Chart</th>
+              <th style="min-width:120px">&#9670; CANSLIM</th>
             </tr></thead>
             <tbody id="mervalBody"></tbody>
           </table>
@@ -897,9 +892,8 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
               <th onclick="tsMkt('gl','divYield',this)">Div%<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','mom3m',this)">Mom3M<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','mom6m',this)">Mom6M<span class="sort-icon">⇅</span></th>
-              <th>Spark</th>
               <th style="width:80px">Earnings</th>
-              <th class="canslim-col hidden" style="min-width:130px">&#9670; CANSLIM</th>
+              <th style="min-width:120px">&#9670; CANSLIM</th>
             </tr></thead>
             <tbody id="globalBody"></tbody>
           </table>
@@ -1510,10 +1504,9 @@ function renderTech(){
       '<td>'+(d.beta?f2(d.beta):'--')+'</td>'+
       '<td>'+doSpark(d.spark)+'</td>'+
       '<td><button class="tv-btn" onclick="openTVChart(\''+d.symbol+'\')">&#128200;</button></td>'+
-      '<td class="canslim-col hidden">'+canslimCell(d)+'</td>'+
       '</tr>';
   }).join('');
-  document.getElementById('techBody').innerHTML=rows||emptyRow(13);
+  document.getElementById('techBody').innerHTML=rows||emptyRow(12);
 }
 
 // ── MERVAL DETECTION ──────────────────────────────
@@ -1639,11 +1632,11 @@ function renderAllTab() {
       '<td>'+fv(d.avgVol20)+'</td>' +
       '<td>'+momCell(d.mom3m)+'</td>' +
       '<td>'+momCell(d.mom6m)+'</td>' +
-      '<td>'+doSpark(d.spark)+'</td>' +
       '<td><button class="tv-btn" onclick="openTVChart(\''+d.symbol+'\')">📈</button></td>' +
+      '<td>'+canslimCell(d)+'</td>' +
       '</tr>';
   }).join('');
-  document.getElementById('mervalBody').innerHTML = arRows || emptyRow(13);
+  document.getElementById('mervalBody').innerHTML = arRows || emptyRow(12);
 
   // ── Render GLOBAL rows
   var glRows = glData.map(function(d) {
@@ -1664,12 +1657,11 @@ function renderAllTab() {
       '<td>'+(d.divYield?f2(d.divYield)+'%':'--')+'</td>' +
       '<td>'+momCell(d.mom3m)+'</td>' +
       '<td>'+momCell(d.mom6m)+'</td>' +
-      '<td>'+doSpark(d.spark)+'</td>' +
       '<td style="text-align:center;font-family:var(--mono);font-size:12px">'+formatEarningsDate(d.symbol)+'</td>' +
-      '<td class="canslim-col hidden">'+canslimCell(d)+'</td>' +
+      '<td>'+canslimCell(d)+'</td>' +
       '</tr>';
   }).join('');
-  document.getElementById('globalBody').innerHTML = glRows || emptyRow(16);
+  document.getElementById('globalBody').innerHTML = glRows || emptyRow(15);
 }
 
 function renderEarningsTab() {
@@ -2027,28 +2019,13 @@ function squeezeCell(d) {
 }
 
 // ── CANSLIM SCORE ─────────────────────────────────
-// Calcula un score estimado CANSLIM con los datos disponibles:
-// C = Current Earnings: proxy via PE bajo + momentum positivo
-// A = Annual Earnings: proxy via mom12m fuerte (>25%)
-// N = New Highs: distFromHigh > -5% (cerca de máximos)
-// S = Supply/Demand: volumen > volumen promedio
-// L = Leader: RSI > 60 + distEma200 > 0
-// I = Institutional: marketCap grande (proxy)
-// M = Market: distEma200 > 0 (sobre EMA200)
-
-var canslimVisible = false;
-
-function toggleCanslim() {
-  canslimVisible = !canslimVisible;
-  var btn = document.getElementById('canslimToggleBtn');
-  if (btn) {
-    btn.classList.toggle('active', canslimVisible);
-    btn.textContent = (canslimVisible ? '◈ OCULTAR FUNDAMENTALES' : '◈ FUNDAMENTALES / CANSLIM');
-  }
-  document.querySelectorAll('.canslim-col').forEach(function(el) {
-    el.classList.toggle('hidden', !canslimVisible);
-  });
-}
+// C = Current Earnings: proxy PE 5-40 + día positivo
+// A = Annual Earnings:  momentum 12M > 20%
+// N = New Highs:        distFromHigh > -15%
+// S = Supply/Demand:    volumen > 1.2x promedio 20d
+// L = Leader:           RSI > 55 + sobre EMA200
+// I = Institutional:    MarketCap > $2B
+// M = Market direction: sobre EMA200
 
 function canslimScore(d) {
   // Cada criterio vale 1 punto (max 7)
@@ -2098,25 +2075,17 @@ function canslimCell(d) {
   else if (score >= 3) { badgeCls = 'moderate'; badgeTxt = score+'/7 ~'; }
   else { badgeCls = 'weak'; badgeTxt = score+'/7 ✗'; }
 
-  // Dots CANSLIM
+  // Dots CANSLIM con tooltip
+  var dotLabels = ['C','A','N','S','L','I','M'];
   var dots = hits.map(function(h) {
     var col = h.ok ? 'var(--green)' : 'rgba(255,61,90,0.35)';
     return '<div class="canslim-dot" title="'+h.l+(h.ok?' ✓':' ✗')+'" style="background:'+col+'"></div>';
   }).join('');
 
-  // Links externos — SimplyWall.st y MarketScreener
-  var sym = d.symbol.replace('.BA','');
-  var swsUrl = 'https://simplywall.st/stocks/us/'+sym.toLowerCase();
-  var msUrl  = 'https://www.marketscreener.com/quote/stock/'+sym+'/';
-
   return '<div class="canslim-cell">'+
     '<div class="canslim-score">'+
       '<span class="canslim-badge '+badgeCls+'">'+badgeTxt+'</span>'+
       '<div class="canslim-dots">'+dots+'</div>'+
-    '</div>'+
-    '<div class="canslim-links">'+
-      '<a class="canslim-link sws" href="'+swsUrl+'" target="_blank" rel="noopener">SWS</a>'+
-      '<a class="canslim-link ms"  href="'+msUrl+'"  target="_blank" rel="noopener">MS</a>'+
     '</div>'+
   '</div>';
 }
