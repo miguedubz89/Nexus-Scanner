@@ -885,9 +885,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
               <th onclick="tsMkt('gl','pe',this)">P/E<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','marketCap',this)">Cap. Mkt<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','volume',this)">Volumen<span class="sort-icon">⇅</span></th>
-              <th onclick="tsMkt('gl','avgVol20',this)">VolProm20<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','beta',this)">Beta<span class="sort-icon">⇅</span></th>
-              <th onclick="tsMkt('gl','divYield',this)">Div%<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','mom12m',this)">Mom 12M<span class="sort-icon">⇅</span></th>
               <th style="min-width:120px">&#9670; CANSLIM</th>
             </tr></thead>
@@ -1646,9 +1644,7 @@ function renderAllTab() {
       '<td>'+(d.pe?f1(d.pe)+'x':'--')+'</td>' +
       '<td>'+fcap(d.marketCap)+'</td>' +
       '<td>'+fv(d.volume)+'</td>' +
-      '<td>'+fv(d.avgVol20)+'</td>' +
       '<td>'+(d.beta?f2(d.beta):'--')+'</td>' +
-      '<td>'+(d.divYield?f2(d.divYield)+'%':'--')+'</td>' +
       '<td>'+momCell(d.mom12m != null ? d.mom12m : d.mom6m)+'</td>' +
       '<td>'+canslimCell(d)+'</td>' +
       '</tr>';
