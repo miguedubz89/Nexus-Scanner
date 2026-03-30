@@ -2007,67 +2007,94 @@ function squeezeCell(d) {
 }
 
 // ── CANSLIM SCORE ─────────────────────────────────
-// C = Current Earnings: proxy PE 5-40 + día positivo
-// A = Annual Earnings:  momentum 12M > 20%
-// N = New Highs:        distFromHigh > -15%
-// S = Supply/Demand:    volumen > 1.2x promedio 20d
-// L = Leader:           RSI > 55 + sobre EMA200
-// I = Institutional:    MarketCap > $2B
+// C = Current quarterly EPS growth YoY > 25%
+// A = Annual EPS growth YoY > 25%
+// N = New Highs: distFromHigh > -15%
+// S = Supply/Demand: volumen > 1.2x promedio 20d
+// L = Leader: ROE > 17% + RSI > 55 + sobre EMA200
+// I = Institutional: MarketCap > $2B
 // M = Market direction: sobre EMA200
 
 function canslimScore(d) {
-  // Cada criterio vale 1 punto (max 7)
   var score = 0;
-  var hits = [];
+  var hits  = [];
 
-  // C — Earnings actuales: PE razonable (5-40) + momentum positivo hoy
-  if (d.pe && d.pe > 5 && d.pe < 40 && d.chgPct > 0) { score++; hits.push({l:'C',ok:true}); }
-  else { hits.push({l:'C',ok:false}); }
+  // C — EPS trimestral YoY > 25% (dato real del server)
+  //     Fallback: PE razonable + día positivo si no hay dato
+  var c_ok;
+  if (d.epsGrowthQ != null) {
+    c_ok = d.epsGrowthQ > 25;
+  } else {
+    c_ok = (d.pe && d.pe > 5 && d.pe < 40 && d.chgPct > 0);
+  }
+  if (c_ok) score++;
+  hits.push({ l:'C', ok: c_ok,
+    tip: d.epsGrowthQ != null ? 'EPS trim: '+(d.epsGrowthQ>0?'+':'')+d.epsGrowthQ+'%' : 'EPS sin dato — proxy P/E+día' });
 
-  // A — Earnings anuales: momentum 12M > 20%
-  var m12 = d.mom12m != null ? d.mom12m : d.mom6m;
-  if (m12 != null && m12 > 20) { score++; hits.push({l:'A',ok:true}); }
-  else { hits.push({l:'A',ok:false}); }
+  // A — EPS anual YoY > 25%
+  //     Fallback: momentum 12M > 20%
+  var a_ok;
+  if (d.epsGrowthA != null) {
+    a_ok = d.epsGrowthA > 25;
+  } else {
+    var m12 = d.mom12m != null ? d.mom12m : d.mom6m;
+    a_ok = (m12 != null && m12 > 20);
+  }
+  if (a_ok) score++;
+  hits.push({ l:'A', ok: a_ok,
+    tip: d.epsGrowthA != null ? 'EPS anual: '+(d.epsGrowthA>0?'+':'')+d.epsGrowthA+'%' : 'EPS anual sin dato — proxy Mom12M' });
 
-  // N — New product/high: cerca de máximos (distFromHigh > -15%)
-  if (d.distFromHigh != null && d.distFromHigh > -15) { score++; hits.push({l:'N',ok:true}); }
-  else { hits.push({l:'N',ok:false}); }
+  // N — Cerca de máximos 52s (distFromHigh > -15%)
+  var n_ok = (d.distFromHigh != null && d.distFromHigh > -15);
+  if (n_ok) score++;
+  hits.push({ l:'N', ok: n_ok,
+    tip: d.distFromHigh != null ? 'Dist máx 52s: '+(d.distFromHigh>0?'+':'')+d.distFromHigh.toFixed(1)+'%' : 'Sin dato' });
 
-  // S — Supply/Demand: volumen > 1.2x promedio
-  if (d.avgVol20 && d.volume && d.volume > d.avgVol20 * 1.2) { score++; hits.push({l:'S',ok:true}); }
-  else { hits.push({l:'S',ok:false}); }
+  // S — Volumen > 1.2x promedio 20d
+  var s_ok = (d.avgVol20 && d.volume && d.volume > d.avgVol20 * 1.2);
+  if (s_ok) score++;
+  hits.push({ l:'S', ok: s_ok,
+    tip: d.avgVol20 ? 'Vol/Avg: '+(d.volume/d.avgVol20).toFixed(2)+'x' : 'Sin dato volumen' });
 
-  // L — Leader: RSI > 55 y sobre EMA200
-  if (d.rsi && d.rsi > 55 && d.distEma200 != null && d.distEma200 > 0) { score++; hits.push({l:'L',ok:true}); }
-  else { hits.push({l:'L',ok:false}); }
+  // L — Líder: ROE > 17% (dato real) + RSI > 55 + sobre EMA200
+  var l_ok;
+  if (d.roe != null) {
+    l_ok = (d.roe > 17 && d.rsi != null && d.rsi > 55 && d.distEma200 != null && d.distEma200 > 0);
+  } else {
+    l_ok = (d.rsi != null && d.rsi > 55 && d.distEma200 != null && d.distEma200 > 0);
+  }
+  if (l_ok) score++;
+  hits.push({ l:'L', ok: l_ok,
+    tip: d.roe != null ? 'ROE: '+d.roe+'% | RSI: '+(d.rsi?d.rsi.toFixed(1):'--') : 'ROE sin dato — proxy RSI+EMA200' });
 
-  // I — Institutional: proxy MarketCap > 2B
-  if (d.marketCap && d.marketCap > 2e9) { score++; hits.push({l:'I',ok:true}); }
-  else { hits.push({l:'I',ok:false}); }
+  // I — Soporte institucional: proxy MarketCap > $2B
+  var i_ok = (d.marketCap && d.marketCap > 2e9);
+  if (i_ok) score++;
+  hits.push({ l:'I', ok: i_ok,
+    tip: d.marketCap ? 'Cap: $'+(d.marketCap/1e9).toFixed(1)+'B' : 'Sin Market Cap' });
 
-  // M — Market direction: sobre EMA200
-  if (d.distEma200 != null && d.distEma200 > 0) { score++; hits.push({l:'M',ok:true}); }
-  else { hits.push({l:'M',ok:false}); }
+  // M — Mercado alcista: sobre EMA200
+  var m_ok = (d.distEma200 != null && d.distEma200 > 0);
+  if (m_ok) score++;
+  hits.push({ l:'M', ok: m_ok,
+    tip: d.distEma200 != null ? 'Dist EMA200: '+(d.distEma200>0?'+':'')+d.distEma200.toFixed(1)+'%' : 'Sin dato' });
 
   return { score: score, hits: hits };
 }
 
 function canslimCell(d) {
   var result = canslimScore(d);
-  var score = result.score;
-  var hits = result.hits;
+  var score  = result.score;
+  var hits   = result.hits;
 
-  // Badge de calidad
   var badgeCls, badgeTxt;
-  if (score >= 5) { badgeCls = 'strong'; badgeTxt = score+'/7 ★'; }
+  if (score >= 5)      { badgeCls = 'strong';   badgeTxt = score+'/7 ★'; }
   else if (score >= 3) { badgeCls = 'moderate'; badgeTxt = score+'/7 ~'; }
-  else { badgeCls = 'weak'; badgeTxt = score+'/7 ✗'; }
+  else                 { badgeCls = 'weak';      badgeTxt = score+'/7 ✗'; }
 
-  // Dots CANSLIM con tooltip
-  var dotLabels = ['C','A','N','S','L','I','M'];
   var dots = hits.map(function(h) {
     var col = h.ok ? 'var(--green)' : 'rgba(255,61,90,0.35)';
-    return '<div class="canslim-dot" title="'+h.l+(h.ok?' ✓':' ✗')+'" style="background:'+col+'"></div>';
+    return '<div class="canslim-dot" title="'+h.l+': '+h.tip+'" style="background:'+col+'"></div>';
   }).join('');
 
   return '<div class="canslim-cell">'+
