@@ -11,7 +11,8 @@ Luego abrí market-scanner.html en tu browser.
 El servidor corre en http://localhost:5000
 """
 
-from flask import Flask, jsonify, request
+import os
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import yfinance as yf
 import pandas as pd
@@ -131,6 +132,87 @@ def calc_adx(hist, period=14):
 
 # ─── ENDPOINT PRINCIPAL ───────────────────────────────────────────────────────
 
+def calc_squeeze_momentum(hist, length=20, mult_bb=2.0, mult_kc=1.5):
+    """
+    TTM Squeeze Momentum — LazyBear method.
+    Devuelve: { sqzOn, sqzOff, sqzMom, sqzMomPrev }
+      sqzOn   = True  → squeeze activo (Bollinger dentro de Keltner = compresión)
+      sqzOff  = True  → squeeze se acaba de liberar (potencial ruptura)
+      sqzMom  = valor del momentum (positivo = alcista, negativo = bajista)
+      sqzMomPrev = momentum de la vela anterior (para detectar dirección)
+    """
+    try:
+        if len(hist) < length + 5:
+            return None
+
+        close = hist['Close'].values.astype(float)
+        high  = hist['High'].values.astype(float)
+        low   = hist['Low'].values.astype(float)
+        n     = len(close)
+
+        # ── Bollinger Bands ──────────────────────────────
+        def sma(arr, p):
+            return np.array([np.mean(arr[max(0,i-p+1):i+1]) if i >= p-1 else np.nan for i in range(len(arr))])
+
+        def stdev(arr, p):
+            return np.array([np.std(arr[max(0,i-p+1):i+1], ddof=0) if i >= p-1 else np.nan for i in range(len(arr))])
+
+        basis = sma(close, length)
+        dev   = stdev(close, length)
+        bb_upper = basis + mult_bb * dev
+        bb_lower = basis - mult_bb * dev
+
+        # ── Keltner Channels ─────────────────────────────
+        # True Range para ATR
+        tr = np.zeros(n)
+        for i in range(1, n):
+            tr[i] = max(high[i]-low[i], abs(high[i]-close[i-1]), abs(low[i]-close[i-1]))
+        tr[0] = high[0] - low[0]
+        atr_kc = sma(tr, length)
+        kc_upper = basis + mult_kc * atr_kc
+        kc_lower = basis - mult_kc * atr_kc
+
+        # ── Squeeze detection ────────────────────────────
+        sqz_on  = (bb_lower > kc_lower) & (bb_upper < kc_upper)
+        sqz_off = (bb_lower < kc_lower) & (bb_upper > kc_upper)
+
+        # ── Momentum (delta de precio vs media) ──────────
+        def highest(arr, p):
+            return np.array([np.max(arr[max(0,i-p+1):i+1]) if i >= p-1 else np.nan for i in range(len(arr))])
+        def lowest(arr, p):
+            return np.array([np.min(arr[max(0,i-p+1):i+1]) if i >= p-1 else np.nan for i in range(len(arr))])
+
+        mid   = (highest(high, length) + lowest(low, length)) / 2
+        delta = close - (mid + basis) / 2
+
+        # Regresión lineal del delta (length períodos)
+        mom = np.full(n, np.nan)
+        for i in range(length - 1, n):
+            y  = delta[i-length+1:i+1]
+            x  = np.arange(length, dtype=float)
+            if np.any(np.isnan(y)):
+                continue
+            xm = x.mean(); ym = y.mean()
+            denom = np.sum((x - xm) ** 2)
+            if denom == 0:
+                mom[i] = 0.0
+                continue
+            slope  = np.sum((x - xm) * (y - ym)) / denom
+            intercept = ym - slope * xm
+            mom[i] = slope * (length - 1) + intercept
+
+        if np.isnan(mom[-1]):
+            return None
+
+        return {
+            'sqzOn':      bool(sqz_on[-1]),
+            'sqzOff':     bool(sqz_off[-1]),
+            'sqzMom':     round(float(mom[-1]), 4),
+            'sqzMomPrev': round(float(mom[-2]), 4) if not np.isnan(mom[-2]) else None,
+        }
+    except Exception:
+        return None
+
 @app.route('/quote', methods=['GET'])
 def get_quote():
     symbol = request.args.get('symbol', '').upper().strip()
@@ -155,15 +237,18 @@ def get_quote():
 
         # Indicadores técnicos
         rsi    = calc_rsi(closes)
-        adx    = calc_adx(hist)   # ADX usa High/Low/Close del DataFrame completo
+        adx    = calc_adx(hist)
         ema50  = calc_ema(closes, 50)
         ema200 = calc_ema(closes, 200)
-        sma50 = calc_sma(closes, 50)
+        sma50  = calc_sma(closes, 50)
         sma200 = calc_sma(closes, 200)
-        dist_ema50 = pct_dist(price, ema50)
+        dist_ema50  = pct_dist(price, ema50)
         dist_ema200 = pct_dist(price, ema200)
         mom3 = momentum(closes, 63)   # ~3 meses
         mom6 = momentum(closes, 126)  # ~6 meses
+
+        # Squeeze Momentum (TTM LazyBear)
+        sqz = calc_squeeze_momentum(hist) or {}
 
         # Volúmenes
         vol_today = int(volumes[-1]) if volumes else 0
@@ -295,12 +380,17 @@ def get_quote():
             'divYield':      div_yield,
             'spark':         spark,
             # CANSLIM fundamentals
-            'epsGrowthQ':    eps_growth_q,    # C: crecimiento EPS trimestral YoY (%)
-            'epsGrowthA':    eps_growth_a,    # A: crecimiento EPS anual YoY (%)
-            'epsAccel':      eps_accel,       # aceleración earnings (trimestre reciente vs anterior)
-            'revGrowthQ':    rev_growth_q,    # crecimiento Revenue trimestral YoY (%)
-            'roe':           roe,             # L: Return on Equity (%)
-            'profitMargin':  profit_margin,   # margen neto (%)
+            'epsGrowthQ':    eps_growth_q,
+            'epsGrowthA':    eps_growth_a,
+            'epsAccel':      eps_accel,
+            'revGrowthQ':    rev_growth_q,
+            'roe':           roe,
+            'profitMargin':  profit_margin,
+            # Squeeze Momentum (TTM LazyBear)
+            'sqzOn':         sqz.get('sqzOn'),
+            'sqzOff':        sqz.get('sqzOff'),
+            'sqzMom':        sqz.get('sqzMom'),
+            'sqzMomPrev':    sqz.get('sqzMomPrev'),
         }
         return jsonify(result)
 
@@ -363,6 +453,13 @@ def get_precio():
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({'status': 'ok', 'message': 'NEXUS SCANNER proxy running'})
+
+
+@app.route('/')
+def serve_index():
+    """Sirve el index.html desde la misma carpeta que server.py"""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    return send_from_directory(base_dir, 'index.html')
 
 
 if __name__ == '__main__':
