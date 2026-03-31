@@ -853,9 +853,9 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
               <th onclick="tsMkt('ar','rsi',this)">RSI<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('ar','adx',this)">ADX<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('ar','distEma200',this)">Dist EMA200<span class="sort-icon">⇅</span></th>
-              <th onclick="tsMkt('ar','pe',this)">P/E<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('ar','volume',this)">Volumen<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('ar','avgVol20',this)">VolProm20<span class="sort-icon">⇅</span></th>
+              <th onclick="tsMkt('ar','beta',this)">Beta<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('ar','mom12m',this)">Mom 12M<span class="sort-icon">⇅</span></th>
               <th style="min-width:120px">&#9670; CANSLIM</th>
             </tr></thead>
@@ -882,9 +882,8 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
               <th onclick="tsMkt('gl','rsi',this)">RSI<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','adx',this)">ADX<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','distEma200',this)">Dist EMA200<span class="sort-icon">⇅</span></th>
-              <th onclick="tsMkt('gl','pe',this)">P/E<span class="sort-icon">⇅</span></th>
-              <th onclick="tsMkt('gl','marketCap',this)">Cap. Mkt<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','volume',this)">Volumen<span class="sort-icon">⇅</span></th>
+              <th onclick="tsMkt('gl','avgVol20',this)">VolProm20<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','beta',this)">Beta<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','mom12m',this)">Mom 12M<span class="sort-icon">⇅</span></th>
               <th style="min-width:120px">&#9670; CANSLIM</th>
@@ -1621,14 +1620,14 @@ function renderAllTab() {
       '<td>'+rsiCell(d.rsi)+'</td>' +
       '<td>'+adxCell(d.adx)+'</td>' +
       '<td>'+distCell(d.distEma200)+'</td>' +
-      '<td>'+(d.pe?f1(d.pe)+'x':'--')+'</td>' +
       '<td>'+fv(d.volume)+'</td>' +
       '<td>'+fv(d.avgVol20)+'</td>' +
+      '<td>'+(d.beta?f2(d.beta):'--')+'</td>' +
       '<td>'+momCell(d.mom12m != null ? d.mom12m : d.mom6m)+'</td>' +
       '<td>'+canslimCell(d)+'</td>' +
       '</tr>';
   }).join('');
-  document.getElementById('mervalBody').innerHTML = arRows || emptyRow(10);
+  document.getElementById('mervalBody').innerHTML = arRows || emptyRow(11);
 
   // ── Render GLOBAL rows
   var glRows = glData.map(function(d) {
@@ -1641,15 +1640,14 @@ function renderAllTab() {
       '<td>'+rsiCell(d.rsi)+'</td>' +
       '<td>'+adxCell(d.adx)+'</td>' +
       '<td>'+distCell(d.distEma200)+'</td>' +
-      '<td>'+(d.pe?f1(d.pe)+'x':'--')+'</td>' +
-      '<td>'+fcap(d.marketCap)+'</td>' +
       '<td>'+fv(d.volume)+'</td>' +
+      '<td>'+fv(d.avgVol20)+'</td>' +
       '<td>'+(d.beta?f2(d.beta):'--')+'</td>' +
       '<td>'+momCell(d.mom12m != null ? d.mom12m : d.mom6m)+'</td>' +
       '<td>'+canslimCell(d)+'</td>' +
       '</tr>';
   }).join('');
-  document.getElementById('globalBody').innerHTML = glRows || emptyRow(13);
+  document.getElementById('globalBody').innerHTML = glRows || emptyRow(11);
 }
 
 function renderEarningsTab() {
