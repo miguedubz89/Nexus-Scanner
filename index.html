@@ -533,7 +533,36 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 ::-webkit-scrollbar-track{background:var(--bg)}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 @media(max-width:1100px){.sc-grid{grid-template-columns:repeat(3,1fr)}.sum-grid{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:800px){.layout{grid-template-columns:1fr}.sidebar{max-height:none;position:relative}}
+@media(max-width:800px){
+  .layout{grid-template-columns:1fr!important}
+  .sidebar{max-height:none;position:relative;width:100%!important;min-width:0!important;transition:none}
+  .sidebar.collapsed{width:0!important;min-width:0!important;padding:0!important;opacity:0;pointer-events:none;overflow:hidden;height:0;margin:0}
+  .layout.sidebar-hidden{grid-template-columns:1fr!important}
+  .sidebar-toggle{
+    position:fixed!important;
+    left:auto!important;right:12px!important;top:auto!important;bottom:16px!important;
+    transform:none!important;
+    z-index:300;
+    border-radius:50%!important;
+    width:44px!important;height:44px!important;
+    padding:0!important;
+    display:flex!important;align-items:center;justify-content:center;
+    font-size:18px!important;
+    background:var(--bg3)!important;
+    border:1px solid var(--accent)!important;
+    color:var(--accent)!important;
+    box-shadow:0 4px 16px rgba(0,212,255,0.3)!important;
+  }
+  #tab-technical .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  #tab-technical table.dt{min-width:860px}
+  #tab-technical table.dt th,#tab-technical table.dt td{padding:10px 7px;font-size:11px}
+  .sum-grid{grid-template-columns:repeat(2,1fr)!important}
+  .sc-grid{grid-template-columns:repeat(2,1fr)!important}
+  .movers-grid{grid-template-columns:1fr}
+  .topbar{padding:8px 12px;gap:8px}
+  .status-bar{gap:10px;font-size:11px}
+  .logo{font-size:20px}
+}
 /* ── MERVAL / GLOBAL SECTIONS ── */
 .mkt-section{margin-bottom:22px}
 .mkt-section-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:10px 14px;border-radius:2px 2px 0 0;border:1px solid;border-bottom:none}
@@ -684,6 +713,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 <div class="tape-wrap"><div class="tape-inner" id="tape">Esperando datos...</div></div>
 
 <div class="layout" id="mainLayout">
+  <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()" title="Ocultar panel">◀</button>
   <div class="sidebar">
     <div class="sb-section">
       <div class="sb-label">Tickers</div>
@@ -932,15 +962,42 @@ var API = (location.hostname === 'localhost' || location.hostname === '127.0.0.1
 
 // ── SIDEBAR TOGGLE ─────────────────────────────────
 function toggleSidebar() {
-  var layout  = document.getElementById('mainLayout');
-  var sidebar = layout.querySelector('.sidebar');
-  var btn     = document.getElementById('sidebarToggle');
+  var layout   = document.getElementById('mainLayout');
+  var sidebar  = layout.querySelector('.sidebar');
+  var btn      = document.getElementById('sidebarToggle');
+  var isMobile = window.innerWidth <= 800;
   var isCollapsed = sidebar.classList.toggle('collapsed');
   btn.classList.toggle('collapsed', isCollapsed);
   layout.classList.toggle('sidebar-hidden', isCollapsed);
-  btn.textContent = isCollapsed ? '▶' : '◀';
-  btn.title = isCollapsed ? 'Mostrar panel' : 'Ocultar panel';
+  if (isMobile) {
+    // On mobile: round FAB, use ☰ / ✕
+    btn.textContent = isCollapsed ? '☰' : '✕';
+    btn.title = isCollapsed ? 'Mostrar filtros' : 'Ocultar filtros';
+  } else {
+    btn.textContent = isCollapsed ? '▶' : '◀';
+    btn.title = isCollapsed ? 'Mostrar panel' : 'Ocultar panel';
+    // Reposition toggle button on desktop
+    btn.style.left = isCollapsed ? '0px' : '255px';
+  }
 }
+// Adjust toggle button position on resize
+window.addEventListener('resize', function() {
+  var btn = document.getElementById('sidebarToggle');
+  if (!btn) return;
+  var isMobile = window.innerWidth <= 800;
+  if (!isMobile) {
+    var sidebar = document.querySelector('.sidebar');
+    var isCollapsed = sidebar.classList.contains('collapsed');
+    btn.style.left = isCollapsed ? '0px' : '255px';
+    btn.style.removeProperty('right');
+    btn.style.removeProperty('bottom');
+    btn.textContent = isCollapsed ? '▶' : '◀';
+  } else {
+    btn.style.removeProperty('left');
+    btn.style.right = '12px';
+    btn.style.bottom = '16px';
+  }
+});
 
 // ── EARNINGS CALENDAR (via Yahoo Finance API pública) ─
 var earningsCache = {};
