@@ -636,6 +636,91 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 }
 #techTable thead{display:none}
 #techTable > tbody > tr:not([class]){display:none}
+
+/* ══════════════════════════════════════
+   NOTAS POR TICKER
+══════════════════════════════════════ */
+.note-btn{
+  background:none;border:none;cursor:pointer;
+  padding:3px 5px;border-radius:3px;
+  transition:all .15s;line-height:1;
+  display:flex;align-items:center;justify-content:center;
+}
+.note-btn:hover{background:rgba(0,212,255,0.12)}
+.note-btn .note-icon{font-size:14px;opacity:0.35;transition:opacity .15s}
+.note-btn.has-note .note-icon{opacity:1;filter:drop-shadow(0 0 4px rgba(255,214,0,0.6))}
+.note-btn:hover .note-icon{opacity:0.8}
+
+/* Popover de nota */
+.note-popover{
+  position:fixed;z-index:800;
+  background:var(--bg2);
+  border:1px solid var(--border2);
+  border-radius:4px;
+  padding:0;
+  width:280px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.6);
+  display:none;
+  flex-direction:column;
+  overflow:hidden;
+}
+.note-popover.open{display:flex}
+.note-popover-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 12px;
+  background:var(--bg3);
+  border-bottom:1px solid var(--border);
+}
+.note-popover-sym{
+  font-family:var(--head);font-weight:900;font-size:14px;
+  letter-spacing:2px;color:var(--accent);
+}
+.note-popover-label{
+  font-family:var(--mono);font-size:10px;
+  color:var(--text-dim);letter-spacing:1px;
+}
+.note-popover-close{
+  background:none;border:none;color:var(--text-dim);
+  cursor:pointer;font-size:16px;padding:0 2px;line-height:1;
+  transition:color .15s;
+}
+.note-popover-close:hover{color:var(--red)}
+.note-textarea{
+  background:transparent;border:none;outline:none;
+  color:var(--text-bright);font-family:var(--mono);font-size:12px;
+  line-height:1.7;resize:none;padding:12px;
+  width:100%;min-height:100px;
+  caret-color:var(--accent);
+}
+.note-textarea::placeholder{color:var(--text-dim)}
+.note-popover-footer{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:6px 10px;border-top:1px solid var(--border);
+  background:var(--bg3);
+}
+.note-save-btn{
+  background:var(--accent);color:var(--bg);
+  border:none;font-family:var(--head);font-weight:700;
+  font-size:10px;letter-spacing:1.5px;text-transform:uppercase;
+  padding:4px 10px;border-radius:2px;cursor:pointer;
+  transition:background .15s;
+}
+.note-save-btn:hover{background:var(--accent2)}
+.note-del-btn{
+  background:none;border:1px solid var(--border2);
+  color:var(--text-dim);font-family:var(--mono);font-size:10px;
+  padding:3px 8px;border-radius:2px;cursor:pointer;
+  transition:all .15s;
+}
+.note-del-btn:hover{border-color:var(--red);color:var(--red)}
+.note-char-count{
+  font-family:var(--mono);font-size:10px;color:var(--text-dim);
+}
+@keyframes notePopIn{
+  from{opacity:0;transform:scale(.95) translateY(4px)}
+  to{opacity:1;transform:scale(1) translateY(0)}
+}
+.note-popover.open{animation:notePopIn .15s ease}
 </style>
 </head>
 <body>
@@ -905,6 +990,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
               <th onclick="tsMkt('ar','beta',this)">Beta<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('ar','mom12m',this)">Mom 12M<span class="sort-icon">⇅</span></th>
               <th style="min-width:120px">&#9670; CANSLIM</th>
+              <th style="width:40px;text-align:center" title="Notas">📝</th>
             </tr></thead>
             <tbody id="mervalBody"></tbody>
           </table>
@@ -934,6 +1020,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
               <th onclick="tsMkt('gl','beta',this)">Beta<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','mom12m',this)">Mom 12M<span class="sort-icon">⇅</span></th>
               <th style="min-width:120px">&#9670; CANSLIM</th>
+              <th style="width:40px;text-align:center" title="Notas">📝</th>
             </tr></thead>
             <tbody id="globalBody"></tbody>
           </table>
@@ -967,6 +1054,26 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
       </div>
     </div>
     <div class="tv-modal-body" id="tvModalBody"></div>
+  </div>
+</div>
+
+<!-- NOTE POPOVER -->
+<div class="note-popover" id="notePopover">
+  <div class="note-popover-header">
+    <div>
+      <div class="note-popover-sym" id="notePopSym">--</div>
+      <div class="note-popover-label">ANOTACIÓN PERSONAL</div>
+    </div>
+    <button class="note-popover-close" onclick="closeNotePopover()">✕</button>
+  </div>
+  <textarea class="note-textarea" id="noteTextarea"
+    placeholder="Escribí tu análisis, nivel de entrada, target, stop loss..."
+    maxlength="500"
+    oninput="updateNoteCharCount()"></textarea>
+  <div class="note-popover-footer">
+    <button class="note-del-btn" onclick="deleteNote()" id="noteDelBtn">🗑 Borrar</button>
+    <span class="note-char-count"><span id="noteCharCount">0</span>/500</span>
+    <button class="note-save-btn" onclick="saveNote()">✓ Guardar</button>
   </div>
 </div>
 
@@ -1855,9 +1962,10 @@ function renderAllTab() {
       '<td>'+(d.beta?f2(d.beta):'--')+'</td>' +
       '<td>'+momCell(d.mom12m != null ? d.mom12m : d.mom6m)+'</td>' +
       '<td>'+canslimCell(d)+'</td>' +
+      '<td style="text-align:center">'+noteBtn(d.symbol)+'</td>' +
       '</tr>';
   }).join('');
-  document.getElementById('mervalBody').innerHTML = arRows || emptyRow(11);
+  document.getElementById('mervalBody').innerHTML = arRows || emptyRow(12);
 
   // ── Render GLOBAL rows
   var glRows = glData.map(function(d) {
@@ -2386,6 +2494,179 @@ function canslimCell(d) {
 }
 
 // No hacer window.onload — la app se inicia desde Firebase onAuthStateChanged
+
+// ══════════════════════════════════════════════════════
+//  SISTEMA DE ANOTACIONES POR TICKER
+//  - Guardado en localStorage (persiste entre sesiones)
+//  - Popover editable al hacer click en el botón 📝
+//  - Botón con glow amarillo si tiene nota guardada
+// ══════════════════════════════════════════════════════
+
+var NOTES_KEY = 'dubz_notes_v1';
+var _notes = {};
+var _activePopover = null;
+
+// ── Cargar notas desde localStorage ──────────────────
+function loadNotes() {
+  try {
+    var raw = localStorage.getItem(NOTES_KEY);
+    _notes = raw ? JSON.parse(raw) : {};
+  } catch(e) { _notes = {}; }
+}
+
+// ── Guardar notas en localStorage ────────────────────
+function saveNotes() {
+  try { localStorage.setItem(NOTES_KEY, JSON.stringify(_notes)); } catch(e) {}
+}
+
+// ── Obtener nota de un ticker ─────────────────────────
+function getNote(sym) {
+  return _notes[sym.toUpperCase()] || '';
+}
+
+// ── Guardar nota de un ticker ─────────────────────────
+function setNote(sym, text) {
+  sym = sym.toUpperCase();
+  if (text.trim()) {
+    _notes[sym] = text.trim();
+  } else {
+    delete _notes[sym];
+  }
+  saveNotes();
+}
+
+// ── Generar celda HTML del botón de nota ─────────────
+function noteCell(sym) {
+  sym = sym.toUpperCase();
+  var note = getNote(sym);
+  var hasNote = note.length > 0;
+  var preview = hasNote
+    ? '<span class="note-preview" onclick="openNotePopover(event,\''+escHtml(sym)+'\')" title="'+escHtml(note)+'">'+escHtml(note.slice(0,40))+(note.length>40?'…':'')+'</span>'
+    : '';
+  return '<div style="display:flex;flex-direction:column;align-items:center;gap:2px">'+
+    '<button class="note-btn'+(hasNote?' has-note':'')+'" '+
+      'onclick="openNotePopover(event,\''+escHtml(sym)+'\')" '+
+      'title="'+(hasNote?escHtml(note):'Agregar anotación')+'">'+(hasNote?'✏️':'📝')+'</button>'+
+    preview+
+  '</div>';
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ── Abrir popover de nota ─────────────────────────────
+function openNotePopover(e, sym) {
+  e.stopPropagation();
+  sym = sym.toUpperCase();
+
+  // Cerrar cualquier popover abierto
+  closeNotePopover();
+
+  var note = getNote(sym);
+  var pop = document.createElement('div');
+  pop.className = 'note-popover';
+  pop.id = 'notePopover';
+
+  pop.innerHTML =
+    '<div class="note-popover-header">' +
+      '<div class="note-popover-title">' +
+        '<span>📝</span>' +
+        '<span>' + sym + '</span>' +
+      '</div>' +
+      '<button class="note-popover-close" onclick="closeNotePopover()" title="Cerrar">✕</button>' +
+    '</div>' +
+    '<textarea class="note-textarea" id="noteTextarea" placeholder="Escribí tu análisis, tesis, nivel de entrada, stop loss..." maxlength="500">' +
+      escHtml(note) +
+    '</textarea>' +
+    '<div class="note-popover-footer">' +
+      '<button class="note-clear-btn" onclick="clearNote(\''+sym+'\')">🗑 Borrar</button>' +
+      '<span class="note-char-count" id="noteCharCount">' + note.length + '/500</span>' +
+      '<button class="note-save-btn" onclick="saveNoteFromPopover(\''+sym+'\')">✓ Guardar</button>' +
+    '</div>';
+
+  document.body.appendChild(pop);
+  _activePopover = { el: pop, sym: sym };
+
+  // Actualizar contador de chars
+  var ta = document.getElementById('noteTextarea');
+  ta.addEventListener('input', function() {
+    document.getElementById('noteCharCount').textContent = ta.value.length + '/500';
+  });
+  // Guardar con Ctrl+Enter o Cmd+Enter
+  ta.addEventListener('keydown', function(ev) {
+    if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') {
+      ev.preventDefault();
+      saveNoteFromPopover(sym);
+    }
+    if (ev.key === 'Escape') closeNotePopover();
+  });
+
+  // Posicionar el popover inteligentemente
+  positionPopover(pop, e);
+
+  // Focus en el textarea
+  setTimeout(function(){ ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }, 50);
+
+  // Cerrar al hacer click afuera
+  setTimeout(function() {
+    document.addEventListener('click', onOutsideClick);
+  }, 10);
+}
+
+function positionPopover(pop, e) {
+  var W = window.innerWidth, H = window.innerHeight;
+  var pw = 280, ph = 220; // ancho/alto estimado del popover
+  var x = e.clientX + 8;
+  var y = e.clientY + 8;
+  if (x + pw > W - 10) x = e.clientX - pw - 8;
+  if (y + ph > H - 10) y = e.clientY - ph - 8;
+  x = Math.max(8, x);
+  y = Math.max(8, y);
+  pop.style.left = x + 'px';
+  pop.style.top  = y + 'px';
+}
+
+function onOutsideClick(e) {
+  var pop = document.getElementById('notePopover');
+  if (pop && !pop.contains(e.target)) {
+    closeNotePopover();
+  }
+}
+
+function closeNotePopover() {
+  var pop = document.getElementById('notePopover');
+  if (pop) {
+    pop.style.animation = 'none';
+    pop.style.opacity = '0';
+    pop.style.transform = 'scale(0.92)';
+    pop.style.transition = 'opacity .12s, transform .12s';
+    setTimeout(function(){ if(pop.parentNode) pop.remove(); }, 120);
+  }
+  document.removeEventListener('click', onOutsideClick);
+  _activePopover = null;
+}
+
+function saveNoteFromPopover(sym) {
+  var ta = document.getElementById('noteTextarea');
+  if (!ta) return;
+  setNote(sym, ta.value);
+  closeNotePopover();
+  // Re-render para actualizar el ícono/preview
+  renderAllTab();
+  // Feedback visual breve
+  showTickerToast('✓ Nota guardada para ' + sym, 'ok');
+}
+
+function clearNote(sym) {
+  setNote(sym, '');
+  closeNotePopover();
+  renderAllTab();
+}
+
+// Inicializar notas al cargar
+loadNotes();
+
 </script>
 </body>
 </html>
