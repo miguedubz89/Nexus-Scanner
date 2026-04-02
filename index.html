@@ -528,6 +528,8 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 .ticker-item-sym{font-family:var(--head);font-weight:700;font-size:14px;color:var(--text-bright);letter-spacing:.5px}
 .ticker-item-remove{background:none;border:1px solid transparent;color:var(--text-dim);font-size:14px;cursor:pointer;padding:2px 6px;border-radius:2px;line-height:1;transition:all .15s;font-family:var(--mono)}
 .ticker-item-remove:hover{border-color:var(--red);color:var(--red);background:rgba(255,61,90,0.08)}
+.ticker-item.ticker-unknown{border-color:rgba(255,214,0,0.3);background:rgba(255,214,0,0.04)}
+@keyframes fadeInToast{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .ticker-count{font-family:var(--mono);font-size:12px;color:var(--text-dim);text-align:center;padding:2px 0}
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:var(--bg)}
@@ -620,6 +622,20 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 .canslim-link.sws:hover{border-color:#7c4dff;color:#b47eff}
 .canslim-link.ms:hover{border-color:var(--orange);color:var(--orange)}
 .canslim-header-wrap{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+/* ── TECH GROUP HEADERS ── */
+.tech-group-header{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:9px 14px;border-radius:2px 2px 0 0;
+  border:1px solid rgba(255,255,255,0.1);border-bottom:none;
+  font-family:var(--head);font-size:13px;
+  margin-top:4px;
+}
+.tech-group-badge{
+  font-family:var(--mono);font-size:10px;padding:2px 7px;
+  border-radius:2px;letter-spacing:1px;border:1px solid;
+}
+#techTable thead{display:none}
+#techTable > tbody > tr:not([class]){display:none}
 </style>
 </head>
 <body>
@@ -728,6 +744,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
       </div>
       <textarea class="ti-area" id="tickerBox" style="display:none"></textarea>
       <button class="btn btn-a btn-full" onclick="loadAndRefresh()">▶ CARGAR TICKERS</button>
+      <div id="unknownTickerBanner" style="display:none;background:rgba(255,214,0,0.08);border:1px solid var(--yellow2);border-radius:2px;padding:8px 10px;font-family:var(--mono);font-size:11px;color:var(--yellow);line-height:1.6;margin-top:2px"></div>
       <div id="saveStatus" style="font-family:var(--mono);font-size:12px;color:var(--text-dim);text-align:center;height:14px"></div>
       <div class="progress-wrap" id="progressWrap">
         <div class="progress-fill" id="progressFill"></div>
@@ -1180,25 +1197,93 @@ var SECTORS = {
   // ── Inteligencia Artificial & Big Data ──
   AI:'IA & Big Data',BBAI:'IA & Big Data',SOUN:'IA & Big Data',IREN:'IA & Big Data',
   CIEN:'IA & Big Data',PATH:'IA & Big Data',AMBA:'IA & Big Data',
+  SMCI:'IA & Big Data',IONQ:'IA & Big Data',QUBT:'IA & Big Data',RGTI:'IA & Big Data',
+  ARRY:'IA & Big Data',DUOL:'Software',
 
   // ── Defensa & Aeroespacial ──
   NOC:'Defensa',GD:'Defensa',L:'Defensa',HII:'Defensa',KTOS:'Defensa',
-  LDOS:'Defensa',BAH:'Defensa',SAIC:'Defensa',
+  LDOS:'Defensa',BAH:'Defensa',SAIC:'Defensa',SPCE:'Defensa',
+  RKLB:'Defensa',ASTS:'Defensa',MNTS:'Defensa',
+  SATL:'Satelital',  // Satellogic
+
+  // ── Satelital & Espacial ──
+  SPCE:'Satelital',RKLB:'Satelital',ASTS:'Satelital',MNTS:'Satelital',
+  SATL:'Satelital',IRDM:'Satelital',MAXN:'Satelital',
 
   // ── Biotech ──
   BNTX:'Biotech',NVAX:'Biotech',SRPT:'Biotech',FOLD:'Biotech',
   IONS:'Biotech',ARWR:'Biotech',RCKT:'Biotech',FATE:'Biotech',
   NTLA:'Biotech',BEAM:'Biotech',CRSP:'Biotech',EDIT:'Biotech',
+  ALNY:'Biotech',INSM:'Biotech',PTGX:'Biotech',RVMD:'Biotech',
+  ROIV:'Biotech',ACAD:'Biotech',HALO:'Biotech',PRAX:'Biotech',
 
-  // ── Minería & Oro ──
-  GOLD:'Materiales',NEM:'Materiales',AEM:'Materiales',
-  KGC:'Materiales',AGI:'Materiales',AU:'Materiales',HMY:'Materiales',
+  // ── Fintech & Pagos ──
+  AFRM:'Fintech',SOFI:'Fintech',UPST:'Fintech',LMND:'Fintech',
+  ROOT:'Fintech',OPEN:'Fintech',HIPPO:'Fintech',METLIFE:'Fintech',
+  NRDS:'Fintech',LC:'Fintech',DAVE:'Fintech',
+
+  // ── Minería & Metales Preciosos ──
+  GOLD:'Materiales',KGC:'Materiales',AGI:'Materiales',AU:'Materiales',HMY:'Materiales',
+  KL:'Materiales',PAAS:'Materiales',SILV:'Materiales',EQX:'Materiales',
+
+  // ── Turismo & Hospitalidad ──
+  ABNB:'Turismo',BKNG:'Turismo',EXPE:'Turismo',TRIP:'Turismo',
+  MAR:'Turismo',HLT:'Turismo',H:'Turismo',IHG:'Turismo',
+  RCL:'Turismo',CCL:'Turismo',NCLH:'Turismo',
+
+  // ── Retail & Comercio ──
+  AMZN:'E-commerce',SHOP:'E-commerce',MELI:'E-commerce',
+  TGT:'Retail',LOW:'Retail',TJX:'Retail',ROST:'Retail',
+  BBY:'Retail',GPS:'Retail',M:'Retail',CVNA:'Retail',KMX:'Retail',
+  DG:'Retail',DLTR:'Retail',BIG:'Retail',FIVE:'Retail',
+
+  // ── Alimentos & Bebidas ──
+  MDLZ:'Alimentos',KHC:'Alimentos',GIS:'Alimentos',K:'Alimentos',
+  HSY:'Alimentos',CAG:'Alimentos',SJM:'Alimentos',CPB:'Alimentos',
+  TSN:'Alimentos',HRL:'Alimentos',ADM:'Alimentos',BG:'Alimentos',
+  MKC:'Alimentos',TAP:'Alimentos',STZ:'Alimentos',BF.B:'Alimentos',
+
+  // ── Transporte & Logística ──
+  UPS:'Transporte',FDX:'Transporte',DAL:'Transporte',UAL:'Transporte',
+  AAL:'Transporte',LUV:'Transporte',CHRW:'Transporte',EXPD:'Transporte',
+  XPO:'Transporte',GXO:'Transporte',JBHT:'Transporte',KNX:'Transporte',
+  ZIM:'Transporte',MATX:'Transporte',
+
+  // ── Juego & Entretenimiento ──
+  DKNG:'Entretenimiento',MGM:'Entretenimiento',WYNN:'Entretenimiento',
+  LVS:'Entretenimiento',PENN:'Entretenimiento',CZR:'Entretenimiento',
+  RBLX:'Entretenimiento',U:'Entretenimiento',EA:'Entretenimiento',
+  TTWO:'Entretenimiento',ATVI:'Entretenimiento',
+
+  // ── Acciones Merval (Argentina) ──
+  // Las que terminan en .BA son auto-detectadas, pero también clasificamos sin sufijo
+  GGAL:'Finanzas',YPFD:'Energía',YPF:'Energía',PAMP:'Utilities',
+  BMA:'Finanzas',SUPV:'Finanzas',CEPU:'Utilities',EDN:'Utilities',
+  LOMA:'Materiales',COME:'Industriales',BYMA:'Finanzas',ALUA:'Materiales',
+  BHIP:'Finanzas',TECO2:'Comunicación',METR:'Utilities',IRSA:'REITs',
+  TGNO4:'Energía',TGSU2:'Energía',TRAN:'Energía',TXAR:'Materiales',
+  VALO:'Finanzas',APBR:'Energía',HARG:'Energía',AGRO:'Consumo Básico',
+  CRES:'Consumo Básico',RICH:'Consumo Básico',MIRG:'Industriales',
+  BOLT:'Industriales',SEMI:'Semiconductores',ARCO:'E-commerce',
+
+  // ── Salud Argentina / Global emergente ──
+  NU:'Finanzas',VALE:'Materiales',BABA:'E-commerce',
+
+  // ── Coworking & Real Estate Tech ──
+  OPEN:'Fintech',RDFN:'REITs',Z:'REITs',ZG:'REITs',CSGP:'REITs',
+
+  // ── Seguridad Cibernética ──
+  PANW:'Ciberseguridad',FTNT:'Ciberseguridad',ZS:'Ciberseguridad',
+  CRWD:'Ciberseguridad',OKTA:'Ciberseguridad',S:'Ciberseguridad',
+  CYBR:'Ciberseguridad',QLYS:'Ciberseguridad',TENB:'Ciberseguridad',
+  RPD:'Ciberseguridad',VRNS:'Ciberseguridad',SIEM:'Ciberseguridad',
 };
 var SEC_COLOR={
   ETF:'#00d4ff',
   Software:'#7c4dff',
   Semiconductores:'#aa00ff',
   'IA & Big Data':'#e040fb',
+  Ciberseguridad:'#ff6d00',
   Hardware:'#6200ea',
   'E-commerce':'#00bcd4',
   Comunicación:'#f48fb1',
@@ -1207,19 +1292,26 @@ var SEC_COLOR={
   Energía:'#ff8c00',
   'Consumo Discrecional':'#00e5ff',
   'Consumo Básico':'#80deea',
+  Alimentos:'#a5d6a7',
   Salud:'#69f0ae',
   Biotech:'#00bfa5',
   Finanzas:'#ffd600',
+  Fintech:'#ffca28',
   Cripto:'#f7931a',
   Defensa:'#90a4ae',
+  Satelital:'#40c4ff',
   Industriales:'#e0e0e0',
+  Transporte:'#bdbdbd',
   Materiales:'#a5d6a7',
   Utilities:'#80cbc4',
   REITs:'#ffab40',
+  Retail:'#ff8a65',
+  Turismo:'#80deea',
+  Entretenimiento:'#ce93d8',
   Otros:'#78909c'
 };
-var SEC_ORDER=['ETF','Software','Semiconductores','IA & Big Data','Hardware','E-commerce','Comunicación','Vehículos Eléctricos','Automotriz','Energía','Consumo Discrecional','Consumo Básico','Salud','Biotech','Finanzas','Cripto','Defensa','Industriales','Materiales','Utilities','REITs','Otros'];
-var SEC_ICON={ETF:'◈',Software:'⬡',Semiconductores:'◎','IA & Big Data':'◉',Hardware:'⬢','E-commerce':'⬟',Comunicación:'◉','Vehículos Eléctricos':'⚡',Automotriz:'◈',Energía:'⬟','Consumo Discrecional':'⬠','Consumo Básico':'⬡',Salud:'✚',Biotech:'◎',Finanzas:'$',Cripto:'◆',Defensa:'⬢',Industriales:'⚙',Materiales:'◆',Utilities:'⚡',REITs:'⬛',Otros:'?'};
+var SEC_ORDER=['ETF','Software','Semiconductores','IA & Big Data','Ciberseguridad','Hardware','E-commerce','Retail','Comunicación','Vehículos Eléctricos','Automotriz','Transporte','Energía','Consumo Discrecional','Consumo Básico','Alimentos','Salud','Biotech','Finanzas','Fintech','Cripto','Defensa','Satelital','Industriales','Materiales','Utilities','REITs','Turismo','Entretenimiento','Otros'];
+var SEC_ICON={ETF:'◈',Software:'⬡',Semiconductores:'◎','IA & Big Data':'◉',Ciberseguridad:'🛡',Hardware:'⬢','E-commerce':'⬟',Retail:'🛍',Comunicación:'◉','Vehículos Eléctricos':'⚡',Automotriz:'◈',Transporte:'✈',Energía:'⬟','Consumo Discrecional':'⬠','Consumo Básico':'⬡',Alimentos:'🌾',Salud:'✚',Biotech:'◎',Finanzas:'$',Fintech:'💳',Cripto:'◆',Defensa:'⬢',Satelital:'🛰',Industriales:'⚙',Materiales:'◆',Utilities:'⚡',REITs:'⬛',Turismo:'🌍',Entretenimiento:'🎮',Otros:'?'};
 
 var allData=[], filtered=[], tickers=[];
 var autoOn=true, cdTimer=null, cdSecs=60;
@@ -1541,9 +1633,21 @@ function renderSectors(){
 }
 
 function renderTech(){
-  var rows=filtered.map(function(d){
+  // Separar Merval de Global
+  var arData = filtered.filter(function(d){ return isArgentineTicker(d.symbol); });
+  var glData = filtered.filter(function(d){ return !isArgentineTicker(d.symbol); });
+
+  // Agrupar Global por sector
+  var grouped = {};
+  glData.forEach(function(d){
+    var sec = d.sector || 'Otros';
+    if(!grouped[sec]) grouped[sec] = [];
+    grouped[sec].push(d);
+  });
+
+  function techRow(d, sectorCol) {
     return '<tr class="'+(d._flash==='up'?'flu':d._flash==='dn'?'fld':'')+'">'+
-      '<td><div class="tk-cell"><div class="sec-bar" style="background:'+(SEC_COLOR[d.sector]||'#fff')+'"></div><span class="tk-sym">'+d.symbol+'</span></div></td>'+
+      '<td><div class="tk-cell"><div class="sec-bar" style="background:'+(sectorCol||SEC_COLOR[d.sector]||'#78909c')+'"></div><span class="tk-sym">'+dispSym(d.symbol)+'</span></div></td>'+
       '<td style="color:'+(d.chgPct>=0?'var(--green)':'var(--red)')+'">'+fp(d.price)+'</td>'+
       '<td>'+chipChg(d.chgPct)+'</td>'+
       '<td>'+rsiCell(d.rsi)+'</td>'+
@@ -1555,8 +1659,77 @@ function renderTech(){
       '<td>'+doSpark(d.spark)+'</td>'+
       '<td><button class="tv-btn" onclick="openTVChart(\''+d.symbol+'\')">&#128200;</button></td>'+
       '</tr>';
-  }).join('');
-  document.getElementById('techBody').innerHTML=rows||emptyRow(12);
+  }
+
+  var theadHtml = '<thead><tr>'+
+    '<th style="width:90px">Ticker</th>'+
+    '<th>Precio</th>'+
+    '<th>% Día</th>'+
+    '<th>RSI(14)</th>'+
+    '<th>ADX(14)</th>'+
+    '<th>Dist EMA50%</th>'+
+    '<th>Dist EMA200%</th>'+
+    '<th>Mom 12M</th>'+
+    '<th style="width:110px">Squeeze Mom</th>'+
+    '<th>Beta</th>'+
+    '<th style="width:70px">Spark</th>'+
+    '<th style="width:60px">Chart</th>'+
+    '</tr></thead>';
+
+  var html = '';
+
+  // ── SECCIÓN MERVAL ──
+  if (arData.length) {
+    var arRows = arData.map(function(d){ return techRow(d,'var(--green)'); }).join('');
+    html += '<div class="tech-group-header" style="border-color:rgba(0,230,118,0.3);background:linear-gradient(135deg,rgba(0,230,118,0.07),transparent)">'+
+      '<span style="color:var(--green)">🇦🇷</span>'+
+      '<span style="color:var(--green);font-weight:900;letter-spacing:3px">MERVAL</span>'+
+      '<span class="tech-group-badge" style="color:var(--green);border-color:rgba(0,230,118,0.4);background:rgba(0,230,118,0.08)">'+arData.length+' tickers · ARS</span>'+
+    '</div>'+
+    '<div class="tbl-wrap" style="margin-bottom:18px;border-top:none;border-radius:0 0 2px 2px">'+
+    '<table class="dt">'+theadHtml+'<tbody>'+arRows+'</tbody></table></div>';
+  }
+
+  // ── SECCIONES GLOBAL por sector ──
+  if (glData.length) {
+    SEC_ORDER.forEach(function(sec){
+      var secData = grouped[sec];
+      if (!secData || !secData.length) return;
+      var col = SEC_COLOR[sec] || '#78909c';
+      var icon = SEC_ICON[sec] || '?';
+      var upCount = secData.filter(function(d){ return d.chgPct > 0; }).length;
+      var dnCount = secData.filter(function(d){ return d.chgPct < 0; }).length;
+      var chgVals = secData.map(function(d){ return d.chgPct; }).filter(function(v){ return v != null; });
+      var chgAvg = chgVals.length ? chgVals.reduce(function(a,b){return a+b},0)/chgVals.length : null;
+
+      var rows = secData.map(function(d){ return techRow(d, col); }).join('');
+
+      html += '<div class="tech-group-header" style="border-color:'+col+'33">'+
+        '<span style="color:'+col+'">'+icon+'</span>'+
+        '<span style="color:'+col+';font-weight:900;letter-spacing:2px">'+sec.toUpperCase()+'</span>'+
+        '<span class="tech-group-badge" style="color:'+col+';border-color:'+col+'44;background:'+col+'11">'+secData.length+' ticker'+(secData.length>1?'s':'')+'</span>'+
+        (chgAvg!=null?'<span style="font-family:var(--mono);font-size:11px;color:'+(chgAvg>=0?'var(--green)':'var(--red)')+'">día: '+(chgAvg>=0?'+':'')+f2(chgAvg)+'%</span>':'')+
+        '<span style="font-family:var(--mono);font-size:11px;color:var(--text-dim)"><span style="color:var(--green)">▲'+upCount+'</span> <span style="color:var(--red)">▼'+dnCount+'</span></span>'+
+      '</div>'+
+      '<div class="tbl-wrap" style="margin-bottom:18px;border-top:none;border-radius:0 0 2px 2px">'+
+      '<table class="dt">'+theadHtml+'<tbody>'+rows+'</tbody></table></div>';
+    });
+
+    // "Otros" que no cayeron en ningún sector del SEC_ORDER
+    var otrosNoOrden = glData.filter(function(d){
+      return !SEC_ORDER.includes(d.sector||'Otros') || (d.sector||'Otros')==='Otros';
+    });
+    // Ya están incluidos arriba si sector=Otros. No duplicar.
+  }
+
+  if (!html) {
+    html = '<div style="color:var(--text-dim);padding:30px;font-family:var(--mono);text-align:center">Cargá tickers y hacé click en ▶ CARGAR TICKERS</div>';
+  }
+
+  document.getElementById('techBody').innerHTML = html;
+  // Quitar el thead del table original ya que ahora cada grupo tiene el suyo
+  var mainThead = document.querySelector('#techTable thead');
+  if (mainThead) mainThead.style.display = 'none';
 }
 
 // ── MERVAL DETECTION ──────────────────────────────
@@ -1961,15 +2134,39 @@ window.renderTickerList = function() {
   if (!ul) return;
   ul.innerHTML = window.tickerList.map(function(sym, i) {
     var isAR = isArgentineTicker ? isArgentineTicker(sym) : sym.endsWith('.BA');
-    return '<div class="ticker-item">' +
-      '<span class="ticker-item-sym">' + (sym.endsWith('.BA') ? sym.slice(0,-3) : sym) +
-        (isAR ? '<span style="font-size:9px;color:var(--yellow);border:1px solid var(--yellow2);padding:0 3px;border-radius:2px;margin-left:4px;vertical-align:middle;line-height:1.4">ARS</span>' : '') +
-      '</span>' +
+    var cleanSym = sym.endsWith('.BA') ? sym.slice(0,-3) : sym;
+    var knownSector = SECTORS[sym.toUpperCase()] || SECTORS[cleanSym.toUpperCase()];
+    var isUnknown = !isAR && !knownSector;
+    var warnHtml = isUnknown
+      ? '<span title="Ticker no reconocido — puede estar mal escrito o ser muy poco común" style="color:var(--yellow);font-size:12px;cursor:help;margin-left:2px">⚠</span>'
+      : '';
+    return '<div class="ticker-item' + (isUnknown ? ' ticker-unknown' : '') + '">' +
+      '<div style="display:flex;align-items:center;gap:4px;min-width:0">' +
+        '<span class="ticker-item-sym">' + cleanSym + '</span>' +
+        (isAR ? '<span style="font-size:9px;color:var(--yellow);border:1px solid var(--yellow2);padding:0 3px;border-radius:2px;vertical-align:middle;line-height:1.4">ARS</span>' : '') +
+        warnHtml +
+      '</div>' +
       '<button class="ticker-item-remove" onclick="removeTicker(' + i + ')" title="Eliminar">✕</button>' +
       '</div>';
   }).join('');
   document.getElementById('tickerCount').textContent = window.tickerList.length + ' ticker' + (window.tickerList.length !== 1 ? 's' : '');
   document.getElementById('tickerBox').value = window.tickerList.join('\n');
+
+  // Mostrar banner si hay tickers desconocidos
+  var unknowns = window.tickerList.filter(function(sym){
+    if(isArgentineTicker(sym)) return false;
+    var clean = sym.endsWith('.BA') ? sym.slice(0,-3) : sym;
+    return !SECTORS[sym.toUpperCase()] && !SECTORS[clean.toUpperCase()];
+  });
+  var banner = document.getElementById('unknownTickerBanner');
+  if (banner) {
+    if (unknowns.length) {
+      banner.style.display = 'block';
+      banner.innerHTML = '⚠ ' + unknowns.length + ' ticker' + (unknowns.length>1?'s':'') + ' no reconocido' + (unknowns.length>1?'s':'') + ': <strong>' + unknowns.join(', ') + '</strong><br><span style="opacity:.8;font-size:10px">Verificá el símbolo. Si es correcto, puede ser muy nuevo o poco común y se mostrará como "Otros".</span>';
+    } else {
+      banner.style.display = 'none';
+    }
+  }
 };
 
 function addTickerFromInput() {
@@ -1982,6 +2179,16 @@ function addTickerFromInput() {
     inp.value = '';
     return;
   }
+
+  // Avisar si el ticker no está en el mapa de sectores
+  var isAR = isArgentineTicker(sym);
+  var cleanSym = sym.endsWith('.BA') ? sym.slice(0,-3) : sym;
+  var knownSector = SECTORS[sym] || SECTORS[cleanSym];
+  if (!isAR && !knownSector) {
+    // Mostrar toast de advertencia pero igual agregar
+    showTickerToast('⚠ "' + sym + '" no está en el mapa de sectores. Verificá el símbolo. Si es correcto, se mostrará como "Otros".', 'warn');
+  }
+
   window.tickerList.push(sym);
   window.renderTickerList();
   saveTickersFromList();
@@ -1989,6 +2196,24 @@ function addTickerFromInput() {
   inp.focus();
   var ul = document.getElementById('tickerList');
   ul.scrollTop = ul.scrollHeight;
+}
+
+function showTickerToast(msg, type) {
+  var existing = document.getElementById('tickerToast');
+  if (existing) existing.remove();
+  var toast = document.createElement('div');
+  toast.id = 'tickerToast';
+  var bg = type === 'warn' ? 'rgba(255,214,0,0.12)' : 'rgba(0,230,118,0.12)';
+  var bor = type === 'warn' ? 'var(--yellow2)' : 'var(--green2)';
+  var col = type === 'warn' ? 'var(--yellow)' : 'var(--green)';
+  toast.style.cssText = 'position:fixed;bottom:70px;right:16px;z-index:500;max-width:280px;'+
+    'background:'+bg+';border:1px solid '+bor+';border-radius:4px;'+
+    'padding:10px 14px;font-family:var(--mono);font-size:11px;color:'+col+';'+
+    'line-height:1.5;box-shadow:0 4px 20px rgba(0,0,0,0.4);animation:fadeInToast .25s ease';
+  toast.innerHTML = msg + '<div style="margin-top:6px;opacity:.6;font-size:10px">Toca para cerrar</div>';
+  toast.onclick = function(){ toast.remove(); };
+  document.body.appendChild(toast);
+  setTimeout(function(){ if(toast.parentNode) toast.remove(); }, 6000);
 }
 
 function removeTicker(idx) {
