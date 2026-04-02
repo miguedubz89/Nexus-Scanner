@@ -528,8 +528,6 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 .ticker-item-sym{font-family:var(--head);font-weight:700;font-size:14px;color:var(--text-bright);letter-spacing:.5px}
 .ticker-item-remove{background:none;border:1px solid transparent;color:var(--text-dim);font-size:14px;cursor:pointer;padding:2px 6px;border-radius:2px;line-height:1;transition:all .15s;font-family:var(--mono)}
 .ticker-item-remove:hover{border-color:var(--red);color:var(--red);background:rgba(255,61,90,0.08)}
-.ticker-item.ticker-unknown{border-color:rgba(255,214,0,0.3);background:rgba(255,214,0,0.04)}
-@keyframes fadeInToast{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .ticker-count{font-family:var(--mono);font-size:12px;color:var(--text-dim);text-align:center;padding:2px 0}
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:var(--bg)}
@@ -622,105 +620,6 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 .canslim-link.sws:hover{border-color:#7c4dff;color:#b47eff}
 .canslim-link.ms:hover{border-color:var(--orange);color:var(--orange)}
 .canslim-header-wrap{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px}
-/* ── TECH GROUP HEADERS ── */
-.tech-group-header{
-  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-  padding:9px 14px;border-radius:2px 2px 0 0;
-  border:1px solid rgba(255,255,255,0.1);border-bottom:none;
-  font-family:var(--head);font-size:13px;
-  margin-top:4px;
-}
-.tech-group-badge{
-  font-family:var(--mono);font-size:10px;padding:2px 7px;
-  border-radius:2px;letter-spacing:1px;border:1px solid;
-}
-#techTable thead{display:none}
-#techTable > tbody > tr:not([class]){display:none}
-
-/* ══════════════════════════════════════
-   NOTAS POR TICKER
-══════════════════════════════════════ */
-.note-btn{
-  background:none;border:none;cursor:pointer;
-  padding:3px 5px;border-radius:3px;
-  transition:all .15s;line-height:1;
-  display:flex;align-items:center;justify-content:center;
-}
-.note-btn:hover{background:rgba(0,212,255,0.12)}
-.note-btn .note-icon{font-size:14px;opacity:0.35;transition:opacity .15s}
-.note-btn.has-note .note-icon{opacity:1;filter:drop-shadow(0 0 4px rgba(255,214,0,0.6))}
-.note-btn:hover .note-icon{opacity:0.8}
-
-/* Popover de nota */
-.note-popover{
-  position:fixed;z-index:800;
-  background:var(--bg2);
-  border:1px solid var(--border2);
-  border-radius:4px;
-  padding:0;
-  width:280px;
-  box-shadow:0 8px 32px rgba(0,0,0,0.6);
-  display:none;
-  flex-direction:column;
-  overflow:hidden;
-}
-.note-popover.open{display:flex}
-.note-popover-header{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:8px 12px;
-  background:var(--bg3);
-  border-bottom:1px solid var(--border);
-}
-.note-popover-sym{
-  font-family:var(--head);font-weight:900;font-size:14px;
-  letter-spacing:2px;color:var(--accent);
-}
-.note-popover-label{
-  font-family:var(--mono);font-size:10px;
-  color:var(--text-dim);letter-spacing:1px;
-}
-.note-popover-close{
-  background:none;border:none;color:var(--text-dim);
-  cursor:pointer;font-size:16px;padding:0 2px;line-height:1;
-  transition:color .15s;
-}
-.note-popover-close:hover{color:var(--red)}
-.note-textarea{
-  background:transparent;border:none;outline:none;
-  color:var(--text-bright);font-family:var(--mono);font-size:12px;
-  line-height:1.7;resize:none;padding:12px;
-  width:100%;min-height:100px;
-  caret-color:var(--accent);
-}
-.note-textarea::placeholder{color:var(--text-dim)}
-.note-popover-footer{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:6px 10px;border-top:1px solid var(--border);
-  background:var(--bg3);
-}
-.note-save-btn{
-  background:var(--accent);color:var(--bg);
-  border:none;font-family:var(--head);font-weight:700;
-  font-size:10px;letter-spacing:1.5px;text-transform:uppercase;
-  padding:4px 10px;border-radius:2px;cursor:pointer;
-  transition:background .15s;
-}
-.note-save-btn:hover{background:var(--accent2)}
-.note-del-btn{
-  background:none;border:1px solid var(--border2);
-  color:var(--text-dim);font-family:var(--mono);font-size:10px;
-  padding:3px 8px;border-radius:2px;cursor:pointer;
-  transition:all .15s;
-}
-.note-del-btn:hover{border-color:var(--red);color:var(--red)}
-.note-char-count{
-  font-family:var(--mono);font-size:10px;color:var(--text-dim);
-}
-@keyframes notePopIn{
-  from{opacity:0;transform:scale(.95) translateY(4px)}
-  to{opacity:1;transform:scale(1) translateY(0)}
-}
-.note-popover.open{animation:notePopIn .15s ease}
 </style>
 </head>
 <body>
@@ -829,7 +728,6 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
       </div>
       <textarea class="ti-area" id="tickerBox" style="display:none"></textarea>
       <button class="btn btn-a btn-full" onclick="loadAndRefresh()">▶ CARGAR TICKERS</button>
-      <div id="unknownTickerBanner" style="display:none;background:rgba(255,214,0,0.08);border:1px solid var(--yellow2);border-radius:2px;padding:8px 10px;font-family:var(--mono);font-size:11px;color:var(--yellow);line-height:1.6;margin-top:2px"></div>
       <div id="saveStatus" style="font-family:var(--mono);font-size:12px;color:var(--text-dim);text-align:center;height:14px"></div>
       <div class="progress-wrap" id="progressWrap">
         <div class="progress-fill" id="progressFill"></div>
@@ -990,7 +888,6 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
               <th onclick="tsMkt('ar','beta',this)">Beta<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('ar','mom12m',this)">Mom 12M<span class="sort-icon">⇅</span></th>
               <th style="min-width:120px">&#9670; CANSLIM</th>
-              <th style="width:40px;text-align:center" title="Notas">📝</th>
             </tr></thead>
             <tbody id="mervalBody"></tbody>
           </table>
@@ -1020,7 +917,6 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
               <th onclick="tsMkt('gl','beta',this)">Beta<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','mom12m',this)">Mom 12M<span class="sort-icon">⇅</span></th>
               <th style="min-width:120px">&#9670; CANSLIM</th>
-              <th style="width:40px;text-align:center" title="Notas">📝</th>
             </tr></thead>
             <tbody id="globalBody"></tbody>
           </table>
@@ -1054,26 +950,6 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
       </div>
     </div>
     <div class="tv-modal-body" id="tvModalBody"></div>
-  </div>
-</div>
-
-<!-- NOTE POPOVER -->
-<div class="note-popover" id="notePopover">
-  <div class="note-popover-header">
-    <div>
-      <div class="note-popover-sym" id="notePopSym">--</div>
-      <div class="note-popover-label">ANOTACIÓN PERSONAL</div>
-    </div>
-    <button class="note-popover-close" onclick="closeNotePopover()">✕</button>
-  </div>
-  <textarea class="note-textarea" id="noteTextarea"
-    placeholder="Escribí tu análisis, nivel de entrada, target, stop loss..."
-    maxlength="500"
-    oninput="updateNoteCharCount()"></textarea>
-  <div class="note-popover-footer">
-    <button class="note-del-btn" onclick="deleteNote()" id="noteDelBtn">🗑 Borrar</button>
-    <span class="note-char-count"><span id="noteCharCount">0</span>/500</span>
-    <button class="note-save-btn" onclick="saveNote()">✓ Guardar</button>
   </div>
 </div>
 
@@ -1304,93 +1180,25 @@ var SECTORS = {
   // ── Inteligencia Artificial & Big Data ──
   AI:'IA & Big Data',BBAI:'IA & Big Data',SOUN:'IA & Big Data',IREN:'IA & Big Data',
   CIEN:'IA & Big Data',PATH:'IA & Big Data',AMBA:'IA & Big Data',
-  SMCI:'IA & Big Data',IONQ:'IA & Big Data',QUBT:'IA & Big Data',RGTI:'IA & Big Data',
-  ARRY:'IA & Big Data',DUOL:'Software',
 
   // ── Defensa & Aeroespacial ──
   NOC:'Defensa',GD:'Defensa',L:'Defensa',HII:'Defensa',KTOS:'Defensa',
-  LDOS:'Defensa',BAH:'Defensa',SAIC:'Defensa',SPCE:'Defensa',
-  RKLB:'Defensa',ASTS:'Defensa',MNTS:'Defensa',
-  SATL:'Satelital',  // Satellogic
-
-  // ── Satelital & Espacial ──
-  SPCE:'Satelital',RKLB:'Satelital',ASTS:'Satelital',MNTS:'Satelital',
-  SATL:'Satelital',IRDM:'Satelital',MAXN:'Satelital',
+  LDOS:'Defensa',BAH:'Defensa',SAIC:'Defensa',
 
   // ── Biotech ──
   BNTX:'Biotech',NVAX:'Biotech',SRPT:'Biotech',FOLD:'Biotech',
   IONS:'Biotech',ARWR:'Biotech',RCKT:'Biotech',FATE:'Biotech',
   NTLA:'Biotech',BEAM:'Biotech',CRSP:'Biotech',EDIT:'Biotech',
-  ALNY:'Biotech',INSM:'Biotech',PTGX:'Biotech',RVMD:'Biotech',
-  ROIV:'Biotech',ACAD:'Biotech',HALO:'Biotech',PRAX:'Biotech',
 
-  // ── Fintech & Pagos ──
-  AFRM:'Fintech',SOFI:'Fintech',UPST:'Fintech',LMND:'Fintech',
-  ROOT:'Fintech',OPEN:'Fintech',HIPPO:'Fintech',METLIFE:'Fintech',
-  NRDS:'Fintech',LC:'Fintech',DAVE:'Fintech',
-
-  // ── Minería & Metales Preciosos ──
-  GOLD:'Materiales',KGC:'Materiales',AGI:'Materiales',AU:'Materiales',HMY:'Materiales',
-  KL:'Materiales',PAAS:'Materiales',SILV:'Materiales',EQX:'Materiales',
-
-  // ── Turismo & Hospitalidad ──
-  ABNB:'Turismo',BKNG:'Turismo',EXPE:'Turismo',TRIP:'Turismo',
-  MAR:'Turismo',HLT:'Turismo',H:'Turismo',IHG:'Turismo',
-  RCL:'Turismo',CCL:'Turismo',NCLH:'Turismo',
-
-  // ── Retail & Comercio ──
-  AMZN:'E-commerce',SHOP:'E-commerce',MELI:'E-commerce',
-  TGT:'Retail',LOW:'Retail',TJX:'Retail',ROST:'Retail',
-  BBY:'Retail',GPS:'Retail',M:'Retail',CVNA:'Retail',KMX:'Retail',
-  DG:'Retail',DLTR:'Retail',BIG:'Retail',FIVE:'Retail',
-
-  // ── Alimentos & Bebidas ──
-  MDLZ:'Alimentos',KHC:'Alimentos',GIS:'Alimentos',K:'Alimentos',
-  HSY:'Alimentos',CAG:'Alimentos',SJM:'Alimentos',CPB:'Alimentos',
-  TSN:'Alimentos',HRL:'Alimentos',ADM:'Alimentos',BG:'Alimentos',
-  MKC:'Alimentos',TAP:'Alimentos',STZ:'Alimentos',BF.B:'Alimentos',
-
-  // ── Transporte & Logística ──
-  UPS:'Transporte',FDX:'Transporte',DAL:'Transporte',UAL:'Transporte',
-  AAL:'Transporte',LUV:'Transporte',CHRW:'Transporte',EXPD:'Transporte',
-  XPO:'Transporte',GXO:'Transporte',JBHT:'Transporte',KNX:'Transporte',
-  ZIM:'Transporte',MATX:'Transporte',
-
-  // ── Juego & Entretenimiento ──
-  DKNG:'Entretenimiento',MGM:'Entretenimiento',WYNN:'Entretenimiento',
-  LVS:'Entretenimiento',PENN:'Entretenimiento',CZR:'Entretenimiento',
-  RBLX:'Entretenimiento',U:'Entretenimiento',EA:'Entretenimiento',
-  TTWO:'Entretenimiento',ATVI:'Entretenimiento',
-
-  // ── Acciones Merval (Argentina) ──
-  // Las que terminan en .BA son auto-detectadas, pero también clasificamos sin sufijo
-  GGAL:'Finanzas',YPFD:'Energía',YPF:'Energía',PAMP:'Utilities',
-  BMA:'Finanzas',SUPV:'Finanzas',CEPU:'Utilities',EDN:'Utilities',
-  LOMA:'Materiales',COME:'Industriales',BYMA:'Finanzas',ALUA:'Materiales',
-  BHIP:'Finanzas',TECO2:'Comunicación',METR:'Utilities',IRSA:'REITs',
-  TGNO4:'Energía',TGSU2:'Energía',TRAN:'Energía',TXAR:'Materiales',
-  VALO:'Finanzas',APBR:'Energía',HARG:'Energía',AGRO:'Consumo Básico',
-  CRES:'Consumo Básico',RICH:'Consumo Básico',MIRG:'Industriales',
-  BOLT:'Industriales',SEMI:'Semiconductores',ARCO:'E-commerce',
-
-  // ── Salud Argentina / Global emergente ──
-  NU:'Finanzas',VALE:'Materiales',BABA:'E-commerce',
-
-  // ── Coworking & Real Estate Tech ──
-  OPEN:'Fintech',RDFN:'REITs',Z:'REITs',ZG:'REITs',CSGP:'REITs',
-
-  // ── Seguridad Cibernética ──
-  PANW:'Ciberseguridad',FTNT:'Ciberseguridad',ZS:'Ciberseguridad',
-  CRWD:'Ciberseguridad',OKTA:'Ciberseguridad',S:'Ciberseguridad',
-  CYBR:'Ciberseguridad',QLYS:'Ciberseguridad',TENB:'Ciberseguridad',
-  RPD:'Ciberseguridad',VRNS:'Ciberseguridad',SIEM:'Ciberseguridad',
+  // ── Minería & Oro ──
+  GOLD:'Materiales',NEM:'Materiales',AEM:'Materiales',
+  KGC:'Materiales',AGI:'Materiales',AU:'Materiales',HMY:'Materiales',
 };
 var SEC_COLOR={
   ETF:'#00d4ff',
   Software:'#7c4dff',
   Semiconductores:'#aa00ff',
   'IA & Big Data':'#e040fb',
-  Ciberseguridad:'#ff6d00',
   Hardware:'#6200ea',
   'E-commerce':'#00bcd4',
   Comunicación:'#f48fb1',
@@ -1399,26 +1207,19 @@ var SEC_COLOR={
   Energía:'#ff8c00',
   'Consumo Discrecional':'#00e5ff',
   'Consumo Básico':'#80deea',
-  Alimentos:'#a5d6a7',
   Salud:'#69f0ae',
   Biotech:'#00bfa5',
   Finanzas:'#ffd600',
-  Fintech:'#ffca28',
   Cripto:'#f7931a',
   Defensa:'#90a4ae',
-  Satelital:'#40c4ff',
   Industriales:'#e0e0e0',
-  Transporte:'#bdbdbd',
   Materiales:'#a5d6a7',
   Utilities:'#80cbc4',
   REITs:'#ffab40',
-  Retail:'#ff8a65',
-  Turismo:'#80deea',
-  Entretenimiento:'#ce93d8',
   Otros:'#78909c'
 };
-var SEC_ORDER=['ETF','Software','Semiconductores','IA & Big Data','Ciberseguridad','Hardware','E-commerce','Retail','Comunicación','Vehículos Eléctricos','Automotriz','Transporte','Energía','Consumo Discrecional','Consumo Básico','Alimentos','Salud','Biotech','Finanzas','Fintech','Cripto','Defensa','Satelital','Industriales','Materiales','Utilities','REITs','Turismo','Entretenimiento','Otros'];
-var SEC_ICON={ETF:'◈',Software:'⬡',Semiconductores:'◎','IA & Big Data':'◉',Ciberseguridad:'🛡',Hardware:'⬢','E-commerce':'⬟',Retail:'🛍',Comunicación:'◉','Vehículos Eléctricos':'⚡',Automotriz:'◈',Transporte:'✈',Energía:'⬟','Consumo Discrecional':'⬠','Consumo Básico':'⬡',Alimentos:'🌾',Salud:'✚',Biotech:'◎',Finanzas:'$',Fintech:'💳',Cripto:'◆',Defensa:'⬢',Satelital:'🛰',Industriales:'⚙',Materiales:'◆',Utilities:'⚡',REITs:'⬛',Turismo:'🌍',Entretenimiento:'🎮',Otros:'?'};
+var SEC_ORDER=['ETF','Software','Semiconductores','IA & Big Data','Hardware','E-commerce','Comunicación','Vehículos Eléctricos','Automotriz','Energía','Consumo Discrecional','Consumo Básico','Salud','Biotech','Finanzas','Cripto','Defensa','Industriales','Materiales','Utilities','REITs','Otros'];
+var SEC_ICON={ETF:'◈',Software:'⬡',Semiconductores:'◎','IA & Big Data':'◉',Hardware:'⬢','E-commerce':'⬟',Comunicación:'◉','Vehículos Eléctricos':'⚡',Automotriz:'◈',Energía:'⬟','Consumo Discrecional':'⬠','Consumo Básico':'⬡',Salud:'✚',Biotech:'◎',Finanzas:'$',Cripto:'◆',Defensa:'⬢',Industriales:'⚙',Materiales:'◆',Utilities:'⚡',REITs:'⬛',Otros:'?'};
 
 var allData=[], filtered=[], tickers=[];
 var autoOn=true, cdTimer=null, cdSecs=60;
@@ -1740,21 +1541,9 @@ function renderSectors(){
 }
 
 function renderTech(){
-  // Separar Merval de Global
-  var arData = filtered.filter(function(d){ return isArgentineTicker(d.symbol); });
-  var glData = filtered.filter(function(d){ return !isArgentineTicker(d.symbol); });
-
-  // Agrupar Global por sector
-  var grouped = {};
-  glData.forEach(function(d){
-    var sec = d.sector || 'Otros';
-    if(!grouped[sec]) grouped[sec] = [];
-    grouped[sec].push(d);
-  });
-
-  function techRow(d, sectorCol) {
+  var rows=filtered.map(function(d){
     return '<tr class="'+(d._flash==='up'?'flu':d._flash==='dn'?'fld':'')+'">'+
-      '<td><div class="tk-cell"><div class="sec-bar" style="background:'+(sectorCol||SEC_COLOR[d.sector]||'#78909c')+'"></div><span class="tk-sym">'+dispSym(d.symbol)+'</span></div></td>'+
+      '<td><div class="tk-cell"><div class="sec-bar" style="background:'+(SEC_COLOR[d.sector]||'#fff')+'"></div><span class="tk-sym">'+d.symbol+'</span></div></td>'+
       '<td style="color:'+(d.chgPct>=0?'var(--green)':'var(--red)')+'">'+fp(d.price)+'</td>'+
       '<td>'+chipChg(d.chgPct)+'</td>'+
       '<td>'+rsiCell(d.rsi)+'</td>'+
@@ -1766,77 +1555,8 @@ function renderTech(){
       '<td>'+doSpark(d.spark)+'</td>'+
       '<td><button class="tv-btn" onclick="openTVChart(\''+d.symbol+'\')">&#128200;</button></td>'+
       '</tr>';
-  }
-
-  var theadHtml = '<thead><tr>'+
-    '<th style="width:90px">Ticker</th>'+
-    '<th>Precio</th>'+
-    '<th>% Día</th>'+
-    '<th>RSI(14)</th>'+
-    '<th>ADX(14)</th>'+
-    '<th>Dist EMA50%</th>'+
-    '<th>Dist EMA200%</th>'+
-    '<th>Mom 12M</th>'+
-    '<th style="width:110px">Squeeze Mom</th>'+
-    '<th>Beta</th>'+
-    '<th style="width:70px">Spark</th>'+
-    '<th style="width:60px">Chart</th>'+
-    '</tr></thead>';
-
-  var html = '';
-
-  // ── SECCIÓN MERVAL ──
-  if (arData.length) {
-    var arRows = arData.map(function(d){ return techRow(d,'var(--green)'); }).join('');
-    html += '<div class="tech-group-header" style="border-color:rgba(0,230,118,0.3);background:linear-gradient(135deg,rgba(0,230,118,0.07),transparent)">'+
-      '<span style="color:var(--green)">🇦🇷</span>'+
-      '<span style="color:var(--green);font-weight:900;letter-spacing:3px">MERVAL</span>'+
-      '<span class="tech-group-badge" style="color:var(--green);border-color:rgba(0,230,118,0.4);background:rgba(0,230,118,0.08)">'+arData.length+' tickers · ARS</span>'+
-    '</div>'+
-    '<div class="tbl-wrap" style="margin-bottom:18px;border-top:none;border-radius:0 0 2px 2px">'+
-    '<table class="dt">'+theadHtml+'<tbody>'+arRows+'</tbody></table></div>';
-  }
-
-  // ── SECCIONES GLOBAL por sector ──
-  if (glData.length) {
-    SEC_ORDER.forEach(function(sec){
-      var secData = grouped[sec];
-      if (!secData || !secData.length) return;
-      var col = SEC_COLOR[sec] || '#78909c';
-      var icon = SEC_ICON[sec] || '?';
-      var upCount = secData.filter(function(d){ return d.chgPct > 0; }).length;
-      var dnCount = secData.filter(function(d){ return d.chgPct < 0; }).length;
-      var chgVals = secData.map(function(d){ return d.chgPct; }).filter(function(v){ return v != null; });
-      var chgAvg = chgVals.length ? chgVals.reduce(function(a,b){return a+b},0)/chgVals.length : null;
-
-      var rows = secData.map(function(d){ return techRow(d, col); }).join('');
-
-      html += '<div class="tech-group-header" style="border-color:'+col+'33">'+
-        '<span style="color:'+col+'">'+icon+'</span>'+
-        '<span style="color:'+col+';font-weight:900;letter-spacing:2px">'+sec.toUpperCase()+'</span>'+
-        '<span class="tech-group-badge" style="color:'+col+';border-color:'+col+'44;background:'+col+'11">'+secData.length+' ticker'+(secData.length>1?'s':'')+'</span>'+
-        (chgAvg!=null?'<span style="font-family:var(--mono);font-size:11px;color:'+(chgAvg>=0?'var(--green)':'var(--red)')+'">día: '+(chgAvg>=0?'+':'')+f2(chgAvg)+'%</span>':'')+
-        '<span style="font-family:var(--mono);font-size:11px;color:var(--text-dim)"><span style="color:var(--green)">▲'+upCount+'</span> <span style="color:var(--red)">▼'+dnCount+'</span></span>'+
-      '</div>'+
-      '<div class="tbl-wrap" style="margin-bottom:18px;border-top:none;border-radius:0 0 2px 2px">'+
-      '<table class="dt">'+theadHtml+'<tbody>'+rows+'</tbody></table></div>';
-    });
-
-    // "Otros" que no cayeron en ningún sector del SEC_ORDER
-    var otrosNoOrden = glData.filter(function(d){
-      return !SEC_ORDER.includes(d.sector||'Otros') || (d.sector||'Otros')==='Otros';
-    });
-    // Ya están incluidos arriba si sector=Otros. No duplicar.
-  }
-
-  if (!html) {
-    html = '<div style="color:var(--text-dim);padding:30px;font-family:var(--mono);text-align:center">Cargá tickers y hacé click en ▶ CARGAR TICKERS</div>';
-  }
-
-  document.getElementById('techBody').innerHTML = html;
-  // Quitar el thead del table original ya que ahora cada grupo tiene el suyo
-  var mainThead = document.querySelector('#techTable thead');
-  if (mainThead) mainThead.style.display = 'none';
+  }).join('');
+  document.getElementById('techBody').innerHTML=rows||emptyRow(12);
 }
 
 // ── MERVAL DETECTION ──────────────────────────────
@@ -1962,10 +1682,9 @@ function renderAllTab() {
       '<td>'+(d.beta?f2(d.beta):'--')+'</td>' +
       '<td>'+momCell(d.mom12m != null ? d.mom12m : d.mom6m)+'</td>' +
       '<td>'+canslimCell(d)+'</td>' +
-      '<td style="text-align:center">'+noteBtn(d.symbol)+'</td>' +
       '</tr>';
   }).join('');
-  document.getElementById('mervalBody').innerHTML = arRows || emptyRow(12);
+  document.getElementById('mervalBody').innerHTML = arRows || emptyRow(11);
 
   // ── Render GLOBAL rows
   var glRows = glData.map(function(d) {
@@ -2242,39 +1961,15 @@ window.renderTickerList = function() {
   if (!ul) return;
   ul.innerHTML = window.tickerList.map(function(sym, i) {
     var isAR = isArgentineTicker ? isArgentineTicker(sym) : sym.endsWith('.BA');
-    var cleanSym = sym.endsWith('.BA') ? sym.slice(0,-3) : sym;
-    var knownSector = SECTORS[sym.toUpperCase()] || SECTORS[cleanSym.toUpperCase()];
-    var isUnknown = !isAR && !knownSector;
-    var warnHtml = isUnknown
-      ? '<span title="Ticker no reconocido — puede estar mal escrito o ser muy poco común" style="color:var(--yellow);font-size:12px;cursor:help;margin-left:2px">⚠</span>'
-      : '';
-    return '<div class="ticker-item' + (isUnknown ? ' ticker-unknown' : '') + '">' +
-      '<div style="display:flex;align-items:center;gap:4px;min-width:0">' +
-        '<span class="ticker-item-sym">' + cleanSym + '</span>' +
-        (isAR ? '<span style="font-size:9px;color:var(--yellow);border:1px solid var(--yellow2);padding:0 3px;border-radius:2px;vertical-align:middle;line-height:1.4">ARS</span>' : '') +
-        warnHtml +
-      '</div>' +
+    return '<div class="ticker-item">' +
+      '<span class="ticker-item-sym">' + (sym.endsWith('.BA') ? sym.slice(0,-3) : sym) +
+        (isAR ? '<span style="font-size:9px;color:var(--yellow);border:1px solid var(--yellow2);padding:0 3px;border-radius:2px;margin-left:4px;vertical-align:middle;line-height:1.4">ARS</span>' : '') +
+      '</span>' +
       '<button class="ticker-item-remove" onclick="removeTicker(' + i + ')" title="Eliminar">✕</button>' +
       '</div>';
   }).join('');
   document.getElementById('tickerCount').textContent = window.tickerList.length + ' ticker' + (window.tickerList.length !== 1 ? 's' : '');
   document.getElementById('tickerBox').value = window.tickerList.join('\n');
-
-  // Mostrar banner si hay tickers desconocidos
-  var unknowns = window.tickerList.filter(function(sym){
-    if(isArgentineTicker(sym)) return false;
-    var clean = sym.endsWith('.BA') ? sym.slice(0,-3) : sym;
-    return !SECTORS[sym.toUpperCase()] && !SECTORS[clean.toUpperCase()];
-  });
-  var banner = document.getElementById('unknownTickerBanner');
-  if (banner) {
-    if (unknowns.length) {
-      banner.style.display = 'block';
-      banner.innerHTML = '⚠ ' + unknowns.length + ' ticker' + (unknowns.length>1?'s':'') + ' no reconocido' + (unknowns.length>1?'s':'') + ': <strong>' + unknowns.join(', ') + '</strong><br><span style="opacity:.8;font-size:10px">Verificá el símbolo. Si es correcto, puede ser muy nuevo o poco común y se mostrará como "Otros".</span>';
-    } else {
-      banner.style.display = 'none';
-    }
-  }
 };
 
 function addTickerFromInput() {
@@ -2287,16 +1982,6 @@ function addTickerFromInput() {
     inp.value = '';
     return;
   }
-
-  // Avisar si el ticker no está en el mapa de sectores
-  var isAR = isArgentineTicker(sym);
-  var cleanSym = sym.endsWith('.BA') ? sym.slice(0,-3) : sym;
-  var knownSector = SECTORS[sym] || SECTORS[cleanSym];
-  if (!isAR && !knownSector) {
-    // Mostrar toast de advertencia pero igual agregar
-    showTickerToast('⚠ "' + sym + '" no está en el mapa de sectores. Verificá el símbolo. Si es correcto, se mostrará como "Otros".', 'warn');
-  }
-
   window.tickerList.push(sym);
   window.renderTickerList();
   saveTickersFromList();
@@ -2304,24 +1989,6 @@ function addTickerFromInput() {
   inp.focus();
   var ul = document.getElementById('tickerList');
   ul.scrollTop = ul.scrollHeight;
-}
-
-function showTickerToast(msg, type) {
-  var existing = document.getElementById('tickerToast');
-  if (existing) existing.remove();
-  var toast = document.createElement('div');
-  toast.id = 'tickerToast';
-  var bg = type === 'warn' ? 'rgba(255,214,0,0.12)' : 'rgba(0,230,118,0.12)';
-  var bor = type === 'warn' ? 'var(--yellow2)' : 'var(--green2)';
-  var col = type === 'warn' ? 'var(--yellow)' : 'var(--green)';
-  toast.style.cssText = 'position:fixed;bottom:70px;right:16px;z-index:500;max-width:280px;'+
-    'background:'+bg+';border:1px solid '+bor+';border-radius:4px;'+
-    'padding:10px 14px;font-family:var(--mono);font-size:11px;color:'+col+';'+
-    'line-height:1.5;box-shadow:0 4px 20px rgba(0,0,0,0.4);animation:fadeInToast .25s ease';
-  toast.innerHTML = msg + '<div style="margin-top:6px;opacity:.6;font-size:10px">Toca para cerrar</div>';
-  toast.onclick = function(){ toast.remove(); };
-  document.body.appendChild(toast);
-  setTimeout(function(){ if(toast.parentNode) toast.remove(); }, 6000);
 }
 
 function removeTicker(idx) {
@@ -2494,179 +2161,6 @@ function canslimCell(d) {
 }
 
 // No hacer window.onload — la app se inicia desde Firebase onAuthStateChanged
-
-// ══════════════════════════════════════════════════════
-//  SISTEMA DE ANOTACIONES POR TICKER
-//  - Guardado en localStorage (persiste entre sesiones)
-//  - Popover editable al hacer click en el botón 📝
-//  - Botón con glow amarillo si tiene nota guardada
-// ══════════════════════════════════════════════════════
-
-var NOTES_KEY = 'dubz_notes_v1';
-var _notes = {};
-var _activePopover = null;
-
-// ── Cargar notas desde localStorage ──────────────────
-function loadNotes() {
-  try {
-    var raw = localStorage.getItem(NOTES_KEY);
-    _notes = raw ? JSON.parse(raw) : {};
-  } catch(e) { _notes = {}; }
-}
-
-// ── Guardar notas en localStorage ────────────────────
-function saveNotes() {
-  try { localStorage.setItem(NOTES_KEY, JSON.stringify(_notes)); } catch(e) {}
-}
-
-// ── Obtener nota de un ticker ─────────────────────────
-function getNote(sym) {
-  return _notes[sym.toUpperCase()] || '';
-}
-
-// ── Guardar nota de un ticker ─────────────────────────
-function setNote(sym, text) {
-  sym = sym.toUpperCase();
-  if (text.trim()) {
-    _notes[sym] = text.trim();
-  } else {
-    delete _notes[sym];
-  }
-  saveNotes();
-}
-
-// ── Generar celda HTML del botón de nota ─────────────
-function noteCell(sym) {
-  sym = sym.toUpperCase();
-  var note = getNote(sym);
-  var hasNote = note.length > 0;
-  var preview = hasNote
-    ? '<span class="note-preview" onclick="openNotePopover(event,\''+escHtml(sym)+'\')" title="'+escHtml(note)+'">'+escHtml(note.slice(0,40))+(note.length>40?'…':'')+'</span>'
-    : '';
-  return '<div style="display:flex;flex-direction:column;align-items:center;gap:2px">'+
-    '<button class="note-btn'+(hasNote?' has-note':'')+'" '+
-      'onclick="openNotePopover(event,\''+escHtml(sym)+'\')" '+
-      'title="'+(hasNote?escHtml(note):'Agregar anotación')+'">'+(hasNote?'✏️':'📝')+'</button>'+
-    preview+
-  '</div>';
-}
-
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-}
-
-// ── Abrir popover de nota ─────────────────────────────
-function openNotePopover(e, sym) {
-  e.stopPropagation();
-  sym = sym.toUpperCase();
-
-  // Cerrar cualquier popover abierto
-  closeNotePopover();
-
-  var note = getNote(sym);
-  var pop = document.createElement('div');
-  pop.className = 'note-popover';
-  pop.id = 'notePopover';
-
-  pop.innerHTML =
-    '<div class="note-popover-header">' +
-      '<div class="note-popover-title">' +
-        '<span>📝</span>' +
-        '<span>' + sym + '</span>' +
-      '</div>' +
-      '<button class="note-popover-close" onclick="closeNotePopover()" title="Cerrar">✕</button>' +
-    '</div>' +
-    '<textarea class="note-textarea" id="noteTextarea" placeholder="Escribí tu análisis, tesis, nivel de entrada, stop loss..." maxlength="500">' +
-      escHtml(note) +
-    '</textarea>' +
-    '<div class="note-popover-footer">' +
-      '<button class="note-clear-btn" onclick="clearNote(\''+sym+'\')">🗑 Borrar</button>' +
-      '<span class="note-char-count" id="noteCharCount">' + note.length + '/500</span>' +
-      '<button class="note-save-btn" onclick="saveNoteFromPopover(\''+sym+'\')">✓ Guardar</button>' +
-    '</div>';
-
-  document.body.appendChild(pop);
-  _activePopover = { el: pop, sym: sym };
-
-  // Actualizar contador de chars
-  var ta = document.getElementById('noteTextarea');
-  ta.addEventListener('input', function() {
-    document.getElementById('noteCharCount').textContent = ta.value.length + '/500';
-  });
-  // Guardar con Ctrl+Enter o Cmd+Enter
-  ta.addEventListener('keydown', function(ev) {
-    if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') {
-      ev.preventDefault();
-      saveNoteFromPopover(sym);
-    }
-    if (ev.key === 'Escape') closeNotePopover();
-  });
-
-  // Posicionar el popover inteligentemente
-  positionPopover(pop, e);
-
-  // Focus en el textarea
-  setTimeout(function(){ ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }, 50);
-
-  // Cerrar al hacer click afuera
-  setTimeout(function() {
-    document.addEventListener('click', onOutsideClick);
-  }, 10);
-}
-
-function positionPopover(pop, e) {
-  var W = window.innerWidth, H = window.innerHeight;
-  var pw = 280, ph = 220; // ancho/alto estimado del popover
-  var x = e.clientX + 8;
-  var y = e.clientY + 8;
-  if (x + pw > W - 10) x = e.clientX - pw - 8;
-  if (y + ph > H - 10) y = e.clientY - ph - 8;
-  x = Math.max(8, x);
-  y = Math.max(8, y);
-  pop.style.left = x + 'px';
-  pop.style.top  = y + 'px';
-}
-
-function onOutsideClick(e) {
-  var pop = document.getElementById('notePopover');
-  if (pop && !pop.contains(e.target)) {
-    closeNotePopover();
-  }
-}
-
-function closeNotePopover() {
-  var pop = document.getElementById('notePopover');
-  if (pop) {
-    pop.style.animation = 'none';
-    pop.style.opacity = '0';
-    pop.style.transform = 'scale(0.92)';
-    pop.style.transition = 'opacity .12s, transform .12s';
-    setTimeout(function(){ if(pop.parentNode) pop.remove(); }, 120);
-  }
-  document.removeEventListener('click', onOutsideClick);
-  _activePopover = null;
-}
-
-function saveNoteFromPopover(sym) {
-  var ta = document.getElementById('noteTextarea');
-  if (!ta) return;
-  setNote(sym, ta.value);
-  closeNotePopover();
-  // Re-render para actualizar el ícono/preview
-  renderAllTab();
-  // Feedback visual breve
-  showTickerToast('✓ Nota guardada para ' + sym, 'ok');
-}
-
-function clearNote(sym) {
-  setNote(sym, '');
-  closeNotePopover();
-  renderAllTab();
-}
-
-// Inicializar notas al cargar
-loadNotes();
-
 </script>
 </body>
 </html>
