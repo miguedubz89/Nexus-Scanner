@@ -577,6 +577,8 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 .mkt-stats{display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-family:var(--mono);font-size:12px}
 .mkt-section .tbl-wrap{border-radius:0 0 2px 2px;border-top:none}
 .ars-tag{display:inline-block;background:rgba(255,214,0,0.1);border:1px solid var(--yellow2);color:var(--yellow);font-family:var(--mono);font-size:9px;padding:1px 4px;border-radius:2px;letter-spacing:1px;vertical-align:middle;margin-left:3px;line-height:1.4}
+.note-btn{display:inline-block;transition:transform .15s,opacity .15s;opacity:.6}
+.note-btn:hover{transform:scale(1.3);opacity:1}
 
 /* ══════════════════════════════════════
    CANSLIM / FUNDAMENTALS COLUMN
@@ -752,11 +754,16 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
         <select class="sel" id="fSector" onchange="applyFilters()">
           <option value="">Todos los sectores</option>
           <option>ETF</option><option>Software</option><option>Semiconductores</option>
-          <option>Hardware</option><option>E-commerce</option><option>Comunicación</option>
-          <option>Vehículos Eléctricos</option><option>Energía</option>
-          <option>Consumo Discrecional</option><option>Consumo Básico</option>
-          <option>Salud</option><option>Finanzas</option><option>Industriales</option>
-          <option>Materiales</option><option>Utilities</option><option>REITs</option><option>Otros</option>
+          <option>IA & Big Data</option><option>Hardware</option><option>Nube & SaaS</option>
+          <option>Ciberseguridad</option><option>E-commerce</option><option>Comunicación</option>
+          <option>Gaming</option><option>Vehículos Eléctricos</option><option>Automotriz</option>
+          <option>Energía</option><option>Consumo Discrecional</option><option>Consumo Básico</option>
+          <option>Salud</option><option>Tecnología Médica</option><option>Biotech</option>
+          <option>Finanzas</option><option>Fintech</option><option>Gestión de Activos</option>
+          <option>Seguros</option><option>Cripto</option><option>Defensa</option>
+          <option>Industriales</option><option>Transporte</option><option>Materiales</option>
+          <option>Utilities</option><option>REITs</option>
+          <option>Satélites & Espacio</option><option>Agro & Alimentos</option><option>Otros</option>
         </select>
       </div>
       <div class="range-wrap">
@@ -888,6 +895,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
               <th onclick="tsMkt('ar','beta',this)">Beta<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('ar','mom12m',this)">Mom 12M<span class="sort-icon">⇅</span></th>
               <th style="min-width:120px">&#9670; CANSLIM</th>
+              <th style="width:50px;text-align:center">📝</th>
             </tr></thead>
             <tbody id="mervalBody"></tbody>
           </table>
@@ -917,6 +925,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
               <th onclick="tsMkt('gl','beta',this)">Beta<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','mom12m',this)">Mom 12M<span class="sort-icon">⇅</span></th>
               <th style="min-width:120px">&#9670; CANSLIM</th>
+              <th style="width:50px;text-align:center">📝</th>
             </tr></thead>
             <tbody id="globalBody"></tbody>
           </table>
@@ -1193,6 +1202,61 @@ var SECTORS = {
   // ── Minería & Oro ──
   GOLD:'Materiales',NEM:'Materiales',AEM:'Materiales',
   KGC:'Materiales',AGI:'Materiales',AU:'Materiales',HMY:'Materiales',
+
+  // ── Satélites & Espacio ──
+  SATL:'Satélites & Espacio',ASTS:'Satélites & Espacio',SPCE:'Satélites & Espacio',
+  RKLB:'Satélites & Espacio',LUNR:'Satélites & Espacio',IRDM:'Satélites & Espacio',
+
+  // ── Agro & Alimentos ──
+  AGRO:'Agro & Alimentos',CRES:'Agro & Alimentos',
+  VITL:'Agro & Alimentos',CORN:'Agro & Alimentos',SOYB:'Agro & Alimentos',
+  WEAT:'Agro & Alimentos',
+
+  // ── Tecnología Financiera (Fintech) ──
+  AFRM:'Fintech',SOFI:'Fintech',NU:'Fintech',OPFI:'Fintech',
+  LMND:'Fintech',INSU:'Fintech',ROOT:'Fintech',HIFS:'Fintech',
+  DAVE:'Fintech',CLOV:'Fintech',UWMC:'Fintech',RKT:'Fintech',
+
+  // ── Ciberseguridad ──
+  PANW:'Ciberseguridad',FTNT:'Ciberseguridad',ZS:'Ciberseguridad',
+  CRWD:'Ciberseguridad',OKTA:'Ciberseguridad',S:'Ciberseguridad',
+  QLYS:'Ciberseguridad',TENB:'Ciberseguridad',VRNS:'Ciberseguridad',
+  CYBR:'Ciberseguridad',SAIC:'Ciberseguridad',
+
+  // ── Nube & SaaS ──
+  SNOW:'Nube & SaaS',NET:'Nube & SaaS',DDOG:'Nube & SaaS',
+  MDB:'Nube & SaaS',GTLB:'Nube & SaaS',CFLT:'Nube & SaaS',
+  ESTC:'Nube & SaaS',DOCN:'Nube & SaaS',
+
+  // ── Seguros ──
+  MET:'Seguros',PRU:'Seguros',AFL:'Seguros',ALL:'Seguros',TRV:'Seguros',
+  CB:'Seguros',AIG:'Seguros',PGR:'Seguros',CINF:'Seguros',
+  HIG:'Seguros',L:'Seguros',
+
+  // ── Transporte & Logística ──
+  UPS:'Transporte',FDX:'Transporte',DAL:'Transporte',UAL:'Transporte',
+  AAL:'Transporte',LUV:'Transporte',CHRW:'Transporte',EXPD:'Transporte',
+  JBHT:'Transporte',XPO:'Transporte',SAIA:'Transporte',
+  ZTO:'Transporte',ODFL:'Transporte',
+
+  // ── Biotecnología avanzada ──
+  BEAM:'Biotech',CRSP:'Biotech',EDIT:'Biotech',NTLA:'Biotech',
+  FATE:'Biotech',RCKT:'Biotech',ARWR:'Biotech',IONS:'Biotech',
+
+  // ── Juegos & Gaming ──
+  ATVI:'Gaming',EA:'Gaming',TTWO:'Gaming',U:'Gaming',RBLX:'Gaming',
+  PLTK:'Gaming',ANET:'Gaming',
+
+  // ── Tecnología Médica ──
+  ISRG:'Tecnología Médica',MDT:'Tecnología Médica',BSX:'Tecnología Médica',
+  SYK:'Tecnología Médica',EW:'Tecnología Médica',ZBH:'Tecnología Médica',
+  DXCM:'Tecnología Médica',PODD:'Tecnología Médica',RMD:'Tecnología Médica',
+  GEHC:'Tecnología Médica',
+
+  // ── Gestoras de Activos ──
+  BLK:'Gestión de Activos',SCHW:'Gestión de Activos',MKTX:'Gestión de Activos',
+  NDAQ:'Gestión de Activos',ICE:'Gestión de Activos',CME:'Gestión de Activos',
+  CBOE:'Gestión de Activos',SPGI:'Gestión de Activos',MCO:'Gestión de Activos',
 };
 var SEC_COLOR={
   ETF:'#00d4ff',
@@ -1216,16 +1280,123 @@ var SEC_COLOR={
   Materiales:'#a5d6a7',
   Utilities:'#80cbc4',
   REITs:'#ffab40',
+  Ciberseguridad:'#ff5252',
+  'Nube & SaaS':'#40c4ff',
+  Fintech:'#ffea00',
+  Seguros:'#cfd8dc',
+  Transporte:'#bcaaa4',
+  Gaming:'#ea80fc',
+  'Tecnología Médica':'#18ffff',
+  'Gestión de Activos':'#ffe57f',
+  'Satélites & Espacio':'#82b1ff',
+  'Agro & Alimentos':'#ccff90',
   Otros:'#78909c'
 };
-var SEC_ORDER=['ETF','Software','Semiconductores','IA & Big Data','Hardware','E-commerce','Comunicación','Vehículos Eléctricos','Automotriz','Energía','Consumo Discrecional','Consumo Básico','Salud','Biotech','Finanzas','Cripto','Defensa','Industriales','Materiales','Utilities','REITs','Otros'];
-var SEC_ICON={ETF:'◈',Software:'⬡',Semiconductores:'◎','IA & Big Data':'◉',Hardware:'⬢','E-commerce':'⬟',Comunicación:'◉','Vehículos Eléctricos':'⚡',Automotriz:'◈',Energía:'⬟','Consumo Discrecional':'⬠','Consumo Básico':'⬡',Salud:'✚',Biotech:'◎',Finanzas:'$',Cripto:'◆',Defensa:'⬢',Industriales:'⚙',Materiales:'◆',Utilities:'⚡',REITs:'⬛',Otros:'?'};
+var SEC_ORDER=['ETF','Software','Semiconductores','IA & Big Data','Hardware','Nube & SaaS','Ciberseguridad','E-commerce','Comunicación','Gaming','Vehículos Eléctricos','Automotriz','Energía','Consumo Discrecional','Consumo Básico','Salud','Tecnología Médica','Biotech','Finanzas','Fintech','Gestión de Activos','Seguros','Cripto','Defensa','Industriales','Transporte','Materiales','Utilities','REITs','Satélites & Espacio','Agro & Alimentos','Otros'];
+var SEC_ICON={ETF:'◈',Software:'⬡',Semiconductores:'◎','IA & Big Data':'◉',Hardware:'⬢','Nube & SaaS':'☁','Ciberseguridad':'🔒','E-commerce':'⬟',Comunicación:'◉',Gaming:'🎮','Vehículos Eléctricos':'⚡',Automotriz:'◈',Energía:'⬟','Consumo Discrecional':'⬠','Consumo Básico':'⬡',Salud:'✚','Tecnología Médica':'⚕',Biotech:'◎',Finanzas:'$',Fintech:'💳','Gestión de Activos':'📈',Seguros:'◆',Cripto:'◆',Defensa:'⬢',Industriales:'⚙',Transporte:'✈',Materiales:'◆',Utilities:'⚡',REITs:'⬛','Satélites & Espacio':'🛰','Agro & Alimentos':'🌾',Otros:'?'};
 
 var allData=[], filtered=[], tickers=[];
 var autoOn=true, cdTimer=null, cdSecs=60;
 var tblSortF='', tblSortD=1;
 var serverOk=false;
 var prevPrices={};
+
+// ── TICKER ERRORS (símbolo no encontrado o mal escrito) ──
+var tickerErrors = {};
+function markTickerError(sym, reason) {
+  tickerErrors[sym] = reason;
+  updateTickerErrorBadge(sym);
+}
+function clearTickerError(sym) {
+  if (tickerErrors[sym]) {
+    delete tickerErrors[sym];
+    updateTickerErrorBadge(sym);
+  }
+}
+function updateTickerErrorBadge(sym) {
+  var items = document.querySelectorAll('.ticker-item');
+  window.tickerList.forEach(function(s, i) {
+    if (s !== sym) return;
+    var el = items[i];
+    if (!el) return;
+    var badge = el.querySelector('.ticker-warn');
+    if (tickerErrors[sym]) {
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'ticker-warn';
+        badge.style.cssText = 'font-size:11px;color:var(--yellow);border:1px solid var(--yellow2);padding:1px 5px;border-radius:2px;margin-left:4px;vertical-align:middle;line-height:1.4;cursor:help;background:rgba(255,214,0,0.1);animation:pulse 1.5s infinite';
+        badge.title = '⚠ No se pudo cargar: ' + tickerErrors[sym] + '\nVerificá que el símbolo sea correcto.\nEj: acciones argentinas → GGAL.BA';
+        badge.textContent = '⚠ NO ENCONTRADO';
+        var symEl = el.querySelector('.ticker-item-sym');
+        if (symEl) symEl.appendChild(badge);
+      }
+    } else {
+      if (badge) badge.remove();
+    }
+  });
+}
+
+// ── ANOTACIONES POR TICKER ────────────────────────
+var NOTES_KEY = 'dubz_notes_v1';
+function loadNotes() {
+  try { return JSON.parse(localStorage.getItem(NOTES_KEY) || '{}'); } catch(e) { return {}; }
+}
+function saveNotes(notes) {
+  try { localStorage.setItem(NOTES_KEY, JSON.stringify(notes)); } catch(e) {}
+}
+var tickerNotes = loadNotes();
+
+function getNoteIcon(sym) {
+  var note = tickerNotes[sym];
+  var hasNote = note && note.trim();
+  return '<span class="note-btn" ' +
+    'data-sym="' + sym + '" ' +
+    'title="' + (hasNote ? escHtml(note) : 'Agregar anotación') + '" ' +
+    'onclick="openNoteEditor(\'' + sym + '\')" ' +
+    'style="cursor:pointer;font-size:13px;margin-left:4px;display:inline-block;transition:transform .15s;color:' + (hasNote ? 'var(--yellow)' : 'var(--text-dim)') + '">' +
+    (hasNote ? '📝' : '✎') + '</span>';
+}
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+function openNoteEditor(sym) {
+  var existing = document.getElementById('noteEditorOverlay');
+  if (existing) existing.remove();
+  var note = tickerNotes[sym] || '';
+  var overlay = document.createElement('div');
+  overlay.id = 'noteEditorOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:3000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+  overlay.innerHTML =
+    '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:4px;width:420px;max-width:95vw;padding:24px;box-shadow:0 0 40px rgba(0,212,255,0.15)">' +
+      '<div style="font-family:var(--head);font-weight:900;font-size:16px;letter-spacing:3px;color:var(--accent);margin-bottom:4px">📝 NOTA — ' + sym + '</div>' +
+      '<div style="font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:14px;letter-spacing:1px">Esta nota aparece al pasar el cursor por el ticker</div>' +
+      '<textarea id="noteEditorTA" style="width:100%;height:120px;background:var(--bg3);border:1px solid var(--border2);color:var(--text-bright);font-family:var(--mono);font-size:13px;padding:10px;border-radius:2px;resize:vertical;outline:none;line-height:1.6" placeholder="Ej: Esperando earnings, soporte en 1200, stop en 1050...">' + escHtml(note) + '</textarea>' +
+      '<div style="display:flex;gap:10px;margin-top:12px;justify-content:flex-end">' +
+        '<button onclick="this.closest(\'#noteEditorOverlay\').remove()" style="background:none;border:1px solid var(--border2);color:var(--text-dim);font-family:var(--mono);font-size:12px;padding:7px 16px;border-radius:2px;cursor:pointer;letter-spacing:1px;transition:all .15s" onmouseover="this.style.borderColor=\'var(--red)\';this.style.color=\'var(--red)\'" onmouseout="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--text-dim)\'">CANCELAR</button>' +
+        '<button onclick="deleteNote(\'' + sym + '\')" style="background:none;border:1px solid var(--red2);color:var(--red);font-family:var(--mono);font-size:12px;padding:7px 16px;border-radius:2px;cursor:pointer;letter-spacing:1px;transition:all .15s" onmouseover="this.style.background=\'rgba(255,61,90,0.12)\'" onmouseout="this.style.background=\'none\'">🗑 BORRAR</button>' +
+        '<button onclick="saveNote(\'' + sym + '\')" style="background:var(--accent);border:1px solid var(--accent);color:var(--bg);font-family:var(--mono);font-size:12px;font-weight:700;padding:7px 16px;border-radius:2px;cursor:pointer;letter-spacing:1px;transition:all .15s" onmouseover="this.style.background=\'var(--accent2)\'" onmouseout="this.style.background=\'var(--accent)\'">💾 GUARDAR</button>' +
+      '</div>' +
+    '</div>';
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+  setTimeout(function() {
+    var ta = document.getElementById('noteEditorTA');
+    if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+  }, 50);
+}
+function saveNote(sym) {
+  var ta = document.getElementById('noteEditorTA');
+  if (!ta) return;
+  tickerNotes[sym] = ta.value.trim();
+  saveNotes(tickerNotes);
+  document.getElementById('noteEditorOverlay').remove();
+  renderAllTab();
+}
+function deleteNote(sym) {
+  delete tickerNotes[sym];
+  saveNotes(tickerNotes);
+  document.getElementById('noteEditorOverlay').remove();
+  renderAllTab();
+}
 
 // tickerList expuesto globalmente para que Firebase lo pueda setear
 window.tickerList = ['SPY','QQQ','XLE','AAPL','NVDA','META','MSFT','GOOG','TSLA','AMZN','CVX','XOM','VIST','JPM','WMT','JNJ','GLD','TLT','AMD','NFLX'];
@@ -1347,15 +1518,23 @@ async function fetchPrecio(sym) {
 async function fetchQuote(sym) {
   try {
     var r = await fetch(API+'/quote?symbol='+sym, {signal: AbortSignal.timeout(15000)});
-    if (!r.ok) return null;
+    if (!r.ok) {
+      markTickerError(sym, 'HTTP '+r.status);
+      return null;
+    }
     var d = await r.json();
-    if (d.error) return null;
-    d.sector = SECTORS[sym] || 'Otros';
+    if (d.error) {
+      markTickerError(sym, d.error);
+      return null;
+    }
+    clearTickerError(sym);
+    d.sector = SECTORS[sym] || (isArgentineTicker(sym) ? 'Merval' : 'Otros');
     var prev = prevPrices[sym];
     d._flash = prev ? (d.price > prev ? 'up' : d.price < prev ? 'dn' : '') : '';
     prevPrices[sym] = d.price;
     return d;
   } catch(e) {
+    markTickerError(sym, 'Timeout/Error');
     console.warn('Error fetching', sym, e.message);
     return null;
   }
@@ -1541,7 +1720,17 @@ function renderSectors(){
 }
 
 function renderTech(){
-  var rows=filtered.map(function(d){
+  // Agrupar por sector
+  var grouped = {};
+  filtered.forEach(function(d){
+    var sec = d.sector || 'Otros';
+    if (!grouped[sec]) grouped[sec] = [];
+    grouped[sec].push(d);
+  });
+
+  var techSort = window._techSort || { field: '', dir: -1 };
+
+  function makeRow(d) {
     return '<tr class="'+(d._flash==='up'?'flu':d._flash==='dn'?'fld':'')+'">'+
       '<td><div class="tk-cell"><div class="sec-bar" style="background:'+(SEC_COLOR[d.sector]||'#fff')+'"></div><span class="tk-sym">'+d.symbol+'</span></div></td>'+
       '<td style="color:'+(d.chgPct>=0?'var(--green)':'var(--red)')+'">'+fp(d.price)+'</td>'+
@@ -1555,8 +1744,91 @@ function renderTech(){
       '<td>'+doSpark(d.spark)+'</td>'+
       '<td><button class="tv-btn" onclick="openTVChart(\''+d.symbol+'\')">&#128200;</button></td>'+
       '</tr>';
-  }).join('');
-  document.getElementById('techBody').innerHTML=rows||emptyRow(12);
+  }
+
+  // Separar Merval de globales
+  var mervalGroups = [];
+  var globalGroups = [];
+  SEC_ORDER.forEach(function(sec) {
+    if (!grouped[sec]) return;
+    var secData = grouped[sec].slice();
+    if (secData.length === 0) return;
+    // ¿Todos son argentinos?
+    var allAR = secData.every(function(d){ return isArgentineTicker(d.symbol); });
+    var anyAR = secData.some(function(d){ return isArgentineTicker(d.symbol); });
+    if (allAR) {
+      mervalGroups.push({ sec: sec, data: secData });
+    } else if (anyAR) {
+      // Mixto: separar
+      var ar = secData.filter(function(d){ return isArgentineTicker(d.symbol); });
+      var gl = secData.filter(function(d){ return !isArgentineTicker(d.symbol); });
+      if (ar.length) mervalGroups.push({ sec: sec, data: ar });
+      if (gl.length) globalGroups.push({ sec: sec, data: gl });
+    } else {
+      globalGroups.push({ sec: sec, data: secData });
+    }
+  });
+  // Otros no en SEC_ORDER
+  Object.keys(grouped).forEach(function(sec) {
+    if (SEC_ORDER.indexOf(sec) === -1) {
+      var secData = grouped[sec];
+      var allAR = secData.every(function(d){ return isArgentineTicker(d.symbol); });
+      if (allAR) mervalGroups.push({ sec: sec, data: secData });
+      else globalGroups.push({ sec: sec, data: secData });
+    }
+  });
+
+  function renderGroup(grp) {
+    var sec = grp.sec;
+    var secData = grp.data;
+    var col = SEC_COLOR[sec] || '#78909c';
+    var icon = SEC_ICON[sec] || '?';
+    var upC = secData.filter(function(d){ return d.chgPct > 0; }).length;
+    var dnC = secData.filter(function(d){ return d.chgPct < 0; }).length;
+    return '<div style="margin-bottom:16px">' +
+      '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg3);border:1px solid var(--border);border-bottom:none;border-radius:2px 2px 0 0">' +
+        '<div style="width:3px;height:14px;background:'+col+';border-radius:2px;flex-shrink:0"></div>' +
+        '<span style="color:'+col+';font-size:13px">'+icon+'</span>' +
+        '<span style="font-family:var(--head);font-weight:900;font-size:12px;letter-spacing:2px;color:'+col+';text-transform:uppercase">'+sec+'</span>' +
+        '<span style="font-family:var(--mono);font-size:11px;color:var(--text-dim);background:var(--bg);padding:1px 6px;border:1px solid var(--border);border-radius:2px">'+secData.length+'</span>' +
+        '<span style="font-family:var(--mono);font-size:11px;color:var(--green);margin-left:6px">▲'+upC+'</span>' +
+        '<span style="font-family:var(--mono);font-size:11px;color:var(--red)">▼'+dnC+'</span>' +
+      '</div>' +
+      '<div class="tbl-wrap" style="border-radius:0 0 2px 2px"><table class="dt" style="min-width:860px">' +
+        '<thead><tr>' +
+          '<th style="width:90px">Ticker</th><th>Precio</th><th>% Día</th>' +
+          '<th>RSI(14)</th><th>ADX(14)</th><th>Dist EMA50%</th><th>Dist EMA200%</th>' +
+          '<th>Mom 12M</th><th style="width:110px">Squeeze Mom</th><th>Beta</th>' +
+          '<th style="width:70px">Spark</th><th style="width:60px">Chart</th>' +
+        '</tr></thead>' +
+        '<tbody>' + secData.map(makeRow).join('') + '</tbody>' +
+      '</table></div></div>';
+  }
+
+  var html = '';
+
+  if (mervalGroups.length) {
+    html += '<div style="margin-bottom:8px;padding:8px 12px;background:linear-gradient(135deg,rgba(0,230,118,0.07),rgba(0,180,90,0.03));border:1px solid rgba(0,230,118,0.25);border-radius:2px;font-family:var(--head);font-weight:900;font-size:13px;letter-spacing:3px;color:var(--green)">🇦🇷 MERVAL — ACCIONES ARGENTINAS</div>';
+    html += mervalGroups.map(renderGroup).join('');
+  }
+  if (globalGroups.length) {
+    html += '<div style="margin-bottom:8px;margin-top:'+(mervalGroups.length?'18px':'0')+';padding:8px 12px;background:linear-gradient(135deg,rgba(0,212,255,0.06),rgba(0,153,204,0.03));border:1px solid rgba(0,212,255,0.2);border-radius:2px;font-family:var(--head);font-weight:900;font-size:13px;letter-spacing:3px;color:var(--accent)">🌎 GLOBAL — ACCIONES INTERNACIONALES</div>';
+    html += globalGroups.map(renderGroup).join('');
+  }
+
+  var techBody = document.getElementById('techBody');
+  var techTable = document.getElementById('techTable');
+  // Reemplazar toda la tabla técnica por divs agrupados
+  var wrapper = document.getElementById('tech-grouped-wrapper');
+  if (!wrapper) {
+    wrapper = document.createElement('div');
+    wrapper.id = 'tech-grouped-wrapper';
+    wrapper.style.overflowX = 'auto';
+    wrapper.style.webkitOverflowScrolling = 'touch';
+    techTable.parentNode.insertBefore(wrapper, techTable);
+    techTable.style.display = 'none';
+  }
+  wrapper.innerHTML = html || '<div style="color:var(--text-dim);padding:30px;font-family:var(--mono);text-align:center">SIN DATOS — INICIÁ EL SERVIDOR Y CARGÁ TICKERS</div>';
 }
 
 // ── MERVAL DETECTION ──────────────────────────────
@@ -1571,7 +1843,11 @@ var MERVAL_TICKERS = {
   'MIRG':1,'MOLA':1,'MOLI':1,'MORI':1,'OEST':1,'PATA':1,'PECO':1,'PERD':1,
   'POLL':1,'RIGO':1,'ROSE':1,'SAMI':1,'SEMI':1,'TECO2':1,'TGNO4':1,'TGSU2':1,
   'TRAN':1,'TXAR':1,'VALO':1,'APBR':1,'HARG':1,'INTR':1,'INVJ':1,'AGRO':1,
-  'CRES':1,'RICH':1,'HOLS':1,'MORI':1,'PATA':1
+  'CRES':1,'RICH':1,'HOLS':1,'MORI':1,'PATA':1,
+  // Satellogic y otros
+  'SATL':1,'MEBA':1,'NERA':1,'RUCQ':1,'GARO':1,'GBAN':1,'GCDI':1,'GCPA':1,
+  'HOSA':1,'JMIN':1,'LFIX':1,'MCHP':1,'MOLA':1,'MTLH':1,'MTYQ':1,'NICA':1,
+  'PATY':1,'PVIN':1,'REPA':1,'RUBA':1,'SAMI':1,'SECO':1,'STSA':1,'TECO2':1
 };
 
 function isArgentineTicker(sym) {
@@ -1667,6 +1943,7 @@ function renderAllTab() {
   // ── Render MERVAL rows
   var arRows = arData.map(function(d) {
     var sym = dispSym(d.symbol);
+    var rawSym = d.symbol;
     return '<tr class="'+(d._flash==='up'?'flu':d._flash==='dn'?'fld':'')+'">' +
       '<td><div class="tk-cell"><div class="sec-bar" style="background:var(--green)"></div>' +
         '<span class="tk-sym">'+sym+'</span>' +
@@ -1682,6 +1959,7 @@ function renderAllTab() {
       '<td>'+(d.beta?f2(d.beta):'--')+'</td>' +
       '<td>'+momCell(d.mom12m != null ? d.mom12m : d.mom6m)+'</td>' +
       '<td>'+canslimCell(d)+'</td>' +
+      '<td style="text-align:center">'+getNoteIcon(rawSym)+'</td>' +
       '</tr>';
   }).join('');
   document.getElementById('mervalBody').innerHTML = arRows || emptyRow(11);
@@ -1702,9 +1980,10 @@ function renderAllTab() {
       '<td>'+(d.beta?f2(d.beta):'--')+'</td>' +
       '<td>'+momCell(d.mom12m != null ? d.mom12m : d.mom6m)+'</td>' +
       '<td>'+canslimCell(d)+'</td>' +
+      '<td style="text-align:center">'+getNoteIcon(d.symbol)+'</td>' +
       '</tr>';
   }).join('');
-  document.getElementById('globalBody').innerHTML = glRows || emptyRow(11);
+  document.getElementById('globalBody').innerHTML = glRows || emptyRow(12);
 }
 
 function renderEarningsTab() {
@@ -1970,6 +2249,10 @@ window.renderTickerList = function() {
   }).join('');
   document.getElementById('tickerCount').textContent = window.tickerList.length + ' ticker' + (window.tickerList.length !== 1 ? 's' : '');
   document.getElementById('tickerBox').value = window.tickerList.join('\n');
+  // Re-aplicar badges de error si existen
+  if (typeof tickerErrors !== 'undefined') {
+    Object.keys(tickerErrors).forEach(function(sym) { updateTickerErrorBadge(sym); });
+  }
 };
 
 function addTickerFromInput() {
