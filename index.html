@@ -622,6 +622,101 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 .canslim-link.sws:hover{border-color:#7c4dff;color:#b47eff}
 .canslim-link.ms:hover{border-color:var(--orange);color:var(--orange)}
 .canslim-header-wrap{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+
+/* ══════════════════════════════════════
+   PORTFOLIO TAB STYLES
+══════════════════════════════════════ */
+.tab-portfolio{border-color:rgba(255,214,0,0.4)!important;color:var(--yellow)!important}
+.tab-portfolio.active{background:rgba(255,214,0,0.12)!important;border-color:var(--yellow)!important;color:var(--yellow)!important}
+
+/* Toolbar */
+.pf-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;background:var(--bg2);border:1px solid var(--border);border-radius:2px;padding:10px 14px}
+.pf-toolbar-left{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.pf-toolbar-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pf-currency-toggle{display:flex;align-items:center;gap:8px}
+.pf-cur-label{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:1px;color:var(--text-dim)}
+.pf-switch{position:relative;display:inline-block;width:40px;height:22px}
+.pf-switch input{opacity:0;width:0;height:0}
+.pf-slider{position:absolute;cursor:pointer;inset:0;background:rgba(0,212,255,0.2);border:1px solid var(--accent2);border-radius:22px;transition:.3s}
+.pf-slider:before{content:'';position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:var(--accent);border-radius:50%;transition:.3s}
+.pf-switch input:checked+.pf-slider{background:rgba(255,214,0,0.2);border-color:var(--yellow2)}
+.pf-switch input:checked+.pf-slider:before{transform:translateX(18px);background:var(--yellow)}
+.pf-mep-input{background:var(--bg3);border:1px solid var(--border2);color:var(--text-bright);font-family:var(--mono);font-size:13px;padding:4px 8px;border-radius:2px;outline:none;width:90px;transition:border-color .2s}
+.pf-mep-input:focus{border-color:var(--accent)}
+.pf-search-input{background:var(--bg3);border:1px solid var(--border2);color:var(--text-bright);font-family:var(--mono);font-size:13px;padding:5px 10px;border-radius:2px;outline:none;width:180px;transition:border-color .2s}
+.pf-search-input:focus{border-color:var(--accent)}
+.pf-search-input::placeholder{color:var(--text-dim)}
+
+/* Summary cards */
+.pf-summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.pf-sum-card{background:var(--bg2);border:1px solid var(--border);border-radius:2px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px;transition:border-color .2s}
+.pf-sum-card:hover{border-color:var(--border2)}
+.pf-sum-icon{font-size:24px;line-height:1;flex-shrink:0}
+.pf-sum-body{flex:1;min-width:0}
+.pf-sum-lbl{font-family:var(--head);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:4px}
+.pf-sum-val{font-family:var(--mono);font-size:18px;font-weight:700;color:var(--text-bright);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pf-sum-sub{font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-top:2px}
+
+/* Distribution */
+.pf-dist-section{background:var(--bg2);border:1px solid var(--border);border-radius:2px;padding:12px 16px;margin-bottom:14px}
+.pf-dist-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.pf-dist-title{font-family:var(--head);font-size:11px;font-weight:900;letter-spacing:3px;text-transform:uppercase;color:var(--text-bright)}
+.pf-dist-bar{height:18px;border-radius:2px;overflow:hidden;display:flex;margin-bottom:8px;background:var(--bg3);border:1px solid var(--border)}
+.pf-dist-seg{height:100%;transition:width .4s ease;cursor:pointer;position:relative}
+.pf-dist-seg:hover{filter:brightness(1.25)}
+.pf-dist-legend{display:flex;flex-wrap:wrap;gap:8px}
+.pf-dist-item{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;color:var(--text)}
+.pf-dist-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+
+/* Table header */
+.pf-table-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.pf-section-title{font-family:var(--head);font-size:11px;font-weight:900;letter-spacing:3px;text-transform:uppercase;color:var(--text-bright)}
+.pf-currency-badge{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:2px;padding:2px 8px;border-radius:2px;border:1px solid;color:var(--accent);border-color:var(--accent2);background:rgba(0,212,255,0.07)}
+.pf-currency-badge.ars{color:var(--yellow);border-color:var(--yellow2);background:rgba(255,214,0,0.07)}
+
+/* Portfolio table specifics */
+#pfTable .pf-fav-btn{background:none;border:none;cursor:pointer;font-size:14px;padding:0 2px;opacity:.35;transition:opacity .15s,transform .15s}
+#pfTable .pf-fav-btn:hover{opacity:1;transform:scale(1.2)}
+#pfTable .pf-fav-btn.active{opacity:1}
+.pf-indicator{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.5px;padding:2px 6px;border-radius:2px;border:1px solid;white-space:nowrap}
+.pf-indicator.winner{color:var(--green);border-color:var(--green2);background:rgba(0,230,118,0.1)}
+.pf-indicator.loser{color:var(--red);border-color:var(--red2);background:rgba(255,61,90,0.1)}
+.pf-indicator.neutral{color:var(--text-dim);border-color:var(--border2);background:var(--bg3)}
+.pf-action-btn{background:none;border:1px solid var(--border2);color:var(--text-dim);font-family:var(--mono);font-size:11px;cursor:pointer;padding:2px 6px;border-radius:2px;transition:all .15s;line-height:1.4}
+.pf-action-btn:hover{border-color:var(--accent);color:var(--accent)}
+.pf-action-btn.del:hover{border-color:var(--red);color:var(--red);background:rgba(255,61,90,0.08)}
+
+/* Modal */
+.pf-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:1100;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.pf-modal-overlay.open{display:flex}
+.pf-modal{background:var(--bg2);border:1px solid var(--border2);border-radius:4px;width:90vw;max-width:540px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 0 60px rgba(0,0,0,0.5)}
+.pf-modal-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0}
+.pf-modal-title{font-family:var(--head);font-weight:900;font-size:14px;letter-spacing:3px;text-transform:uppercase;color:var(--text-bright)}
+.pf-modal-body{padding:18px;display:flex;flex-direction:column;gap:0}
+.pf-modal-footer{display:flex;justify-content:flex-end;gap:8px;padding:14px 18px;border-top:1px solid var(--border)}
+.pf-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.pf-field{display:flex;flex-direction:column;gap:5px}
+.pf-field label{font-family:var(--head);font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim)}
+.pf-input{background:var(--bg3);border:1px solid var(--border2);color:var(--text-bright);font-family:var(--mono);font-size:13px;padding:7px 10px;border-radius:2px;outline:none;width:100%;transition:border-color .2s}
+.pf-input:focus{border-color:var(--accent)}
+.pf-input::placeholder{color:var(--text-dim)}
+.pf-input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
+
+/* Live price badge */
+.pf-live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* Responsive */
+@media(max-width:900px){
+  .pf-summary-grid{grid-template-columns:repeat(2,1fr)}
+  .pf-form-grid{grid-template-columns:1fr}
+  .pf-search-input{width:130px}
+}
+@media(max-width:600px){
+  .pf-summary-grid{grid-template-columns:1fr}
+  .pf-toolbar{flex-direction:column;align-items:stretch}
+  .pf-toolbar-right{flex-wrap:wrap}
+}
 </style>
 </head>
 <body>
@@ -810,6 +905,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
       <div class="tab" onclick="switchTab('sectors',this)">SECTORES</div>
       <div class="tab" onclick="switchTab('technical',this)">TÉCNICO</div>
       <div class="tab" onclick="switchTab('all',this)">TODOS</div>
+      <div class="tab tab-portfolio" onclick="switchTab('portfolio',this)">💼 PORTAFOLIO</div>
     </div>
 
     <!-- SCANNER TAB -->
@@ -958,6 +1054,175 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
       <div class="exp-info" id="expInfo">0 tickers | --</div>
       <div class="exp-actions">
         <button class="btn btn-g btn-sm" onclick="exportCSV()">⬇ CSV</button>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════
+         PORTAFOLIO TAB
+    ═══════════════════════════════════════════════════════ -->
+    <div class="tab-panel" id="tab-portfolio">
+
+      <!-- TOP TOOLBAR -->
+      <div class="pf-toolbar">
+        <div class="pf-toolbar-left">
+          <div class="pf-currency-toggle">
+            <span class="pf-cur-label">USD</span>
+            <label class="pf-switch">
+              <input type="checkbox" id="pfCurrencyToggle" onchange="pfToggleCurrency()">
+              <span class="pf-slider"></span>
+            </label>
+            <span class="pf-cur-label">ARS</span>
+          </div>
+          <div class="pf-mep-wrap">
+            <span style="color:var(--text-dim);font-family:var(--mono);font-size:11px;letter-spacing:1px">USD MEP:</span>
+            <input type="number" id="pfMepRate" class="pf-mep-input" value="1200" min="1" onchange="pfRefreshAll()" title="Tipo de cambio dólar MEP">
+          </div>
+        </div>
+        <div class="pf-toolbar-right">
+          <input type="text" id="pfSearch" class="pf-search-input" placeholder="🔎 Buscar ticker..." oninput="pfApplyFilters()">
+          <select class="sel" id="pfSortSelect" onchange="pfApplyFilters()" style="font-size:12px;padding:5px 8px">
+            <option value="ticker">Ordenar: Ticker</option>
+            <option value="rendPct_desc">Mayor Rend. %</option>
+            <option value="rendPct_asc">Menor Rend. %</option>
+            <option value="valor_desc">Mayor Valor</option>
+            <option value="fecha_desc">Más reciente</option>
+            <option value="fecha_asc">Más antiguo</option>
+          </select>
+          <button class="btn btn-g btn-sm" onclick="pfExportCSV()">⬇ CSV</button>
+          <button class="btn btn-a btn-sm" onclick="pfOpenAddModal()">＋ AGREGAR</button>
+        </div>
+      </div>
+
+      <!-- SUMMARY CARDS -->
+      <div class="pf-summary-grid">
+        <div class="pf-sum-card">
+          <div class="pf-sum-icon">💰</div>
+          <div class="pf-sum-body">
+            <div class="pf-sum-lbl">Valor Total</div>
+            <div class="pf-sum-val" id="pfValTotal">—</div>
+            <div class="pf-sum-sub" id="pfValTotalSub">0 posiciones</div>
+          </div>
+        </div>
+        <div class="pf-sum-card">
+          <div class="pf-sum-icon">📈</div>
+          <div class="pf-sum-body">
+            <div class="pf-sum-lbl">Ganancia / Pérdida</div>
+            <div class="pf-sum-val" id="pfGanancia">—</div>
+            <div class="pf-sum-sub" id="pfGananciaSub">—</div>
+          </div>
+        </div>
+        <div class="pf-sum-card">
+          <div class="pf-sum-icon">📊</div>
+          <div class="pf-sum-body">
+            <div class="pf-sum-lbl">Rendimiento Total</div>
+            <div class="pf-sum-val" id="pfRendTotal">—</div>
+            <div class="pf-sum-sub">vs costo total</div>
+          </div>
+        </div>
+        <div class="pf-sum-card pf-liquidity-card">
+          <div class="pf-sum-icon">💵</div>
+          <div class="pf-sum-body">
+            <div class="pf-sum-lbl">Liquidez</div>
+            <div class="pf-sum-val" id="pfLiquidezDisplay">—</div>
+            <div style="display:flex;gap:5px;align-items:center;margin-top:4px">
+              <input type="number" id="pfLiquidez" class="pf-mep-input" placeholder="0" min="0" onchange="pfUpdateLiquidez()" style="width:110px" title="Liquidez disponible en USD">
+              <span style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">USD</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DISTRIBUTION BAR -->
+      <div class="pf-dist-section">
+        <div class="pf-dist-header">
+          <span class="pf-dist-title">◆ DISTRIBUCIÓN</span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--text-dim)" id="pfDistCount">0 instrumentos</span>
+        </div>
+        <div class="pf-dist-bar" id="pfDistBar"></div>
+        <div class="pf-dist-legend" id="pfDistLegend"></div>
+      </div>
+
+      <!-- PORTFOLIO TABLE -->
+      <div class="pf-table-header">
+        <span class="pf-section-title">◆ POSICIONES</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="pf-currency-badge" id="pfCurrencyBadge">USD</span>
+        </div>
+      </div>
+      <div class="tbl-wrap" style="overflow-x:auto">
+        <table class="dt" id="pfTable">
+          <thead>
+            <tr>
+              <th style="width:36px;text-align:center">⭐</th>
+              <th style="width:110px" onclick="pfSortByCol('ticker',this)">Ticker<span class="sort-icon">⇅</span></th>
+              <th onclick="pfSortByCol('cantidad',this)">Cant.<span class="sort-icon">⇅</span></th>
+              <th onclick="pfSortByCol('precioCompra',this)">P.Compra<span class="sort-icon">⇅</span></th>
+              <th onclick="pfSortByCol('precioActual',this)">P.Actual<span class="sort-icon">⇅</span></th>
+              <th onclick="pfSortByCol('costTotal',this)">Costo Total<span class="sort-icon">⇅</span></th>
+              <th onclick="pfSortByCol('valActual',this)">Val.Actual<span class="sort-icon">⇅</span></th>
+              <th onclick="pfSortByCol('rendUsd',this)">Rend ($)<span class="sort-icon">⇅</span></th>
+              <th onclick="pfSortByCol('rendPct',this)">Rend (%)<span class="sort-icon">⇅</span></th>
+              <th onclick="pfSortByCol('fecha',this)">Fecha<span class="sort-icon">⇅</span></th>
+              <th style="width:90px;text-align:center">Indicador</th>
+              <th style="width:70px;text-align:center">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="pfBody"></tbody>
+        </table>
+      </div>
+      <div id="pfEmpty" style="display:none;text-align:center;padding:60px 20px;font-family:var(--mono);color:var(--text-dim)">
+        <div style="font-size:48px;margin-bottom:12px">💼</div>
+        <div style="font-size:14px;letter-spacing:2px">SIN POSICIONES REGISTRADAS</div>
+        <div style="font-size:12px;margin-top:6px">Hacé clic en <strong style="color:var(--accent)">＋ AGREGAR</strong> para cargar tu primera inversión</div>
+      </div>
+
+    </div><!-- /#tab-portfolio -->
+
+    <!-- MODAL: Agregar / Editar posición -->
+    <div class="pf-modal-overlay" id="pfModalOverlay" onclick="pfCloseModal(event)">
+      <div class="pf-modal">
+        <div class="pf-modal-header">
+          <div class="pf-modal-title" id="pfModalTitle">＋ AGREGAR POSICIÓN</div>
+          <button class="tv-close" onclick="pfCloseModalForce()">✕</button>
+        </div>
+        <div class="pf-modal-body">
+          <input type="hidden" id="pfEditId">
+          <div class="pf-form-grid">
+            <div class="pf-field">
+              <label>Ticker *</label>
+              <input type="text" id="pfFTicker" class="pf-input" placeholder="Ej: AAPL, GGAL" maxlength="12" style="text-transform:uppercase">
+            </div>
+            <div class="pf-field">
+              <label>Nombre / Descripción</label>
+              <input type="text" id="pfFNombre" class="pf-input" placeholder="Ej: Apple Inc.">
+            </div>
+            <div class="pf-field">
+              <label>Cantidad *</label>
+              <input type="number" id="pfFCantidad" class="pf-input" placeholder="100" min="0" step="any">
+            </div>
+            <div class="pf-field">
+              <label>Precio de Compra (USD) *</label>
+              <input type="number" id="pfFPrecioCompra" class="pf-input" placeholder="150.00" min="0" step="any">
+            </div>
+            <div class="pf-field">
+              <label>Precio Actual (USD)</label>
+              <div style="display:flex;gap:6px">
+                <input type="number" id="pfFPrecioActual" class="pf-input" placeholder="Auto" min="0" step="any" style="flex:1">
+                <button class="btn btn-a btn-sm" onclick="pfFetchPrice()" title="Obtener precio en tiempo real">⟳ LIVE</button>
+              </div>
+            </div>
+            <div class="pf-field">
+              <label>Fecha de Compra</label>
+              <input type="date" id="pfFFecha" class="pf-input">
+            </div>
+          </div>
+          <div id="pfFormError" style="display:none;background:rgba(255,61,90,0.1);border:1px solid var(--red2);color:var(--red);font-family:var(--mono);font-size:12px;padding:8px 12px;border-radius:2px;margin-top:8px"></div>
+          <div id="pfFetchStatus" style="display:none;font-family:var(--mono);font-size:11px;color:var(--accent);margin-top:6px;letter-spacing:1px"></div>
+        </div>
+        <div class="pf-modal-footer">
+          <button class="btn btn-r btn-sm" onclick="pfCloseModalForce()">Cancelar</button>
+          <button class="btn btn-g btn-sm" onclick="pfSavePosition()">💾 GUARDAR</button>
+        </div>
       </div>
     </div>
 
@@ -2506,6 +2771,489 @@ function canslimCell(d) {
 }
 
 // No hacer window.onload — la app se inicia desde Firebase onAuthStateChanged
+
+/* ═══════════════════════════════════════════════════════════════════
+   PORTAFOLIO — Gestión de inversiones en acciones y CEDEARs
+   Datos en localStorage | Precios live vía Yahoo Finance proxy
+═══════════════════════════════════════════════════════════════════ */
+
+var pfPositions   = [];  // Array de posiciones del portafolio
+var pfCurrencyARS = false; // false = USD, true = ARS
+var pfMepRate     = 1200;
+var pfLiquidezUSD = 0;
+var pfSortCol     = null;
+var pfSortDir     = 1;
+var pfLiveCache   = {};  // { ticker: { price, chgPct, ts } }
+
+// ── COLORES para distribución ──────────────────────────────
+var PF_COLORS = [
+  '#00d4ff','#00e676','#ffd600','#ff8c00','#b44aff',
+  '#ff3d5a','#00b84a','#0099cc','#ff6b35','#7c4dff',
+  '#00bfa5','#f06292','#aed581','#4fc3f7','#ffb74d'
+];
+
+// ── LOAD / SAVE ────────────────────────────────────────────
+function pfLoad() {
+  try {
+    var raw = localStorage.getItem('dubz_portfolio');
+    pfPositions = raw ? JSON.parse(raw) : [];
+    pfMepRate   = parseFloat(localStorage.getItem('dubz_mep') || '1200');
+    pfLiquidezUSD = parseFloat(localStorage.getItem('dubz_liquidez') || '0');
+    document.getElementById('pfMepRate').value = pfMepRate;
+    document.getElementById('pfLiquidez').value = pfLiquidezUSD || '';
+  } catch(e) { pfPositions = []; }
+}
+function pfSave() {
+  localStorage.setItem('dubz_portfolio', JSON.stringify(pfPositions));
+  localStorage.setItem('dubz_mep', pfMepRate);
+  localStorage.setItem('dubz_liquidez', pfLiquidezUSD);
+}
+
+// ── TOGGLE MONEDA ──────────────────────────────────────────
+function pfToggleCurrency() {
+  pfCurrencyARS = document.getElementById('pfCurrencyToggle').checked;
+  pfRefreshAll();
+}
+
+// ── TIPO DE CAMBIO / LIQUIDEZ ──────────────────────────────
+function pfRefreshAll() {
+  pfMepRate = parseFloat(document.getElementById('pfMepRate').value) || 1200;
+  pfSave();
+  pfRenderAll();
+}
+function pfUpdateLiquidez() {
+  pfLiquidezUSD = parseFloat(document.getElementById('pfLiquidez').value) || 0;
+  pfSave();
+  pfRenderSummary();
+}
+
+// ── FORMATOS ───────────────────────────────────────────────
+function pfFmt(n, decimals) {
+  if (n == null || isNaN(n)) return '—';
+  return n.toLocaleString('es-AR', { minimumFractionDigits: decimals||2, maximumFractionDigits: decimals||2 });
+}
+function pfFmtMoney(usd) {
+  if (usd == null || isNaN(usd)) return '—';
+  if (pfCurrencyARS) {
+    var ars = usd * pfMepRate;
+    return '$ ' + pfFmt(ars, 0) + ' ARS';
+  }
+  return 'U$D ' + pfFmt(usd, 2);
+}
+function pfFmtMoneyShort(usd) {
+  if (usd == null || isNaN(usd)) return '—';
+  var val = pfCurrencyARS ? usd * pfMepRate : usd;
+  var sym = pfCurrencyARS ? '$' : 'U$D';
+  if (Math.abs(val) >= 1e6) return sym + ' ' + pfFmt(val/1e6,2) + 'M';
+  if (Math.abs(val) >= 1e3) return sym + ' ' + pfFmt(val/1e3,2) + 'K';
+  return sym + ' ' + pfFmt(val, 2);
+}
+
+// ── PRECIO ACTUAL para una posición ───────────────────────
+function pfGetCurrentPrice(pos) {
+  var cached = pfLiveCache[pos.ticker.toUpperCase()];
+  if (cached) return cached.price;
+  return pos.precioActual || pos.precioCompra;
+}
+
+// ── CÁLCULOS de una posición ───────────────────────────────
+function pfCalc(pos) {
+  var pc  = parseFloat(pos.precioCompra) || 0;
+  var qty = parseFloat(pos.cantidad) || 0;
+  var pa  = pfGetCurrentPrice(pos);
+  var costTotal = pc * qty;
+  var valActual = pa * qty;
+  var rendUsd   = valActual - costTotal;
+  var rendPct   = costTotal > 0 ? (rendUsd / costTotal * 100) : 0;
+  var cached    = pfLiveCache[pos.ticker.toUpperCase()];
+  var chgPct    = cached ? cached.chgPct : null;
+  return { costTotal, valActual, rendUsd, rendPct, chgPct, pa };
+}
+
+// ── RENDER COMPLETO ────────────────────────────────────────
+function pfRenderAll() {
+  pfRenderSummary();
+  pfRenderDistribution();
+  pfRenderTable();
+}
+
+// ── SUMMARY CARDS ──────────────────────────────────────────
+function pfRenderSummary() {
+  var totalCost = 0, totalVal = 0;
+  pfPositions.forEach(function(pos) {
+    var c = pfCalc(pos);
+    totalCost += c.costTotal;
+    totalVal  += c.valActual;
+  });
+  var ganancia = totalVal - totalCost;
+  var rendPct  = totalCost > 0 ? (ganancia / totalCost * 100) : 0;
+  var liqDisplay = pfFmtMoneyShort(pfLiquidezUSD);
+
+  document.getElementById('pfValTotal').textContent = pfFmtMoneyShort(totalVal);
+  document.getElementById('pfValTotalSub').textContent = pfPositions.length + ' posicion' + (pfPositions.length===1?'':'es');
+
+  var ganEl = document.getElementById('pfGanancia');
+  ganEl.textContent = pfFmtMoneyShort(ganancia);
+  ganEl.style.color = ganancia >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('pfGananciaSub').textContent = (ganancia >= 0 ? '▲' : '▼') + ' vs costo ' + pfFmtMoneyShort(totalCost);
+
+  var rendEl = document.getElementById('pfRendTotal');
+  rendEl.textContent = (rendPct >= 0 ? '+' : '') + pfFmt(rendPct, 2) + '%';
+  rendEl.style.color = rendPct >= 0 ? 'var(--green)' : 'var(--red)';
+
+  document.getElementById('pfLiquidezDisplay').textContent = liqDisplay;
+
+  // Badge moneda
+  var badge = document.getElementById('pfCurrencyBadge');
+  badge.textContent = pfCurrencyARS ? 'ARS' : 'USD';
+  badge.className = 'pf-currency-badge' + (pfCurrencyARS ? ' ars' : '');
+}
+
+// ── DISTRIBUCIÓN ───────────────────────────────────────────
+function pfRenderDistribution() {
+  var totalVal = 0;
+  var vals = {};
+  pfPositions.forEach(function(pos) {
+    var c = pfCalc(pos);
+    var tk = pos.ticker.toUpperCase();
+    vals[tk] = (vals[tk] || 0) + c.valActual;
+    totalVal += c.valActual;
+  });
+
+  var tickers = Object.keys(vals).sort(function(a,b){ return vals[b]-vals[a]; });
+  document.getElementById('pfDistCount').textContent = tickers.length + ' instrumento' + (tickers.length===1?'':'s');
+
+  var barEl = document.getElementById('pfDistBar');
+  var legEl = document.getElementById('pfDistLegend');
+  barEl.innerHTML = '';
+  legEl.innerHTML = '';
+
+  if (totalVal <= 0) { barEl.innerHTML = '<div style="width:100%;background:var(--bg3)"></div>'; return; }
+
+  tickers.forEach(function(tk, i) {
+    var pct = vals[tk] / totalVal * 100;
+    var col = PF_COLORS[i % PF_COLORS.length];
+    var seg = document.createElement('div');
+    seg.className = 'pf-dist-seg';
+    seg.style.cssText = 'width:'+pct.toFixed(2)+'%;background:'+col+';';
+    seg.title = tk + ': ' + pfFmt(pct,1) + '% · ' + pfFmtMoneyShort(vals[tk]);
+    barEl.appendChild(seg);
+
+    var item = document.createElement('div');
+    item.className = 'pf-dist-item';
+    item.innerHTML = '<div class="pf-dist-dot" style="background:'+col+'"></div><span><b style="color:var(--text-bright)">'+tk+'</b> '+pfFmt(pct,1)+'%</span>';
+    legEl.appendChild(item);
+  });
+}
+
+// ── TABLA DE POSICIONES ────────────────────────────────────
+function pfApplyFilters() {
+  pfRenderTable();
+}
+
+function pfRenderTable() {
+  var query  = (document.getElementById('pfSearch').value || '').toUpperCase();
+  var sortSel = document.getElementById('pfSortSelect').value;
+  var favs   = JSON.parse(localStorage.getItem('dubz_pf_favs') || '[]');
+
+  var list = pfPositions.slice();
+
+  // Filtro búsqueda
+  if (query) {
+    list = list.filter(function(p){ return p.ticker.toUpperCase().indexOf(query) !== -1 || (p.nombre||'').toUpperCase().indexOf(query) !== -1; });
+  }
+
+  // Ordenar
+  if (pfSortCol) {
+    list.sort(function(a,b){
+      var ac = pfCalc(a), bc = pfCalc(b);
+      var av, bv;
+      if (pfSortCol==='ticker')        { av=a.ticker; bv=b.ticker; }
+      else if (pfSortCol==='cantidad') { av=a.cantidad; bv=b.cantidad; }
+      else if (pfSortCol==='precioCompra') { av=a.precioCompra; bv=b.precioCompra; }
+      else if (pfSortCol==='precioActual') { av=ac.pa; bv=bc.pa; }
+      else if (pfSortCol==='costTotal')    { av=ac.costTotal; bv=bc.costTotal; }
+      else if (pfSortCol==='valActual')    { av=ac.valActual; bv=bc.valActual; }
+      else if (pfSortCol==='rendUsd')      { av=ac.rendUsd; bv=bc.rendUsd; }
+      else if (pfSortCol==='rendPct')      { av=ac.rendPct; bv=bc.rendPct; }
+      else if (pfSortCol==='fecha')        { av=new Date(a.fecha||0); bv=new Date(b.fecha||0); }
+      else return 0;
+      if (av < bv) return -pfSortDir;
+      if (av > bv) return pfSortDir;
+      return 0;
+    });
+  } else {
+    // Default: favoritos primero, luego alfabético
+    list.sort(function(a,b){
+      var fa = favs.indexOf(a.id) !== -1, fb = favs.indexOf(b.id) !== -1;
+      if (fa && !fb) return -1; if (!fa && fb) return 1;
+      return a.ticker < b.ticker ? -1 : 1;
+    });
+  }
+
+  var tbody = document.getElementById('pfBody');
+  var empty = document.getElementById('pfEmpty');
+  tbody.innerHTML = '';
+
+  if (list.length === 0) {
+    empty.style.display = pfPositions.length === 0 ? 'block' : 'none';
+    if (pfPositions.length > 0) {
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td colspan="12" style="text-align:center;color:var(--text-dim);font-family:var(--mono);padding:20px">Sin resultados para "'+query+'"</td>';
+      tbody.appendChild(tr);
+    }
+    return;
+  }
+  empty.style.display = 'none';
+
+  list.forEach(function(pos) {
+    var c    = pfCalc(pos);
+    var isFav = favs.indexOf(pos.id) !== -1;
+    var cached = pfLiveCache[pos.ticker.toUpperCase()];
+    var rendColor = c.rendPct >= 0 ? 'var(--green)' : 'var(--red)';
+    var rendSign  = c.rendUsd >= 0 ? '+' : '';
+
+    // Indicador
+    var ind = '';
+    if (c.rendPct >= 10)      ind = '<span class="pf-indicator winner">🏆 GANADORA</span>';
+    else if (c.rendPct <= -10) ind = '<span class="pf-indicator loser">⚠ PERDEDORA</span>';
+    else                       ind = '<span class="pf-indicator neutral">— NEUTRAL</span>';
+
+    // Live price badge
+    var liveBadge = cached
+      ? '<span class="pf-live-dot" title="Precio en tiempo real"></span>'
+      : '<span style="color:var(--text-dim);font-size:10px" title="Sin dato live">◯</span>';
+
+    // Variación diaria
+    var chgHtml = '';
+    if (c.chgPct != null) {
+      var cc = c.chgPct >= 0 ? 'var(--green)' : 'var(--red)';
+      chgHtml = '<br><span style="font-size:10px;color:'+cc+'">'+(c.chgPct>=0?'+':'')+pfFmt(c.chgPct,2)+'% hoy</span>';
+    }
+
+    var fecha = pos.fecha ? new Date(pos.fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'}) : '—';
+    var nombre = pos.nombre ? '<br><span style="font-size:10px;color:var(--text-dim)">'+pos.nombre+'</span>' : '';
+
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td style="text-align:center"><button class="pf-fav-btn'+(isFav?' active':'')+'" onclick="pfToggleFav(\''+pos.id+'\')" title="Favorito">'+(isFav?'⭐':'☆')+'</button></td>'+
+      '<td><div class="tk-cell">'+
+        '<div><span class="tk-sym">'+pos.ticker+'</span>'+nombre+'</div>'+
+        '<div style="margin-left:4px">'+liveBadge+'</div>'+
+      '</div></td>'+
+      '<td>'+pfFmt(pos.cantidad,0)+'</td>'+
+      '<td>'+pfFmtMoneyShort(pos.precioCompra)+'</td>'+
+      '<td>'+pfFmtMoneyShort(c.pa)+chgHtml+'</td>'+
+      '<td>'+pfFmtMoneyShort(c.costTotal)+'</td>'+
+      '<td style="color:var(--text-bright)">'+pfFmtMoneyShort(c.valActual)+'</td>'+
+      '<td style="color:'+rendColor+'">'+rendSign+pfFmtMoneyShort(c.rendUsd)+'</td>'+
+      '<td style="color:'+rendColor+';font-weight:700">'+rendSign+pfFmt(c.rendPct,2)+'%</td>'+
+      '<td style="font-size:12px">'+fecha+'</td>'+
+      '<td>'+ind+'</td>'+
+      '<td style="text-align:center">'+
+        '<div style="display:flex;gap:4px;justify-content:center">'+
+        '<button class="pf-action-btn" onclick="pfEditPosition(\''+pos.id+'\')" title="Editar">✏</button>'+
+        '<button class="pf-action-btn del" onclick="pfDeletePosition(\''+pos.id+'\')" title="Eliminar">✕</button>'+
+        '</div>'+
+      '</td>';
+
+    // Highlight row
+    if (c.rendPct >= 10)      tr.style.background = 'rgba(0,230,118,0.03)';
+    else if (c.rendPct <= -10) tr.style.background = 'rgba(255,61,90,0.03)';
+
+    tbody.appendChild(tr);
+  });
+}
+
+// ── SORT BY COLUMN ─────────────────────────────────────────
+function pfSortByCol(col, th) {
+  if (pfSortCol === col) { pfSortDir = -pfSortDir; }
+  else { pfSortCol = col; pfSortDir = -1; }
+  // Update header classes
+  document.querySelectorAll('#pfTable thead th').forEach(function(el){
+    el.classList.remove('sort-asc','sort-desc');
+  });
+  if (th) th.classList.add(pfSortDir === -1 ? 'sort-desc' : 'sort-asc');
+  pfRenderTable();
+}
+
+// ── FAVORITOS ──────────────────────────────────────────────
+function pfToggleFav(id) {
+  var favs = JSON.parse(localStorage.getItem('dubz_pf_favs') || '[]');
+  var idx = favs.indexOf(id);
+  if (idx === -1) favs.push(id); else favs.splice(idx, 1);
+  localStorage.setItem('dubz_pf_favs', JSON.stringify(favs));
+  pfRenderTable();
+}
+
+// ── MODAL ──────────────────────────────────────────────────
+function pfOpenAddModal() {
+  document.getElementById('pfModalTitle').textContent = '＋ AGREGAR POSICIÓN';
+  document.getElementById('pfEditId').value = '';
+  document.getElementById('pfFTicker').value = '';
+  document.getElementById('pfFNombre').value = '';
+  document.getElementById('pfFCantidad').value = '';
+  document.getElementById('pfFPrecioCompra').value = '';
+  document.getElementById('pfFPrecioActual').value = '';
+  document.getElementById('pfFFecha').value = new Date().toISOString().slice(0,10);
+  document.getElementById('pfFormError').style.display = 'none';
+  document.getElementById('pfFetchStatus').style.display = 'none';
+  document.getElementById('pfModalOverlay').classList.add('open');
+  setTimeout(function(){ document.getElementById('pfFTicker').focus(); }, 100);
+}
+
+function pfEditPosition(id) {
+  var pos = pfPositions.find(function(p){ return p.id === id; });
+  if (!pos) return;
+  document.getElementById('pfModalTitle').textContent = '✏ EDITAR POSICIÓN';
+  document.getElementById('pfEditId').value = id;
+  document.getElementById('pfFTicker').value = pos.ticker;
+  document.getElementById('pfFNombre').value = pos.nombre || '';
+  document.getElementById('pfFCantidad').value = pos.cantidad;
+  document.getElementById('pfFPrecioCompra').value = pos.precioCompra;
+  document.getElementById('pfFPrecioActual').value = pos.precioActual || '';
+  document.getElementById('pfFFecha').value = pos.fecha || '';
+  document.getElementById('pfFormError').style.display = 'none';
+  document.getElementById('pfFetchStatus').style.display = 'none';
+  document.getElementById('pfModalOverlay').classList.add('open');
+}
+
+function pfCloseModal(e) {
+  if (e.target === document.getElementById('pfModalOverlay')) pfCloseModalForce();
+}
+function pfCloseModalForce() {
+  document.getElementById('pfModalOverlay').classList.remove('open');
+}
+
+function pfSavePosition() {
+  var ticker = document.getElementById('pfFTicker').value.trim().toUpperCase().replace(/[^A-Z0-9.]/g,'');
+  var nombre = document.getElementById('pfFNombre').value.trim();
+  var cantidad = parseFloat(document.getElementById('pfFCantidad').value);
+  var precioCompra = parseFloat(document.getElementById('pfFPrecioCompra').value);
+  var precioActual = parseFloat(document.getElementById('pfFPrecioActual').value) || null;
+  var fecha = document.getElementById('pfFFecha').value;
+  var editId = document.getElementById('pfEditId').value;
+
+  var errEl = document.getElementById('pfFormError');
+  if (!ticker) { errEl.textContent = 'El ticker es obligatorio.'; errEl.style.display='block'; return; }
+  if (!cantidad || cantidad <= 0) { errEl.textContent = 'La cantidad debe ser mayor a 0.'; errEl.style.display='block'; return; }
+  if (!precioCompra || precioCompra <= 0) { errEl.textContent = 'El precio de compra debe ser mayor a 0.'; errEl.style.display='block'; return; }
+  errEl.style.display = 'none';
+
+  if (editId) {
+    var idx = pfPositions.findIndex(function(p){ return p.id === editId; });
+    if (idx !== -1) {
+      pfPositions[idx] = { id: editId, ticker, nombre, cantidad, precioCompra, precioActual, fecha };
+    }
+  } else {
+    pfPositions.push({ id: 'pf_' + Date.now(), ticker, nombre, cantidad, precioCompra, precioActual, fecha });
+  }
+
+  pfSave();
+  pfCloseModalForce();
+  // Fetch live price for new ticker
+  pfFetchLivePrices([ticker], function(){ pfRenderAll(); });
+  pfRenderAll();
+}
+
+function pfDeletePosition(id) {
+  if (!confirm('¿Eliminar esta posición?')) return;
+  pfPositions = pfPositions.filter(function(p){ return p.id !== id; });
+  pfSave();
+  pfRenderAll();
+}
+
+// ── FETCH PRECIO LIVE (modal) ──────────────────────────────
+function pfFetchPrice() {
+  var ticker = document.getElementById('pfFTicker').value.trim().toUpperCase();
+  if (!ticker) return;
+  var statusEl = document.getElementById('pfFetchStatus');
+  statusEl.textContent = '⟳ Buscando precio...';
+  statusEl.style.display = 'block';
+  statusEl.style.color = 'var(--accent)';
+  pfFetchLivePrices([ticker], function(results) {
+    var r = results && results[ticker];
+    if (r) {
+      document.getElementById('pfFPrecioActual').value = r.price.toFixed(4);
+      statusEl.textContent = '✓ Precio actualizado: U$D ' + r.price.toFixed(2) + (r.chgPct != null ? ' (' + (r.chgPct>=0?'+':'') + r.chgPct.toFixed(2) + '% hoy)' : '');
+      statusEl.style.color = 'var(--green)';
+    } else {
+      statusEl.textContent = '⚠ No se pudo obtener el precio. Ingresalo manualmente.';
+      statusEl.style.color = 'var(--yellow)';
+    }
+  });
+}
+
+// ── FETCH LIVE PRICES (Yahoo Finance via allorigins) ───────
+function pfFetchLivePrices(tickers, callback) {
+  var results = {};
+  var pending = tickers.length;
+  if (!pending) { if (callback) callback(results); return; }
+
+  tickers.forEach(function(ticker) {
+    var url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + ticker + '?interval=1d&range=1d';
+    var proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+    fetch(proxy)
+      .then(function(r){ return r.json(); })
+      .then(function(data) {
+        var meta = data && data.chart && data.chart.result && data.chart.result[0] && data.chart.result[0].meta;
+        if (meta && meta.regularMarketPrice) {
+          var price = meta.regularMarketPrice;
+          var prev  = meta.chartPreviousClose || meta.previousClose;
+          var chgPct = prev ? (price - prev) / prev * 100 : null;
+          pfLiveCache[ticker.toUpperCase()] = { price, chgPct, ts: Date.now() };
+          results[ticker] = { price, chgPct };
+        }
+      })
+      .catch(function(){})
+      .finally(function(){
+        pending--;
+        if (pending === 0 && callback) callback(results);
+      });
+  });
+}
+
+// ── REFRESH PRECIOS LIVE ───────────────────────────────────
+function pfRefreshLivePrices() {
+  var tickers = pfPositions.map(function(p){ return p.ticker.toUpperCase(); })
+    .filter(function(t,i,a){ return a.indexOf(t) === i; });
+  if (!tickers.length) return;
+  pfFetchLivePrices(tickers, function(){ pfRenderAll(); });
+}
+
+// ── EXPORT CSV ─────────────────────────────────────────────
+function pfExportCSV() {
+  var rows = [['Ticker','Nombre','Cantidad','P.Compra USD','P.Actual USD','Costo Total USD','Val.Actual USD','Rend. USD','Rend. %','Fecha','Indicador']];
+  pfPositions.forEach(function(pos) {
+    var c = pfCalc(pos);
+    var ind = c.rendPct >= 10 ? 'GANADORA' : c.rendPct <= -10 ? 'PERDEDORA' : 'NEUTRAL';
+    rows.push([pos.ticker, pos.nombre||'', pos.cantidad, pos.precioCompra, c.pa.toFixed(2),
+      c.costTotal.toFixed(2), c.valActual.toFixed(2), c.rendUsd.toFixed(2), c.rendPct.toFixed(2)+'%', pos.fecha||'', ind]);
+  });
+  var csv = rows.map(function(r){ return r.join(','); }).join('\n');
+  var blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a'); a.href=url; a.download='portafolio_dubz.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── INICIALIZAR PORTAFOLIO ─────────────────────────────────
+(function pfInit() {
+  pfLoad();
+  // Fetch live prices para posiciones existentes
+  var tickers = pfPositions.map(function(p){ return p.ticker.toUpperCase(); })
+    .filter(function(t,i,a){ return a.indexOf(t) === i; });
+  if (tickers.length) {
+    pfFetchLivePrices(tickers, function(){ pfRenderAll(); });
+  }
+  pfRenderAll();
+  // Auto-refresh precios cada 60 segundos cuando el tab está activo
+  setInterval(function(){
+    if (document.getElementById('tab-portfolio') && document.getElementById('tab-portfolio').classList.contains('active')) {
+      pfRefreshLivePrices();
+    }
+  }, 60000);
+})();
 </script>
 </body>
 </html>
