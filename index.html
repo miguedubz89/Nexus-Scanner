@@ -829,18 +829,38 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
         <div class="sc-card c4"><div class="sc-lbl">Cerca EMA200 (±3%)</div><div class="sc-num" id="n4">0</div><div class="sc-tags" id="t4"></div></div>
         <div class="sc-card c5"><div class="sc-lbl">Volumen Inusual 2x</div><div class="sc-num" id="n5">0</div><div class="sc-tags" id="t5"></div></div>
       </div>
+      <div style="padding:8px 12px;background:linear-gradient(135deg,rgba(0,212,255,0.06),rgba(0,153,204,0.03));border:1px solid rgba(0,212,255,0.2);border-radius:2px;font-family:var(--head);font-weight:900;font-size:12px;letter-spacing:3px;color:var(--accent);margin-bottom:8px">🌎 GLOBAL — MOVIMIENTOS DEL DÍA</div>
       <div class="movers-grid">
         <div>
-          <div class="mv-lbl">🟢 MAYORES SUBIDAS</div>
+          <div class="mv-lbl">🟢 MAYORES SUBIDAS GLOBAL</div>
           <div class="tbl-wrap"><table class="dt"><thead><tr>
             <th style="width:80px">Ticker</th><th>Precio</th><th>% Día</th><th>RSI</th><th>Volumen</th>
           </tr></thead><tbody id="bGain"></tbody></table></div>
         </div>
         <div>
-          <div class="mv-lbl">🔴 MAYORES CAÍDAS</div>
+          <div class="mv-lbl">🔴 MAYORES CAÍDAS GLOBAL</div>
           <div class="tbl-wrap"><table class="dt"><thead><tr>
             <th style="width:80px">Ticker</th><th>Precio</th><th>% Día</th><th>RSI</th><th>Volumen</th>
           </tr></thead><tbody id="bLoss"></tbody></table></div>
+        </div>
+      </div>
+
+      <!-- MERVAL MOVERS -->
+      <div style="margin-top:18px">
+        <div style="padding:8px 12px;background:linear-gradient(135deg,rgba(0,230,118,0.07),rgba(0,180,90,0.03));border:1px solid rgba(0,230,118,0.25);border-radius:2px;font-family:var(--head);font-weight:900;font-size:12px;letter-spacing:3px;color:var(--green);margin-bottom:8px">🇦🇷 MERVAL — MOVIMIENTOS DEL DÍA</div>
+        <div class="movers-grid">
+          <div>
+            <div class="mv-lbl" style="color:var(--green)">🟢 MAYORES SUBIDAS MERVAL</div>
+            <div class="tbl-wrap"><table class="dt"><thead><tr>
+              <th style="width:80px">Ticker</th><th>Precio</th><th>% Día</th><th>RSI</th><th>Volumen</th>
+            </tr></thead><tbody id="bGainAR"></tbody></table></div>
+          </div>
+          <div>
+            <div class="mv-lbl" style="color:var(--red)">🔴 MAYORES CAÍDAS MERVAL</div>
+            <div class="tbl-wrap"><table class="dt"><thead><tr>
+              <th style="width:80px">Ticker</th><th>Precio</th><th>% Día</th><th>RSI</th><th>Volumen</th>
+            </tr></thead><tbody id="bLossAR"></tbody></table></div>
+          </div>
         </div>
       </div>
     </div>
@@ -892,7 +912,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
               <th onclick="tsMkt('ar','distEma200',this)">Dist EMA200<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('ar','volume',this)">Volumen<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('ar','avgVol20',this)">VolProm20<span class="sort-icon">⇅</span></th>
-              <th onclick="tsMkt('ar','beta',this)">Beta<span class="sort-icon">⇅</span></th>
+              <th onclick="tsMkt('ar','marketCap',this)">Cap. Mkt<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('ar','mom12m',this)">Mom 12M<span class="sort-icon">⇅</span></th>
               <th style="min-width:120px">&#9670; CANSLIM</th>
               <th style="width:50px;text-align:center">📝</th>
@@ -922,7 +942,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
               <th onclick="tsMkt('gl','distEma200',this)">Dist EMA200<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','volume',this)">Volumen<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','avgVol20',this)">VolProm20<span class="sort-icon">⇅</span></th>
-              <th onclick="tsMkt('gl','beta',this)">Beta<span class="sort-icon">⇅</span></th>
+              <th onclick="tsMkt('gl','marketCap',this)">Cap. Mkt<span class="sort-icon">⇅</span></th>
               <th onclick="tsMkt('gl','mom12m',this)">Mom 12M<span class="sort-icon">⇅</span></th>
               <th style="min-width:120px">&#9670; CANSLIM</th>
               <th style="width:50px;text-align:center">📝</th>
@@ -1257,6 +1277,28 @@ var SECTORS = {
   BLK:'Gestión de Activos',SCHW:'Gestión de Activos',MKTX:'Gestión de Activos',
   NDAQ:'Gestión de Activos',ICE:'Gestión de Activos',CME:'Gestión de Activos',
   CBOE:'Gestión de Activos',SPGI:'Gestión de Activos',MCO:'Gestión de Activos',
+
+  // ── Antes en "Otros" — ahora correctamente clasificados ──
+  // Finanzas
+  'B':'Finanzas',                     // Bank of New York Mellon
+  // Materiales
+  'VALE':'Materiales',                 // Vale S.A. — minería hierro y metales base
+  'LAC':'Materiales',                  // Lithium Americas — litio
+  // Consumo Discrecional
+  'ARCO':'Consumo Discrecional',       // Arcos Dorados — McDonald's Latinoamérica
+  // Software / Servicios
+  'ADP':'Software',                    // Automatic Data Processing
+  // IA & Big Data
+  'BIDU':'IA & Big Data',              // Baidu — motor de búsqueda e IA China
+  // Consumo Básico
+  'DEO':'Consumo Básico',              // Diageo — bebidas alcohólicas
+  // ETFs
+  'URA':'ETF',                         // Global X Uranium ETF
+  'ETHA':'ETF',                        // iShares Ethereum Trust ETF
+  // Energía
+  'OKLO':'Energía',                    // Oklo — energía nuclear avanzada
+  'PBR':'Energía',                     // Petrobras — petróleo y gas Brasil
+  'PBR.A':'Energía',                   // Petrobras preferred
 };
 var SEC_COLOR={
   ETF:'#00d4ff',
@@ -1604,9 +1646,29 @@ function setCard(id,arr){
 }
 
 function renderMovers(){
-  var sorted=filtered.slice().sort(function(a,b){return b.chgPct-a.chgPct});
-  document.getElementById('bGain').innerHTML=sorted.slice(0,5).map(mRow).join('');
-  document.getElementById('bLoss').innerHTML=sorted.slice(-5).reverse().map(mRow).join('');
+  var glData = filtered.filter(function(d){ return !isArgentineTicker(d.symbol); });
+  var arData = filtered.filter(function(d){ return isArgentineTicker(d.symbol); });
+
+  // Global movers
+  var glSorted = glData.slice().sort(function(a,b){ return b.chgPct - a.chgPct; });
+  document.getElementById('bGain').innerHTML = glSorted.slice(0,5).map(mRow).join('');
+  document.getElementById('bLoss').innerHTML = glSorted.slice(-5).reverse().map(mRow).join('');
+
+  // Merval movers
+  var arSorted = arData.slice().sort(function(a,b){ return b.chgPct - a.chgPct; });
+  var bGainAR = document.getElementById('bGainAR');
+  var bLossAR = document.getElementById('bLossAR');
+  if (bGainAR) bGainAR.innerHTML = arSorted.slice(0,5).map(mRowAR).join('') ||
+    '<tr><td colspan="5" style="color:var(--text-dim);text-align:center;padding:16px;font-family:var(--mono);font-size:12px">Sin tickers Merval cargados</td></tr>';
+  if (bLossAR) bLossAR.innerHTML = arSorted.slice(-5).reverse().map(mRowAR).join('') ||
+    '<tr><td colspan="5" style="color:var(--text-dim);text-align:center;padding:16px;font-family:var(--mono);font-size:12px">Sin tickers Merval cargados</td></tr>';
+}
+function mRowAR(d){
+  var sym = dispSym(d.symbol);
+  return '<tr class="'+(d._flash==='up'?'flu':d._flash==='dn'?'fld':'')+'">'+
+    '<td><div class="tk-cell"><div class="sec-bar" style="background:var(--green)"></div><span class="tk-sym">'+sym+'</span><span class="ars-tag">ARS</span></div></td>'+
+    '<td style="color:'+(d.chgPct>=0?'var(--green)':'var(--red)')+'">$\u00a0'+fp(d.price)+'</td>'+
+    '<td>'+chipChg(d.chgPct)+'</td><td>'+rsiCell(d.rsi)+'</td><td>'+fv(d.volume)+'</td></tr>';
 }
 function mRow(d){
   return '<tr class="'+(d._flash==='up'?'flu':d._flash==='dn'?'fld':'')+'">'+
@@ -1956,7 +2018,7 @@ function renderAllTab() {
       '<td>'+distCell(d.distEma200)+'</td>' +
       '<td>'+fv(d.volume)+'</td>' +
       '<td>'+fv(d.avgVol20)+'</td>' +
-      '<td>'+(d.beta?f2(d.beta):'--')+'</td>' +
+      '<td>'+fcap(d.marketCap)+'</td>' +
       '<td>'+momCell(d.mom12m != null ? d.mom12m : d.mom6m)+'</td>' +
       '<td>'+canslimCell(d)+'</td>' +
       '<td style="text-align:center">'+getNoteIcon(rawSym)+'</td>' +
@@ -1977,7 +2039,7 @@ function renderAllTab() {
       '<td>'+distCell(d.distEma200)+'</td>' +
       '<td>'+fv(d.volume)+'</td>' +
       '<td>'+fv(d.avgVol20)+'</td>' +
-      '<td>'+(d.beta?f2(d.beta):'--')+'</td>' +
+      '<td>'+fcap(d.marketCap)+'</td>' +
       '<td>'+momCell(d.mom12m != null ? d.mom12m : d.mom6m)+'</td>' +
       '<td>'+canslimCell(d)+'</td>' +
       '<td style="text-align:center">'+getNoteIcon(d.symbol)+'</td>' +
