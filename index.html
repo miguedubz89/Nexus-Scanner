@@ -1851,15 +1851,51 @@ function loadAndRefresh() {
   cargarCompleto();
 }
 
+// ── CACHE DE TICKERS (sessionStorage, TTL 5 min) ─────
+var TICKER_CACHE_KEY = 'dubz_ticker_cache';
+var TICKER_CACHE_TTL = 5 * 60 * 1000; // 5 minutos en ms
+
+function saveTickerCache(data) {
+  try {
+    sessionStorage.setItem(TICKER_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data }));
+  } catch(e) {}
+}
+
+function loadTickerCache() {
+  try {
+    var raw = sessionStorage.getItem(TICKER_CACHE_KEY);
+    if (!raw) return null;
+    var obj = JSON.parse(raw);
+    if (!obj || !obj.data || !obj.ts) return null;
+    if (Date.now() - obj.ts > TICKER_CACHE_TTL) return null; // expirado
+    return obj.data;
+  } catch(e) { return null; }
+}
+
 async function cargarCompleto() {
   if (!tickers.length) return;
+
+  // ── Mostrar cache inmediatamente si existe (< 5 min) ──
+  var cached = loadTickerCache();
+  if (cached && cached.length) {
+    allData = cached;
+    applyFilters();
+    buildTape();
+    startCountdown();
+    document.getElementById('expInfo').textContent = allData.length+' tickers | Cache: '+new Date().toLocaleTimeString('es-AR')+' (actualizando...)';
+    document.getElementById('progress-txt').textContent = allData.length+' tickers (cache)';
+  }
+
   var ok = await checkServer();
   if (!ok) {
     document.getElementById('loadStatus').textContent = 'Servidor no disponible. Iniciá server.py';
+    if (!cached) return;
+    setStatus('err','SIN SERVIDOR (mostrando cache)');
     return;
   }
-  setStatus('loading', 'CARGANDO...');
-  document.getElementById('progressWrap').style.display = 'block';
+
+  setStatus('loading', cached ? 'ACTUALIZANDO...' : 'CARGANDO...');
+  if (!cached) document.getElementById('progressWrap').style.display = 'block';
   var total = tickers.length, done = 0;
   var nuevaData = [];
   for (var i = 0; i < tickers.length; i += 3) {
@@ -1867,11 +1903,14 @@ async function cargarCompleto() {
     var results = await Promise.all(batch.map(fetchQuote));
     results.forEach(function(r){ if(r) nuevaData.push(r); });
     done += batch.length;
-    document.getElementById('progressFill').style.width = Math.round(done/total*100)+'%';
-    document.getElementById('loadStatus').textContent = 'Cargando '+done+'/'+total+'...';
-    document.getElementById('progress-txt').textContent = done+'/'+total+' tickers';
+    if (!cached) {
+      document.getElementById('progressFill').style.width = Math.round(done/total*100)+'%';
+      document.getElementById('loadStatus').textContent = 'Cargando '+done+'/'+total+'...';
+      document.getElementById('progress-txt').textContent = done+'/'+total+' tickers';
+    }
   }
   allData = nuevaData;
+  saveTickerCache(allData); // guardar en cache
   document.getElementById('progressWrap').style.display = 'none';
   document.getElementById('loadStatus').textContent = '';
   document.getElementById('progress-txt').textContent = allData.length+' tickers';
@@ -1906,6 +1945,7 @@ async function doRefresh() {
     });
   }
   setStatus('live', 'LIVE — Yahoo Finance');
+  saveTickerCache(allData); // actualizar cache tras refresh
   applyFilters();
   buildTape();
   startCountdown();
@@ -2571,6 +2611,22 @@ function startCountdown(){
     if(cdSecs<=0&&autoOn)doRefresh();
   },1000);
 }
+
+// ── VOLVER DE BACKGROUND (celular) ───────────────
+// Si la pestaña vuelve a primer plano y el cache es fresco (< 5 min),
+// solo actualiza precios. Si está vencido, recarga completo sin la barra de progreso.
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState !== 'visible') return;
+  if (!allData.length) return; // todavía cargando, no hacer nada
+  var cached = loadTickerCache();
+  if (cached && cached.length) {
+    // Cache fresco → solo refresh de precios (rápido)
+    doRefresh();
+  } else {
+    // Cache vencido → recarga completa (silenciosa, sin barra de progreso)
+    cargarCompleto();
+  }
+});
 
 function toggleAuto(){
   autoOn=!autoOn;
