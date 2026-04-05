@@ -64,6 +64,41 @@
     return null;
   };
 
+  // ── Guardar portafolio en Firestore ───────────────
+  window.savePortfolioCloud = async function(data) {
+    const user = auth.currentUser;
+    if (!user) return;
+    try {
+      await setDoc(doc(db, 'users', user.uid), {
+        portfolio: data.positions,
+        pf_mep:    data.mep,
+        pf_liq_ars: data.liqARS,
+        pf_liq_usd: data.liqUSD,
+        pf_view:   data.view
+      }, { merge: true });
+    } catch(e) { console.warn('Error guardando portafolio en nube:', e); }
+  };
+
+  // ── Cargar portafolio de Firestore ────────────────
+  window.loadPortfolioCloud = async function(uid) {
+    try {
+      const snap = await getDoc(doc(db, 'users', uid));
+      if (snap.exists()) {
+        const d = snap.data();
+        if (d.portfolio && Array.isArray(d.portfolio)) {
+          return {
+            positions: d.portfolio,
+            mep:       d.pf_mep      || null,
+            liqARS:    d.pf_liq_ars  || 0,
+            liqUSD:    d.pf_liq_usd  || 0,
+            view:      d.pf_view     || 'USD'
+          };
+        }
+      }
+    } catch(e) { console.warn('Error cargando portafolio de nube:', e); }
+    return null;
+  };
+
   // ── Auth state observer ────────────────────────────
   onAuthStateChanged(auth, async (user) => {
     if (user) {
@@ -90,6 +125,12 @@
         window.saveTickersCloud(window.tickerList);
       }
       if (window.renderTickerList) window.renderTickerList();
+
+      // Cargar portafolio desde la nube (tiene prioridad sobre localStorage)
+      const cloudPf = await window.loadPortfolioCloud(user.uid);
+      if (cloudPf) {
+        window._cloudPortfolio = cloudPf;
+      }
 
       // Iniciar la app
       if (window.initApp) window.initApp();
@@ -2876,15 +2917,33 @@ function pfToView(valor, monedaOrigen) {
 // ── LOAD / SAVE ───────────────────────────────────────────
 function pfLoad() {
   try {
-    var raw = localStorage.getItem('dubz_portfolio');
-    var parsed = raw ? JSON.parse(raw) : [];
-    pfPositions = Array.isArray(parsed) ? parsed : [];
-    // Migrar posiciones viejas sin campo moneda (asumirlas USD)
-    pfPositions.forEach(function(p){ if (!p.moneda) p.moneda = 'USD'; });
-    pfMepRate   = parseFloat(localStorage.getItem('dubz_mep') || '1200');
-    pfLiqARS    = parseFloat(localStorage.getItem('dubz_liq_ars') || '0');
-    pfLiqUSD_val= parseFloat(localStorage.getItem('dubz_liq_usd') || '0');
-    pfViewCurrency = localStorage.getItem('dubz_pf_view') || 'USD';
+    // Prioridad: datos cargados desde Firestore en el login
+    if (window._cloudPortfolio) {
+      var cp = window._cloudPortfolio;
+      pfPositions = Array.isArray(cp.positions) ? cp.positions : [];
+      pfPositions.forEach(function(p){ if (!p.moneda) p.moneda = 'USD'; });
+      if (cp.mep)    pfMepRate    = parseFloat(cp.mep);
+      if (cp.liqARS) pfLiqARS     = parseFloat(cp.liqARS);
+      if (cp.liqUSD) pfLiqUSD_val = parseFloat(cp.liqUSD);
+      if (cp.view)   pfViewCurrency = cp.view;
+      window._cloudPortfolio = null; // consumido
+      // Sincronizar también en localStorage como fallback
+      localStorage.setItem('dubz_portfolio', JSON.stringify(pfPositions));
+      localStorage.setItem('dubz_mep',       pfMepRate);
+      localStorage.setItem('dubz_liq_ars',   pfLiqARS);
+      localStorage.setItem('dubz_liq_usd',   pfLiqUSD_val);
+      localStorage.setItem('dubz_pf_view',   pfViewCurrency);
+    } else {
+      // Fallback a localStorage (mismo dispositivo / sin internet)
+      var raw = localStorage.getItem('dubz_portfolio');
+      var parsed = raw ? JSON.parse(raw) : [];
+      pfPositions = Array.isArray(parsed) ? parsed : [];
+      pfPositions.forEach(function(p){ if (!p.moneda) p.moneda = 'USD'; });
+      pfMepRate   = parseFloat(localStorage.getItem('dubz_mep') || '1200');
+      pfLiqARS    = parseFloat(localStorage.getItem('dubz_liq_ars') || '0');
+      pfLiqUSD_val= parseFloat(localStorage.getItem('dubz_liq_usd') || '0');
+      pfViewCurrency = localStorage.getItem('dubz_pf_view') || 'USD';
+    }
     var mepEl = document.getElementById('pfMepRate');
     if (mepEl) mepEl.value = pfMepRate;
     var laqEl = document.getElementById('pfLiquidezARS');
@@ -2900,6 +2959,16 @@ function pfSave() {
   localStorage.setItem('dubz_liq_ars',    pfLiqARS);
   localStorage.setItem('dubz_liq_usd',    pfLiqUSD_val);
   localStorage.setItem('dubz_pf_view',    pfViewCurrency);
+  // Sincronizar con Firestore (cloud) para que funcione en todos los dispositivos
+  if (window.savePortfolioCloud) {
+    window.savePortfolioCloud({
+      positions: pfPositions,
+      mep:       pfMepRate,
+      liqARS:    pfLiqARS,
+      liqUSD:    pfLiqUSD_val,
+      view:      pfViewCurrency
+    });
+  }
 }
 
 // ── TOGGLE VISTA ──────────────────────────────────────────
@@ -2985,13 +3054,17 @@ function pfFmtDisplay(val) {
 function pfSym() { return pfViewCurrency === 'ARS' ? '$' : 'U$D'; }
 
 // ── PRECIO ACTUAL en moneda NATIVA de la posición ─────────
-// El live cache siempre guarda en USD (precio de Yahoo).
-// Para posiciones ARS, live no aplica directamente salvo que haya precio guardado.
+// El live cache guarda precios en la moneda nativa del ticker:
+//   USD → priceUSD directo de Yahoo
+//   ARS → priceARS de Yahoo Finance con sufijo .BA
 function pfGetCurrentPriceNative(pos) {
-  var cached = pfLiveCache[(pos.ticker||'').toUpperCase()];
+  var tk = (pos.ticker||'').toUpperCase();
+  var cached = pfLiveCache[tk];
   // Si la posición es USD, el cache de Yahoo es directo
   if (pos.moneda === 'USD' && cached && cached.priceUSD) return cached.priceUSD;
-  // Si la posición es ARS y hay precio actual guardado manualmente, usarlo
+  // Si la posición es ARS, usar el precio ARS del cache (.BA)
+  if (pos.moneda === 'ARS' && cached && cached.priceARS) return cached.priceARS;
+  // Fallback: precio actual manual o precio de compra
   if (pos.precioActual && parseFloat(pos.precioActual) > 0) return parseFloat(pos.precioActual);
   return parseFloat(pos.precioCompra) || 0;
 }
@@ -3006,7 +3079,7 @@ function pfCalc(pos) {
   var rendNat  = valNat - costNat;
   var rendPct  = costNat > 0 ? (rendNat / costNat * 100) : 0;
   var cached   = pfLiveCache[(pos.ticker||'').toUpperCase()];
-  var chgPct   = (pos.moneda === 'USD' && cached) ? cached.chgPct : null;
+  var chgPct   = cached ? cached.chgPct : null;
   return {
     costNat: costNat, valNat: valNat, rendNat: rendNat, rendPct: rendPct,
     chgPct: chgPct, pa: pa,
@@ -3317,8 +3390,9 @@ function pfSavePosition() {
   }
   pfSave();
   pfCloseModalForce();
-  // Solo hacer fetch live si es USD
-  if (moneda==='USD') pfFetchLivePrices([ticker], function(){ pfRenderAll(); });
+  // Fetch live para cualquier moneda
+  var mMap={}; mMap[ticker]=moneda;
+  pfFetchLivePrices([ticker], function(){ pfRenderAll(); }, mMap);
   pfRenderAll();
 }
 
@@ -3343,29 +3417,30 @@ function pfFetchPrice() {
   var ticker = (document.getElementById('pfFTicker').value||'').trim().toUpperCase();
   var moneda = document.getElementById('pfFMoneda').value;
   if (!ticker) { alert('Ingresá un ticker primero.'); return; }
-  if (moneda === 'ARS') {
-    var sEl = document.getElementById('pfFetchStatus');
-    sEl.textContent = '⚠ Los precios ARS (CEDEARs) no se pueden obtener automáticamente. Ingresalo desde Balanz/broker.';
-    sEl.style.display='block'; sEl.style.color='var(--yellow)'; return;
-  }
   var statusEl = document.getElementById('pfFetchStatus');
-  statusEl.textContent = '⟳ Buscando precio USD para ' + ticker + '...';
+  var label = moneda === 'ARS' ? (ticker + '.BA en pesos') : ('USD para ' + ticker);
+  statusEl.textContent = '⟳ Buscando precio ' + label + '...';
   statusEl.style.display = 'block'; statusEl.style.color = 'var(--accent)';
+  var mMap={}; mMap[ticker]=moneda;
   pfFetchLivePrices([ticker], function(results) {
     var r = results && results[ticker];
-    if (r && r.priceUSD) {
-      document.getElementById('pfFPrecioActual').value = r.priceUSD.toFixed(4);
-      statusEl.textContent = '✓ U$D ' + r.priceUSD.toFixed(2) + (r.chgPct!=null?' ('+(r.chgPct>=0?'+':'')+r.chgPct.toFixed(2)+'% hoy)':'');
+    var price = r && (moneda === 'ARS' ? (pfLiveCache[ticker]&&pfLiveCache[ticker].priceARS) : r.priceUSD);
+    if (price) {
+      document.getElementById('pfFPrecioActual').value = price.toFixed(4);
+      var sym = moneda === 'ARS' ? '$ ' : 'U$D ';
+      statusEl.textContent = '✓ ' + sym + price.toFixed(2) + (r.chgPct!=null?' ('+(r.chgPct>=0?'+':'')+r.chgPct.toFixed(2)+'% hoy)':'');
       statusEl.style.color = 'var(--green)';
     } else {
       statusEl.textContent = '⚠ No se pudo obtener. Ingresalo manualmente.';
       statusEl.style.color = 'var(--yellow)';
     }
-  });
+  }, mMap);
 }
 
-// ── FETCH LIVE PRICES USD (Yahoo vía múltiples proxies) ───
-function pfFetchLivePrices(tickers, callback) {
+// ── FETCH LIVE PRICES (Yahoo vía múltiples proxies) ───
+// Acepta tickers con moneda: USD → se usa tal cual; ARS → se agrega sufijo .BA
+function pfFetchLivePrices(tickers, callback, monedaMap) {
+  // monedaMap: { TICKER: 'ARS'|'USD' } — si no se pasa, se asume USD
   var results = {}, pending = tickers.length;
   if (!pending) { if(callback)callback(results); return; }
 
@@ -3380,7 +3455,12 @@ function pfFetchLivePrices(tickers, callback) {
           var p = meta.regularMarketPrice;
           var prev = meta.chartPreviousClose||meta.previousClose||meta.regularMarketPreviousClose;
           var chg = prev ? (p-prev)/prev*100 : null;
-          pfLiveCache[ticker] = { priceUSD: p, chgPct: chg, ts: Date.now() };
+          var moneda = monedaMap && monedaMap[ticker] ? monedaMap[ticker] : 'USD';
+          if (moneda === 'ARS') {
+            pfLiveCache[ticker] = { priceARS: p, chgPct: chg, ts: Date.now() };
+          } else {
+            pfLiveCache[ticker] = { priceUSD: p, chgPct: chg, ts: Date.now() };
+          }
           results[ticker] = { priceUSD: p, chgPct: chg };
           onOk();
         } else { onFail(); }
@@ -3389,7 +3469,10 @@ function pfFetchLivePrices(tickers, callback) {
 
   tickers.forEach(function(ticker) {
     var tk = ticker.toUpperCase();
-    var yhUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(tk)+'?interval=1d&range=1d&includePrePost=false';
+    var moneda = monedaMap && monedaMap[tk] ? monedaMap[tk] : 'USD';
+    // Para ARS (CEDEARs en BYMA), agregar sufijo .BA
+    var yhTicker = moneda === 'ARS' ? tk + '.BA' : tk;
+    var yhUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(yhTicker)+'?interval=1d&range=1d&includePrePost=false';
     tryProxy(tk, 'https://api.allorigins.win/raw?url='+encodeURIComponent(yhUrl),
       function(){ done(); },
       function(){
@@ -3407,13 +3490,15 @@ function pfFetchLivePrices(tickers, callback) {
 }
 
 function pfRefreshLivePrices() {
-  var tickers=[];
+  var tickers=[], monedaMap={};
   pfPositions.forEach(function(p){
-    // Solo fetch USD; para ARS no aplica Yahoo
-    if ((p.moneda||'ARS')==='USD') { var t=(p.ticker||'').toUpperCase(); if(t&&tickers.indexOf(t)===-1)tickers.push(t); }
+    var t=(p.ticker||'').toUpperCase();
+    if(t){ tickers.push(t); monedaMap[t]=(p.moneda||'USD'); }
   });
+  // Deduplicar
+  tickers=tickers.filter(function(t,i,a){return a.indexOf(t)===i;});
   if(!tickers.length)return;
-  pfFetchLivePrices(tickers, function(){ pfRenderAll(); });
+  pfFetchLivePrices(tickers, function(){ pfRenderAll(); }, monedaMap);
 }
 
 // ── EXPORT CSV ─────────────────────────────────────────────
@@ -3475,9 +3560,10 @@ function pfImportCSV() {
     var msg='✓ '+added+' posiciones importadas.'; if(skipped>0)msg+=' '+skipped+' duplicadas omitidas.';
     document.getElementById('pfImportResult').textContent=msg;
     document.getElementById('pfImportResult').style.color='var(--green)';
-    // Solo fetch USD
-    var newTickers=imported.filter(function(p){return (p.moneda||'ARS')==='USD';}).map(function(p){return p.ticker;}).filter(function(t,i,a){return a.indexOf(t)===i;});
-    if(newTickers.length)pfFetchLivePrices(newTickers, function(){pfRenderAll();});
+    // Fetch live para todos los tickers importados (USD y ARS)
+    var newTickers=imported.map(function(p){return p.ticker;}).filter(function(t,i,a){return a.indexOf(t)===i;});
+    var newMMap={}; imported.forEach(function(p){newMMap[p.ticker]=(p.moneda||'ARS');});
+    if(newTickers.length)pfFetchLivePrices(newTickers, function(){pfRenderAll();}, newMMap);
     pfRenderAll();
     setTimeout(function(){pfCloseImportForce();},2500);
   };
@@ -3580,10 +3666,11 @@ function pfNormalizeDate(s) {
     if(bu)bu.classList.toggle('active',pfViewCurrency==='USD');
     if(ba)ba.classList.toggle('active',pfViewCurrency==='ARS');
     pfRenderAll();
-    // Fetch solo posiciones USD
-    var tUSD=[];
-    pfPositions.forEach(function(p){if((p.moneda||'ARS')==='USD'){var t=(p.ticker||'').toUpperCase();if(t&&tUSD.indexOf(t)===-1)tUSD.push(t);}});
-    if(tUSD.length)pfFetchLivePrices(tUSD, function(){pfRenderAll();});
+    // Fetch precios live para todas las posiciones (USD y ARS)
+    var tAll=[], mMap={};
+    pfPositions.forEach(function(p){var t=(p.ticker||'').toUpperCase();if(t){tAll.push(t);mMap[t]=(p.moneda||'USD');}});
+    tAll=tAll.filter(function(t,i,a){return a.indexOf(t)===i;});
+    if(tAll.length)pfFetchLivePrices(tAll, function(){pfRenderAll();}, mMap);
     pfFetchMepAuto();
     setInterval(function(){var el=document.getElementById('tab-portfolio');if(el&&el.classList.contains('active'))pfRefreshLivePrices();},60000);
     setInterval(function(){pfFetchMepAuto();},300000);
