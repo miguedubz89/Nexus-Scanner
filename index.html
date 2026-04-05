@@ -706,8 +706,17 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 .pf-live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);animation:pulse 1.5s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
-/* Responsive */
-@media(max-width:900px){
+/* View USD/ARS tabs */
+.pf-view-tabs{display:flex;border:1px solid var(--border2);border-radius:2px;overflow:hidden}
+.pf-view-btn{background:var(--bg3);border:none;color:var(--text-dim);font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:2px;padding:5px 14px;cursor:pointer;transition:all .15s}
+.pf-view-btn.active{background:rgba(0,212,255,0.15);color:var(--accent)}
+.pf-view-btn:first-child{border-right:1px solid var(--border2)}
+/* Active ARS = yellow */
+#pfBtnARS.active{background:rgba(255,214,0,0.12);color:var(--yellow)}
+/* Currency selector in modal */
+.pf-cur-sel-btn{background:var(--bg3);border:1px solid var(--border2);color:var(--text-dim);font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:1px;padding:6px 14px;border-radius:2px;cursor:pointer;transition:all .15s;flex:1}
+.pf-cur-sel-btn.active{background:rgba(255,214,0,0.12);color:var(--yellow);border-color:var(--yellow2)}
+.pf-cur-sel-btn:hover{border-color:var(--accent);color:var(--accent)}
   .pf-summary-grid{grid-template-columns:repeat(2,1fr)}
   .pf-form-grid{grid-template-columns:1fr}
   .pf-search-input{width:130px}
@@ -1065,16 +1074,13 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
       <!-- TOP TOOLBAR -->
       <div class="pf-toolbar">
         <div class="pf-toolbar-left">
-          <div class="pf-currency-toggle">
-            <span class="pf-cur-label">USD</span>
-            <label class="pf-switch">
-              <input type="checkbox" id="pfCurrencyToggle" onchange="pfToggleCurrency()">
-              <span class="pf-slider"></span>
-            </label>
-            <span class="pf-cur-label">ARS</span>
+          <!-- Toggle USD / ARS -->
+          <div class="pf-view-tabs">
+            <button class="pf-view-btn active" id="pfBtnUSD" onclick="pfSetView('USD')">USD</button>
+            <button class="pf-view-btn" id="pfBtnARS" onclick="pfSetView('ARS')">ARS</button>
           </div>
           <div class="pf-mep-wrap">
-            <span style="color:var(--text-dim);font-family:var(--mono);font-size:11px;letter-spacing:1px">USD MEP:</span>
+            <span style="color:var(--text-dim);font-family:var(--mono);font-size:11px;letter-spacing:1px">MEP:</span>
             <input type="number" id="pfMepRate" class="pf-mep-input" value="1200" min="1" onchange="pfRefreshAll()" title="Tipo de cambio dólar MEP">
             <button id="pfMepAutoBtn" class="btn btn-a btn-sm" onclick="pfFetchMepAuto()" title="Obtener MEP automático" style="font-size:11px;padding:3px 8px">⟳ AUTO</button>
           </div>
@@ -1121,14 +1127,21 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
             <div class="pf-sum-sub">vs costo total</div>
           </div>
         </div>
+        <!-- LIQUIDEZ DUAL ARS + USD -->
         <div class="pf-sum-card pf-liquidity-card">
           <div class="pf-sum-icon">💵</div>
           <div class="pf-sum-body">
             <div class="pf-sum-lbl">Liquidez</div>
             <div class="pf-sum-val" id="pfLiquidezDisplay">—</div>
-            <div style="display:flex;gap:5px;align-items:center;margin-top:4px">
-              <input type="number" id="pfLiquidez" class="pf-mep-input" placeholder="0" min="0" onchange="pfUpdateLiquidez()" style="width:110px" title="Liquidez disponible en USD">
-              <span style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">USD</span>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
+              <div>
+                <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:1px;margin-bottom:3px">PESOS $</div>
+                <input type="number" id="pfLiquidezARS" class="pf-mep-input" placeholder="0" min="0" onchange="pfUpdateLiquidez()" style="width:100%" title="Liquidez en pesos argentinos">
+              </div>
+              <div>
+                <div style="font-family:var(--mono);font-size:9px;color:var(--accent);letter-spacing:1px;margin-bottom:3px">DÓLARES U$D</div>
+                <input type="number" id="pfLiquidezUSD" class="pf-mep-input" placeholder="0" min="0" onchange="pfUpdateLiquidez()" style="width:100%;border-color:var(--accent2)" title="Liquidez en dólares">
+              </div>
             </div>
           </div>
         </div>
@@ -1192,22 +1205,31 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           <div class="pf-form-grid">
             <div class="pf-field">
               <label>Ticker *</label>
-              <input type="text" id="pfFTicker" class="pf-input" placeholder="Ej: AAPL, GGAL" maxlength="12" style="text-transform:uppercase">
+              <input type="text" id="pfFTicker" class="pf-input" placeholder="Ej: AAPL, HPQ, MO" maxlength="12" style="text-transform:uppercase">
             </div>
             <div class="pf-field">
               <label>Nombre / Descripción</label>
-              <input type="text" id="pfFNombre" class="pf-input" placeholder="Ej: Apple Inc.">
+              <input type="text" id="pfFNombre" class="pf-input" placeholder="Ej: Hewlett Packard">
             </div>
             <div class="pf-field">
               <label>Cantidad *</label>
-              <input type="number" id="pfFCantidad" class="pf-input" placeholder="100" min="0" step="any">
+              <input type="number" id="pfFCantidad" class="pf-input" placeholder="162" min="0" step="any">
+            </div>
+            <!-- Moneda de la posición -->
+            <div class="pf-field">
+              <label>Moneda de los precios *</label>
+              <div style="display:flex;gap:6px">
+                <button class="pf-cur-sel-btn active" id="pfCurBtnARS" onclick="pfSelectCurrency('ARS')">$ ARS</button>
+                <button class="pf-cur-sel-btn" id="pfCurBtnUSD" onclick="pfSelectCurrency('USD')">U$D USD</button>
+              </div>
+              <input type="hidden" id="pfFMoneda" value="ARS">
             </div>
             <div class="pf-field">
-              <label>Precio de Compra (USD) *</label>
-              <input type="number" id="pfFPrecioCompra" class="pf-input" placeholder="150.00" min="0" step="any">
+              <label>Precio de Compra <span id="pfFPCLabel" style="color:var(--yellow)">(ARS)</span> *</label>
+              <input type="number" id="pfFPrecioCompra" class="pf-input" placeholder="27.708,89" min="0" step="any">
             </div>
             <div class="pf-field">
-              <label>Precio Actual (USD)</label>
+              <label>Precio Actual <span id="pfFPALabel" style="color:var(--yellow)">(ARS)</span></label>
               <div style="display:flex;gap:6px">
                 <input type="number" id="pfFPrecioActual" class="pf-input" placeholder="Auto" min="0" step="any" style="flex:1">
                 <button class="btn btn-a btn-sm" onclick="pfFetchPrice()" title="Obtener precio en tiempo real">⟳ LIVE</button>
@@ -2809,21 +2831,22 @@ function canslimCell(d) {
 // No hacer window.onload — la app se inicia desde Firebase onAuthStateChanged
 
 /* ═══════════════════════════════════════════════════════════════════
-   PORTAFOLIO v2 — Gestión de inversiones en acciones y CEDEARs
-   ✓ Números completos sin abreviar
-   ✓ Dólar MEP automático vía API pública
-   ✓ Precio live con múltiples proxies
-   ✓ Fix bug render (MO no aparecía)
-   ✓ Import CSV Balanz / Bull Market / genérico
+   PORTAFOLIO v3 — Moneda nativa (ARS o USD por posición)
+   ✓ Cada posición guarda su moneda original (moneda: 'ARS' | 'USD')
+   ✓ Vista USD o ARS con toggle — sin perder precisión
+   ✓ Conversión ARS↔USD sólo al mostrar, NUNCA al guardar
+   ✓ Liquidez separada en ARS y USD
+   ✓ Import CSV Balanz (ARS) / genérico
 ═══════════════════════════════════════════════════════════════════ */
 
-var pfPositions   = [];
-var pfCurrencyARS = false;
-var pfMepRate     = 1200;
-var pfLiquidezUSD = 0;
-var pfSortCol     = null;
-var pfSortDir     = 1;
-var pfLiveCache   = {};
+var pfPositions    = [];
+var pfViewCurrency = 'USD';   // 'USD' o 'ARS' — lo que se muestra
+var pfMepRate      = 1200;    // tipo de cambio MEP
+var pfLiqARS       = 0;       // liquidez en pesos
+var pfLiqUSD_val   = 0;       // liquidez en dólares
+var pfSortCol      = null;
+var pfSortDir      = 1;
+var pfLiveCache    = {};       // { TICKER: { priceUSD, chgPct, ts } }
 
 var PF_COLORS = [
   '#00d4ff','#00e676','#ffd600','#ff8c00','#b44aff',
@@ -2831,151 +2854,199 @@ var PF_COLORS = [
   '#00bfa5','#f06292','#aed581','#4fc3f7','#ffb74d'
 ];
 
-// ── LOAD / SAVE ────────────────────────────────────────────
+/* ─── CONVERSIÓN ─────────────────────────────────────────────────
+   Internamente todo se trabaja en moneda NATIVA de la posición.
+   Al mostrar, se convierte según pfViewCurrency y pfMepRate.
+   
+   Regla:
+     pos.moneda = 'ARS'  → precios en pesos
+     pos.moneda = 'USD'  → precios en dólares
+     
+   Para mostrar en ARS:  ARS ya está; USD × MEP
+   Para mostrar en USD:  USD ya está; ARS ÷ MEP
+──────────────────────────────────────────────────────────────────*/
+function pfToView(valor, monedaOrigen) {
+  // Convierte `valor` desde su moneda original a pfViewCurrency
+  if (monedaOrigen === pfViewCurrency) return valor;
+  if (pfViewCurrency === 'ARS') return valor * pfMepRate;  // USD → ARS
+  return valor / pfMepRate;                                // ARS → USD
+}
+
+// ── LOAD / SAVE ───────────────────────────────────────────
 function pfLoad() {
   try {
     var raw = localStorage.getItem('dubz_portfolio');
-    // FIX: asegurar que siempre sea array válido
     var parsed = raw ? JSON.parse(raw) : [];
     pfPositions = Array.isArray(parsed) ? parsed : [];
-    pfMepRate     = parseFloat(localStorage.getItem('dubz_mep') || '1200');
-    pfLiquidezUSD = parseFloat(localStorage.getItem('dubz_liquidez') || '0');
+    // Migrar posiciones viejas sin campo moneda (asumirlas USD)
+    pfPositions.forEach(function(p){ if (!p.moneda) p.moneda = 'USD'; });
+    pfMepRate   = parseFloat(localStorage.getItem('dubz_mep') || '1200');
+    pfLiqARS    = parseFloat(localStorage.getItem('dubz_liq_ars') || '0');
+    pfLiqUSD_val= parseFloat(localStorage.getItem('dubz_liq_usd') || '0');
+    pfViewCurrency = localStorage.getItem('dubz_pf_view') || 'USD';
     var mepEl = document.getElementById('pfMepRate');
-    var liqEl = document.getElementById('pfLiquidez');
     if (mepEl) mepEl.value = pfMepRate;
-    if (liqEl) liqEl.value = pfLiquidezUSD || '';
+    var laqEl = document.getElementById('pfLiquidezARS');
+    var luEl  = document.getElementById('pfLiquidezUSD');
+    if (laqEl) laqEl.value = pfLiqARS || '';
+    if (luEl)  luEl.value  = pfLiqUSD_val || '';
   } catch(e) { pfPositions = []; }
 }
+
 function pfSave() {
-  localStorage.setItem('dubz_portfolio', JSON.stringify(pfPositions));
-  localStorage.setItem('dubz_mep', pfMepRate);
-  localStorage.setItem('dubz_liquidez', pfLiquidezUSD);
+  localStorage.setItem('dubz_portfolio',  JSON.stringify(pfPositions));
+  localStorage.setItem('dubz_mep',        pfMepRate);
+  localStorage.setItem('dubz_liq_ars',    pfLiqARS);
+  localStorage.setItem('dubz_liq_usd',    pfLiqUSD_val);
+  localStorage.setItem('dubz_pf_view',    pfViewCurrency);
 }
 
-// ── TOGGLE MONEDA ──────────────────────────────────────────
-function pfToggleCurrency() {
-  pfCurrencyARS = document.getElementById('pfCurrencyToggle').checked;
+// ── TOGGLE VISTA ──────────────────────────────────────────
+function pfSetView(cur) {
+  pfViewCurrency = cur;
+  pfSave();
+  // Actualizar botones
+  var bu = document.getElementById('pfBtnUSD');
+  var ba = document.getElementById('pfBtnARS');
+  if (bu) { bu.classList.toggle('active', cur==='USD'); }
+  if (ba) { ba.classList.toggle('active', cur==='ARS'); }
   pfRenderAll();
 }
 
-// ── TIPO DE CAMBIO MANUAL ──────────────────────────────────
+// ── TIPO DE CAMBIO MANUAL ─────────────────────────────────
 function pfRefreshAll() {
   pfMepRate = parseFloat(document.getElementById('pfMepRate').value) || 1200;
   pfSave();
   pfRenderAll();
 }
+
 function pfUpdateLiquidez() {
-  pfLiquidezUSD = parseFloat(document.getElementById('pfLiquidez').value) || 0;
+  pfLiqARS     = parseFloat(document.getElementById('pfLiquidezARS').value) || 0;
+  pfLiqUSD_val = parseFloat(document.getElementById('pfLiquidezUSD').value) || 0;
   pfSave();
   pfRenderSummary();
 }
 
-// ── DÓLAR MEP AUTOMÁTICO ───────────────────────────────────
-// Fuentes: dolarapi.com y ambito.com (fallback)
+// ── DÓLAR MEP AUTOMÁTICO ──────────────────────────────────
 function pfFetchMepAuto() {
   var mepEl  = document.getElementById('pfMepRate');
   var mepBtn = document.getElementById('pfMepAutoBtn');
   if (mepBtn) { mepBtn.textContent = '⟳'; mepBtn.disabled = true; }
 
-  // Intentar con dolarapi.com primero
   fetch('https://dolarapi.com/v1/dolares/bolsa')
     .then(function(r){ return r.json(); })
     .then(function(data) {
-      // La API devuelve { compra, venta, ... }
       var rate = data && (data.venta || data.compra);
       if (rate && !isNaN(rate)) {
         pfMepRate = parseFloat(rate);
         if (mepEl) mepEl.value = pfMepRate.toFixed(2);
         pfSave(); pfRenderAll();
         if (mepBtn) { mepBtn.textContent = '✓ MEP'; mepBtn.style.color='var(--green)'; mepBtn.disabled=false; setTimeout(function(){ mepBtn.textContent='⟳ AUTO'; mepBtn.style.color=''; }, 3000); }
-      } else { throw new Error('sin dato'); }
+      } else throw new Error('sin dato');
     })
     .catch(function() {
-      // Fallback: ambito.com proxy
       fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent('https://mercados.ambito.com//dolar/mep/variacion'))
         .then(function(r){ return r.json(); })
         .then(function(data) {
           var rate = data && (data.venta || data.valor);
           if (rate) {
-            // Ambito devuelve string con coma decimal
             rate = parseFloat(String(rate).replace(',','.'));
             if (!isNaN(rate) && rate > 0) {
               pfMepRate = rate;
               if (mepEl) mepEl.value = pfMepRate.toFixed(2);
               pfSave(); pfRenderAll();
-              if (mepBtn) { mepBtn.textContent = '✓ MEP'; mepBtn.style.color='var(--green)'; mepBtn.disabled=false; setTimeout(function(){ mepBtn.textContent='⟳ AUTO'; mepBtn.style.color=''; }, 3000); }
+              if (mepBtn) { mepBtn.textContent='✓ MEP'; mepBtn.style.color='var(--green)'; mepBtn.disabled=false; setTimeout(function(){ mepBtn.textContent='⟳ AUTO'; mepBtn.style.color=''; },3000); }
               return;
             }
           }
-          throw new Error('sin dato ambito');
+          throw new Error('sin dato');
         })
         .catch(function() {
-          if (mepBtn) { mepBtn.textContent = '✗ Error'; mepBtn.style.color='var(--red)'; mepBtn.disabled=false; setTimeout(function(){ mepBtn.textContent='⟳ AUTO'; mepBtn.style.color=''; }, 3000); }
+          if (mepBtn) { mepBtn.textContent='✗ Error'; mepBtn.style.color='var(--red)'; mepBtn.disabled=false; setTimeout(function(){ mepBtn.textContent='⟳ AUTO'; mepBtn.style.color=''; },3000); }
         });
     });
 }
 
-// ── FORMATOS — SIN ABREVIAR ────────────────────────────────
-// Siempre números completos: 17.500,00 en vez de 17.5K
-function pfFmt(n, decimals) {
+// ── FORMATOS ──────────────────────────────────────────────
+function pfFmt(n, dec) {
   if (n == null || isNaN(n)) return '—';
-  return n.toLocaleString('es-AR', {
-    minimumFractionDigits: decimals != null ? decimals : 2,
-    maximumFractionDigits: decimals != null ? decimals : 2
-  });
-}
-function pfFmtMoney(usd) {
-  if (usd == null || isNaN(usd)) return '—';
-  if (pfCurrencyARS) {
-    var ars = usd * pfMepRate;
-    return '$ ' + pfFmt(ars, 2);
-  }
-  return 'U$D ' + pfFmt(usd, 2);
-}
-// Alias — ya no abrevia, mismo que pfFmtMoney
-function pfFmtMoneyShort(usd) {
-  return pfFmtMoney(usd);
+  return n.toLocaleString('es-AR', { minimumFractionDigits: dec!=null?dec:2, maximumFractionDigits: dec!=null?dec:2 });
 }
 
-// ── PRECIO ACTUAL para una posición ───────────────────────
-function pfGetCurrentPrice(pos) {
-  var cached = pfLiveCache[pos.ticker.toUpperCase()];
-  if (cached && cached.price) return cached.price;
+// Formatea un valor YA convertido a pfViewCurrency
+function pfFmtDisplay(val) {
+  if (val == null || isNaN(val)) return '—';
+  if (pfViewCurrency === 'ARS') return '$ ' + pfFmt(val, 2);
+  return 'U$D ' + pfFmt(val, 2);
+}
+
+// Símbolo de moneda de visualización
+function pfSym() { return pfViewCurrency === 'ARS' ? '$' : 'U$D'; }
+
+// ── PRECIO ACTUAL en moneda NATIVA de la posición ─────────
+// El live cache siempre guarda en USD (precio de Yahoo).
+// Para posiciones ARS, live no aplica directamente salvo que haya precio guardado.
+function pfGetCurrentPriceNative(pos) {
+  var cached = pfLiveCache[(pos.ticker||'').toUpperCase()];
+  // Si la posición es USD, el cache de Yahoo es directo
+  if (pos.moneda === 'USD' && cached && cached.priceUSD) return cached.priceUSD;
+  // Si la posición es ARS y hay precio actual guardado manualmente, usarlo
   if (pos.precioActual && parseFloat(pos.precioActual) > 0) return parseFloat(pos.precioActual);
   return parseFloat(pos.precioCompra) || 0;
 }
 
-// ── CÁLCULOS de una posición ───────────────────────────────
+// ── CÁLCULO de una posición — devuelve todo en moneda NATIVA ─
 function pfCalc(pos) {
   var pc  = parseFloat(pos.precioCompra) || 0;
-  var qty = parseFloat(pos.cantidad) || 0;
-  var pa  = pfGetCurrentPrice(pos);
-  var costTotal = pc * qty;
-  var valActual = pa * qty;
-  var rendUsd   = valActual - costTotal;
-  var rendPct   = costTotal > 0 ? (rendUsd / costTotal * 100) : 0;
-  var cached    = pfLiveCache[pos.ticker.toUpperCase()];
-  var chgPct    = cached ? cached.chgPct : null;
-  return { costTotal: costTotal, valActual: valActual, rendUsd: rendUsd, rendPct: rendPct, chgPct: chgPct, pa: pa };
+  var qty = parseFloat(pos.cantidad)     || 0;
+  var pa  = pfGetCurrentPriceNative(pos);
+  var costNat  = pc * qty;
+  var valNat   = pa * qty;
+  var rendNat  = valNat - costNat;
+  var rendPct  = costNat > 0 ? (rendNat / costNat * 100) : 0;
+  var cached   = pfLiveCache[(pos.ticker||'').toUpperCase()];
+  var chgPct   = (pos.moneda === 'USD' && cached) ? cached.chgPct : null;
+  return {
+    costNat: costNat, valNat: valNat, rendNat: rendNat, rendPct: rendPct,
+    chgPct: chgPct, pa: pa,
+    // versiones convertidas a pfViewCurrency
+    costView: pfToView(costNat, pos.moneda),
+    valView:  pfToView(valNat,  pos.moneda),
+    rendView: pfToView(rendNat, pos.moneda),
+    pcView:   pfToView(pc,      pos.moneda),
+    paView:   pfToView(pa,      pos.moneda)
+  };
 }
 
-// ── RENDER COMPLETO ────────────────────────────────────────
+// ── RENDER COMPLETO ───────────────────────────────────────
 function pfRenderAll() {
   pfRenderSummary();
   pfRenderDistribution();
   pfRenderTable();
 }
 
-// ── SUMMARY CARDS ──────────────────────────────────────────
+// ── SUMMARY CARDS ─────────────────────────────────────────
 function pfRenderSummary() {
-  var totalCost = 0, totalVal = 0;
+  var totalCostView = 0, totalValView = 0;
   pfPositions.forEach(function(pos) {
     var c = pfCalc(pos);
-    totalCost += c.costTotal;
-    totalVal  += c.valActual;
+    totalCostView += c.costView;
+    totalValView  += c.valView;
   });
-  var ganancia = totalVal - totalCost;
-  var rendPct  = totalCost > 0 ? (ganancia / totalCost * 100) : 0;
+  var ganView = totalValView - totalCostView;
+  var rendPct = totalCostView > 0 ? (ganView / totalCostView * 100) : 0;
+
+  // Liquidez en vista actual
+  var liqViewDisplay;
+  if (pfViewCurrency === 'ARS') {
+    // ARS directo + USD convertido a ARS
+    var liqTotalARS = pfLiqARS + pfLiqUSD_val * pfMepRate;
+    liqViewDisplay = '$ ' + pfFmt(pfLiqARS, 2) + ' + U$D ' + pfFmt(pfLiqUSD_val, 2);
+  } else {
+    // USD directo + ARS convertido a USD
+    var liqTotalUSD = pfLiqUSD_val + pfLiqARS / pfMepRate;
+    liqViewDisplay = 'U$D ' + pfFmt(pfLiqUSD_val, 2) + ' + $ ' + pfFmt(pfLiqARS, 2);
+  }
 
   var vtEl = document.getElementById('pfValTotal');
   var vsEl = document.getElementById('pfValTotalSub');
@@ -2984,25 +3055,29 @@ function pfRenderSummary() {
   var reEl = document.getElementById('pfRendTotal');
   var ldEl = document.getElementById('pfLiquidezDisplay');
   var bdEl = document.getElementById('pfCurrencyBadge');
+  var buEl = document.getElementById('pfBtnUSD');
+  var baEl = document.getElementById('pfBtnARS');
 
-  if (vtEl) vtEl.textContent = pfFmtMoney(totalVal);
+  if (vtEl) vtEl.textContent = pfFmtDisplay(totalValView);
   if (vsEl) vsEl.textContent = pfPositions.length + ' posicion' + (pfPositions.length===1?'':'es');
-  if (gaEl) { gaEl.textContent = pfFmtMoney(ganancia); gaEl.style.color = ganancia >= 0 ? 'var(--green)' : 'var(--red)'; }
-  if (gsEl) gsEl.textContent = (ganancia >= 0 ? '▲' : '▼') + ' vs costo ' + pfFmtMoney(totalCost);
+  if (gaEl) { gaEl.textContent = pfFmtDisplay(ganView); gaEl.style.color = ganView >= 0 ? 'var(--green)' : 'var(--red)'; }
+  if (gsEl) gsEl.textContent = (ganView >= 0 ? '▲' : '▼') + ' vs costo ' + pfFmtDisplay(totalCostView);
   if (reEl) { reEl.textContent = (rendPct >= 0 ? '+' : '') + pfFmt(rendPct, 2) + '%'; reEl.style.color = rendPct >= 0 ? 'var(--green)' : 'var(--red)'; }
-  if (ldEl) ldEl.textContent = pfFmtMoney(pfLiquidezUSD);
-  if (bdEl) { bdEl.textContent = pfCurrencyARS ? 'ARS' : 'USD'; bdEl.className = 'pf-currency-badge' + (pfCurrencyARS ? ' ars' : ''); }
+  if (ldEl) ldEl.textContent = liqViewDisplay;
+  if (bdEl) { bdEl.textContent = pfViewCurrency; bdEl.className = 'pf-currency-badge' + (pfViewCurrency==='ARS' ? ' ars' : ''); }
+  if (buEl) buEl.classList.toggle('active', pfViewCurrency==='USD');
+  if (baEl) baEl.classList.toggle('active', pfViewCurrency==='ARS');
 }
 
-// ── DISTRIBUCIÓN ───────────────────────────────────────────
+// ── DISTRIBUCIÓN ──────────────────────────────────────────
 function pfRenderDistribution() {
-  var totalVal = 0;
+  var totalView = 0;
   var vals = {};
   pfPositions.forEach(function(pos) {
     var c = pfCalc(pos);
-    var tk = pos.ticker.toUpperCase();
-    vals[tk] = (vals[tk] || 0) + c.valActual;
-    totalVal += c.valActual;
+    var tk = (pos.ticker||'?').toUpperCase();
+    vals[tk] = (vals[tk] || 0) + c.valView;
+    totalView += c.valView;
   });
 
   var tickers = Object.keys(vals).sort(function(a,b){ return vals[b]-vals[a]; });
@@ -3015,20 +3090,16 @@ function pfRenderDistribution() {
   barEl.innerHTML = '';
   legEl.innerHTML = '';
 
-  if (totalVal <= 0) {
-    barEl.innerHTML = '<div style="width:100%;background:var(--bg3);height:100%"></div>';
-    return;
-  }
+  if (totalView <= 0) { barEl.innerHTML = '<div style="width:100%;background:var(--bg3);height:100%"></div>'; return; }
 
   tickers.forEach(function(tk, i) {
-    var pct = vals[tk] / totalVal * 100;
+    var pct = vals[tk] / totalView * 100;
     var col = PF_COLORS[i % PF_COLORS.length];
     var seg = document.createElement('div');
     seg.className = 'pf-dist-seg';
     seg.style.cssText = 'width:'+pct.toFixed(2)+'%;background:'+col;
-    seg.title = tk + ': ' + pfFmt(pct,1) + '% · ' + pfFmtMoney(vals[tk]);
+    seg.title = tk + ': ' + pfFmt(pct,1) + '% · ' + pfFmtDisplay(vals[tk]);
     barEl.appendChild(seg);
-
     var item = document.createElement('div');
     item.className = 'pf-dist-item';
     item.innerHTML = '<div class="pf-dist-dot" style="background:'+col+'"></div><span><b style="color:var(--text-bright)">'+tk+'</b> '+pfFmt(pct,1)+'%</span>';
@@ -3036,52 +3107,40 @@ function pfRenderDistribution() {
   });
 }
 
-// ── TABLA DE POSICIONES ────────────────────────────────────
+// ── TABLA ─────────────────────────────────────────────────
 function pfApplyFilters() { pfRenderTable(); }
 
 function pfRenderTable() {
-  var query   = (document.getElementById('pfSearch') ? document.getElementById('pfSearch').value : '').toUpperCase();
-  var favs    = [];
-  try { favs = JSON.parse(localStorage.getItem('dubz_pf_favs') || '[]'); } catch(e){}
-  // FIX: copiar array con slice para no mutar el original
-  var list = pfPositions.slice();
+  var query = ((document.getElementById('pfSearch')||{}).value || '').toUpperCase();
+  var favs  = []; try { favs = JSON.parse(localStorage.getItem('dubz_pf_favs')||'[]'); } catch(e){}
+  var list  = pfPositions.slice();
 
-  // Filtro búsqueda
-  if (query) {
-    list = list.filter(function(p){
-      return (p.ticker||'').toUpperCase().indexOf(query) !== -1 ||
-             (p.nombre||'').toUpperCase().indexOf(query) !== -1;
-    });
-  }
+  if (query) list = list.filter(function(p){
+    return (p.ticker||'').toUpperCase().indexOf(query)!==-1 || (p.nombre||'').toUpperCase().indexOf(query)!==-1;
+  });
 
-  // Ordenar
   if (pfSortCol) {
     list.sort(function(a,b){
-      var ac = pfCalc(a), bc = pfCalc(b);
-      var av, bv;
+      var ac = pfCalc(a), bc = pfCalc(b), av, bv;
       switch(pfSortCol) {
         case 'ticker':       av=a.ticker; bv=b.ticker; break;
         case 'cantidad':     av=parseFloat(a.cantidad)||0; bv=parseFloat(b.cantidad)||0; break;
-        case 'precioCompra': av=parseFloat(a.precioCompra)||0; bv=parseFloat(b.precioCompra)||0; break;
-        case 'precioActual': av=ac.pa; bv=bc.pa; break;
-        case 'costTotal':    av=ac.costTotal; bv=bc.costTotal; break;
-        case 'valActual':    av=ac.valActual; bv=bc.valActual; break;
-        case 'rendUsd':      av=ac.rendUsd; bv=bc.rendUsd; break;
+        case 'precioCompra': av=ac.pcView; bv=bc.pcView; break;
+        case 'precioActual': av=ac.paView; bv=bc.paView; break;
+        case 'costTotal':    av=ac.costView; bv=bc.costView; break;
+        case 'valActual':    av=ac.valView; bv=bc.valView; break;
+        case 'rendUsd':      av=ac.rendView; bv=bc.rendView; break;
         case 'rendPct':      av=ac.rendPct; bv=bc.rendPct; break;
         case 'fecha':        av=new Date(a.fecha||0); bv=new Date(b.fecha||0); break;
         default: return 0;
       }
-      if (av < bv) return -pfSortDir;
-      if (av > bv) return pfSortDir;
-      return 0;
+      return av<bv ? -pfSortDir : av>bv ? pfSortDir : 0;
     });
   } else {
     list.sort(function(a,b){
-      var fa = favs.indexOf(a.id) !== -1;
-      var fb = favs.indexOf(b.id) !== -1;
-      if (fa && !fb) return -1;
-      if (!fa && fb) return 1;
-      return (a.ticker||'') < (b.ticker||'') ? -1 : 1;
+      var fa=favs.indexOf(a.id)!==-1, fb=favs.indexOf(b.id)!==-1;
+      if(fa&&!fb)return -1; if(!fa&&fb)return 1;
+      return (a.ticker||'')<(b.ticker||'') ? -1 : 1;
     });
   }
 
@@ -3090,35 +3149,29 @@ function pfRenderTable() {
   if (!tbody) return;
   tbody.innerHTML = '';
 
-  if (pfPositions.length === 0) {
-    if (empty) empty.style.display = 'block';
-    return;
-  }
+  if (pfPositions.length === 0) { if (empty) empty.style.display='block'; return; }
   if (empty) empty.style.display = 'none';
 
   if (list.length === 0) {
     var tr0 = document.createElement('tr');
     tr0.innerHTML = '<td colspan="12" style="text-align:center;color:var(--text-dim);font-family:var(--mono);padding:20px">Sin resultados para "'+query+'"</td>';
-    tbody.appendChild(tr0);
-    return;
+    tbody.appendChild(tr0); return;
   }
 
   list.forEach(function(pos) {
     var c      = pfCalc(pos);
     var isFav  = favs.indexOf(pos.id) !== -1;
-    var cached = pfLiveCache[(pos.ticker||'').toUpperCase()];
     var rColor = c.rendPct >= 0 ? 'var(--green)' : 'var(--red)';
-    var rSign  = c.rendUsd >= 0 ? '+' : '';
+    var rSign  = c.rendView >= 0 ? '+' : '';
 
-    var ind = c.rendPct >= 10
-      ? '<span class="pf-indicator winner">🏆 GANADORA</span>'
-      : c.rendPct <= -10
-        ? '<span class="pf-indicator loser">⚠ PERDEDORA</span>'
-        : '<span class="pf-indicator neutral">— NEUTRAL</span>';
+    // Badge moneda nativa de la posición
+    var monBadge = pos.moneda === 'ARS'
+      ? '<span style="font-family:var(--mono);font-size:9px;background:rgba(255,214,0,0.1);border:1px solid var(--yellow2);color:var(--yellow);padding:1px 4px;border-radius:2px;margin-left:4px">ARS</span>'
+      : '<span style="font-family:var(--mono);font-size:9px;background:rgba(0,212,255,0.1);border:1px solid var(--accent2);color:var(--accent);padding:1px 4px;border-radius:2px;margin-left:4px">USD</span>';
 
-    var liveBadge = cached
+    var liveBadge = (pos.moneda==='USD' && pfLiveCache[(pos.ticker||'').toUpperCase()])
       ? '<span class="pf-live-dot" title="Precio en tiempo real"></span>'
-      : '<span style="color:var(--text-dim);font-size:10px" title="Sin precio live">◯</span>';
+      : '<span style="color:var(--text-dim);font-size:10px" title="Manual">◯</span>';
 
     var chgHtml = '';
     if (c.chgPct != null) {
@@ -3126,66 +3179,80 @@ function pfRenderTable() {
       chgHtml = '<br><span style="font-size:10px;color:'+cc+'">'+(c.chgPct>=0?'+':'')+pfFmt(c.chgPct,2)+'% hoy</span>';
     }
 
+    var ind = c.rendPct >= 10
+      ? '<span class="pf-indicator winner">🏆 GANADORA</span>'
+      : c.rendPct <= -10
+        ? '<span class="pf-indicator loser">⚠ PERDEDORA</span>'
+        : '<span class="pf-indicator neutral">— NEUTRAL</span>';
+
     var fechaStr = '—';
-    if (pos.fecha) {
-      try { fechaStr = new Date(pos.fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'}); } catch(e){}
-    }
+    if (pos.fecha) { try { fechaStr = new Date(pos.fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'}); } catch(e){} }
     var nombre = pos.nombre ? '<br><span style="font-size:10px;color:var(--text-dim)">'+pos.nombre+'</span>' : '';
 
-    var tr = document.createElement('tr');
-    // FIX: usar comillas escapadas correctamente en onclick
     var pid = pos.id;
+    var tr  = document.createElement('tr');
     tr.innerHTML =
       '<td style="text-align:center">'+
-        '<button class="pf-fav-btn'+(isFav?' active':'')+'" data-pid="'+pid+'" onclick="pfToggleFav(this.dataset.pid)" title="Favorito">'+(isFav?'⭐':'☆')+'</button>'+
+        '<button class="pf-fav-btn'+(isFav?' active':'')+'" data-pid="'+pid+'" onclick="pfToggleFav(this.dataset.pid)">'+(isFav?'⭐':'☆')+'</button>'+
       '</td>'+
       '<td><div class="tk-cell">'+
-        '<div><span class="tk-sym">'+(pos.ticker||'?')+'</span>'+nombre+'</div>'+
+        '<div><span class="tk-sym">'+(pos.ticker||'?')+'</span>'+monBadge+nombre+'</div>'+
         '<div style="margin-left:4px">'+liveBadge+'</div>'+
       '</div></td>'+
-      '<td>'+pfFmt(parseFloat(pos.cantidad)||0,2)+'</td>'+
-      '<td>'+pfFmtMoney(parseFloat(pos.precioCompra)||0)+'</td>'+
-      '<td>'+pfFmtMoney(c.pa)+chgHtml+'</td>'+
-      '<td>'+pfFmtMoney(c.costTotal)+'</td>'+
-      '<td style="color:var(--text-bright)">'+pfFmtMoney(c.valActual)+'</td>'+
-      '<td style="color:'+rColor+'">'+rSign+pfFmtMoney(c.rendUsd)+'</td>'+
+      '<td>'+pfFmt(parseFloat(pos.cantidad)||0, 2)+'</td>'+
+      '<td>'+pfFmtDisplay(c.pcView)+'</td>'+
+      '<td>'+pfFmtDisplay(c.paView)+chgHtml+'</td>'+
+      '<td>'+pfFmtDisplay(c.costView)+'</td>'+
+      '<td style="color:var(--text-bright)">'+pfFmtDisplay(c.valView)+'</td>'+
+      '<td style="color:'+rColor+'">'+rSign+pfFmtDisplay(c.rendView)+'</td>'+
       '<td style="color:'+rColor+';font-weight:700">'+rSign+pfFmt(c.rendPct,2)+'%</td>'+
       '<td style="font-size:12px">'+fechaStr+'</td>'+
       '<td>'+ind+'</td>'+
       '<td style="text-align:center">'+
         '<div style="display:flex;gap:4px;justify-content:center">'+
-        '<button class="pf-action-btn" data-pid="'+pid+'" onclick="pfEditPosition(this.dataset.pid)" title="Editar">✏</button>'+
-        '<button class="pf-action-btn del" data-pid="'+pid+'" onclick="pfDeletePosition(this.dataset.pid)" title="Eliminar">✕</button>'+
+        '<button class="pf-action-btn" data-pid="'+pid+'" onclick="pfEditPosition(this.dataset.pid)">✏</button>'+
+        '<button class="pf-action-btn del" data-pid="'+pid+'" onclick="pfDeletePosition(this.dataset.pid)">✕</button>'+
         '</div>'+
       '</td>';
 
     if (c.rendPct >= 10)       tr.style.background = 'rgba(0,230,118,0.03)';
     else if (c.rendPct <= -10) tr.style.background = 'rgba(255,61,90,0.03)';
-
     tbody.appendChild(tr);
   });
 }
 
-// ── SORT ───────────────────────────────────────────────────
+// ── SORT ──────────────────────────────────────────────────
 function pfSortByCol(col, th) {
-  if (pfSortCol === col) pfSortDir = -pfSortDir;
-  else { pfSortCol = col; pfSortDir = -1; }
+  pfSortCol = pfSortCol===col ? pfSortCol : col;
+  pfSortDir = pfSortCol===col && pfSortDir===1 ? -1 : (pfSortCol!==col ? -1 : -pfSortDir);
+  pfSortCol = col;
   document.querySelectorAll('#pfTable thead th').forEach(function(el){ el.classList.remove('sort-asc','sort-desc'); });
-  if (th) th.classList.add(pfSortDir === -1 ? 'sort-desc' : 'sort-asc');
+  if (th) th.classList.add(pfSortDir===-1?'sort-desc':'sort-asc');
   pfRenderTable();
 }
 
-// ── FAVORITOS ──────────────────────────────────────────────
+// ── FAVORITOS ─────────────────────────────────────────────
 function pfToggleFav(id) {
-  var favs = [];
-  try { favs = JSON.parse(localStorage.getItem('dubz_pf_favs') || '[]'); } catch(e){}
-  var idx = favs.indexOf(id);
-  if (idx === -1) favs.push(id); else favs.splice(idx, 1);
-  localStorage.setItem('dubz_pf_favs', JSON.stringify(favs));
+  var favs=[]; try{favs=JSON.parse(localStorage.getItem('dubz_pf_favs')||'[]');}catch(e){}
+  var idx=favs.indexOf(id); if(idx===-1)favs.push(id); else favs.splice(idx,1);
+  localStorage.setItem('dubz_pf_favs',JSON.stringify(favs));
   pfRenderTable();
 }
 
-// ── MODAL AGREGAR/EDITAR ───────────────────────────────────
+// ── SELECTOR MONEDA EN MODAL ──────────────────────────────
+function pfSelectCurrency(cur) {
+  document.getElementById('pfFMoneda').value = cur;
+  document.getElementById('pfCurBtnARS').classList.toggle('active', cur==='ARS');
+  document.getElementById('pfCurBtnUSD').classList.toggle('active', cur==='USD');
+  var lbl = cur==='ARS' ? '(ARS)' : '(USD)';
+  var col = cur==='ARS' ? 'var(--yellow)' : 'var(--accent)';
+  document.getElementById('pfFPCLabel').textContent = lbl;
+  document.getElementById('pfFPCLabel').style.color = col;
+  document.getElementById('pfFPALabel').textContent = lbl;
+  document.getElementById('pfFPALabel').style.color = col;
+}
+
+// ── MODAL AGREGAR/EDITAR ──────────────────────────────────
 function pfOpenAddModal() {
   document.getElementById('pfModalTitle').textContent = '＋ AGREGAR POSICIÓN';
   document.getElementById('pfEditId').value = '';
@@ -3197,136 +3264,129 @@ function pfOpenAddModal() {
   document.getElementById('pfFFecha').value = new Date().toISOString().slice(0,10);
   document.getElementById('pfFormError').style.display = 'none';
   document.getElementById('pfFetchStatus').style.display = 'none';
+  // Default: ARS (para CEDEARs argentinos)
+  pfSelectCurrency('ARS');
   document.getElementById('pfModalOverlay').classList.add('open');
   setTimeout(function(){ document.getElementById('pfFTicker').focus(); }, 100);
 }
 
 function pfEditPosition(id) {
   var pos = null;
-  for (var i=0; i<pfPositions.length; i++) { if (pfPositions[i].id === id) { pos = pfPositions[i]; break; } }
-  if (!pos) return;
+  for(var i=0;i<pfPositions.length;i++){if(pfPositions[i].id===id){pos=pfPositions[i];break;}}
+  if(!pos) return;
   document.getElementById('pfModalTitle').textContent = '✏ EDITAR POSICIÓN';
   document.getElementById('pfEditId').value = id;
-  document.getElementById('pfFTicker').value = pos.ticker || '';
-  document.getElementById('pfFNombre').value = pos.nombre || '';
-  document.getElementById('pfFCantidad').value = pos.cantidad || '';
-  document.getElementById('pfFPrecioCompra').value = pos.precioCompra || '';
-  document.getElementById('pfFPrecioActual').value = pos.precioActual || '';
-  document.getElementById('pfFFecha').value = pos.fecha || '';
+  document.getElementById('pfFTicker').value = pos.ticker||'';
+  document.getElementById('pfFNombre').value = pos.nombre||'';
+  document.getElementById('pfFCantidad').value = pos.cantidad||'';
+  document.getElementById('pfFPrecioCompra').value = pos.precioCompra||'';
+  document.getElementById('pfFPrecioActual').value = pos.precioActual||'';
+  document.getElementById('pfFFecha').value = pos.fecha||'';
   document.getElementById('pfFormError').style.display = 'none';
   document.getElementById('pfFetchStatus').style.display = 'none';
+  pfSelectCurrency(pos.moneda||'ARS');
   document.getElementById('pfModalOverlay').classList.add('open');
 }
 
-function pfCloseModal(e) {
-  if (e && e.target === document.getElementById('pfModalOverlay')) pfCloseModalForce();
-}
-function pfCloseModalForce() {
-  document.getElementById('pfModalOverlay').classList.remove('open');
-}
+function pfCloseModal(e) { if(e&&e.target===document.getElementById('pfModalOverlay'))pfCloseModalForce(); }
+function pfCloseModalForce() { document.getElementById('pfModalOverlay').classList.remove('open'); }
 
 function pfSavePosition() {
-  var ticker       = (document.getElementById('pfFTicker').value || '').trim().toUpperCase().replace(/[^A-Z0-9.]/g,'');
-  var nombre       = (document.getElementById('pfFNombre').value || '').trim();
+  var ticker       = (document.getElementById('pfFTicker').value||'').trim().toUpperCase().replace(/[^A-Z0-9.]/g,'');
+  var nombre       = (document.getElementById('pfFNombre').value||'').trim();
   var cantidad     = parseFloat(document.getElementById('pfFCantidad').value);
   var precioCompra = parseFloat(document.getElementById('pfFPrecioCompra').value);
-  var precioActual = parseFloat(document.getElementById('pfFPrecioActual').value) || null;
+  var precioActual = parseFloat(document.getElementById('pfFPrecioActual').value)||null;
   var fecha        = document.getElementById('pfFFecha').value;
+  var moneda       = document.getElementById('pfFMoneda').value || 'ARS';
   var editId       = document.getElementById('pfEditId').value;
 
   var errEl = document.getElementById('pfFormError');
-  if (!ticker)                        { errEl.textContent='El ticker es obligatorio.'; errEl.style.display='block'; return; }
-  if (!cantidad || cantidad <= 0)     { errEl.textContent='La cantidad debe ser mayor a 0.'; errEl.style.display='block'; return; }
-  if (!precioCompra || precioCompra<=0) { errEl.textContent='El precio de compra debe ser mayor a 0.'; errEl.style.display='block'; return; }
-  errEl.style.display = 'none';
+  if (!ticker)                           {errEl.textContent='El ticker es obligatorio.';errEl.style.display='block';return;}
+  if (!cantidad||cantidad<=0)            {errEl.textContent='La cantidad debe ser mayor a 0.';errEl.style.display='block';return;}
+  if (!precioCompra||precioCompra<=0)    {errEl.textContent='El precio de compra debe ser mayor a 0.';errEl.style.display='block';return;}
+  errEl.style.display='none';
 
-  var newPos = { id: editId || ('pf_'+Date.now()), ticker: ticker, nombre: nombre, cantidad: cantidad, precioCompra: precioCompra, precioActual: precioActual, fecha: fecha };
+  var newPos = {id:editId||'pf_'+Date.now(), ticker:ticker, nombre:nombre, cantidad:cantidad, precioCompra:precioCompra, precioActual:precioActual, fecha:fecha, moneda:moneda};
 
   if (editId) {
-    for (var i=0; i<pfPositions.length; i++) {
-      if (pfPositions[i].id === editId) { pfPositions[i] = newPos; break; }
-    }
+    for(var i=0;i<pfPositions.length;i++){if(pfPositions[i].id===editId){pfPositions[i]=newPos;break;}}
   } else {
     pfPositions.push(newPos);
   }
-
   pfSave();
   pfCloseModalForce();
-  pfFetchLivePrices([ticker], function(){ pfRenderAll(); });
+  // Solo hacer fetch live si es USD
+  if (moneda==='USD') pfFetchLivePrices([ticker], function(){ pfRenderAll(); });
   pfRenderAll();
 }
 
 function pfDeletePosition(id) {
-  if (!confirm('¿Eliminar esta posición?')) return;
-  pfPositions = pfPositions.filter(function(p){ return p.id !== id; });
-  pfSave();
-  pfRenderAll();
+  if(!confirm('¿Eliminar esta posición?'))return;
+  pfPositions=pfPositions.filter(function(p){return p.id!==id;});
+  pfSave(); pfRenderAll();
 }
 
-// ── FETCH PRECIO LIVE (botón en modal) ────────────────────
+// ── FETCH PRECIO LIVE (botón modal) ──────────────────────
 function pfFetchPrice() {
-  var ticker = (document.getElementById('pfFTicker').value || '').trim().toUpperCase();
+  var ticker = (document.getElementById('pfFTicker').value||'').trim().toUpperCase();
+  var moneda = document.getElementById('pfFMoneda').value;
   if (!ticker) { alert('Ingresá un ticker primero.'); return; }
+  if (moneda === 'ARS') {
+    var sEl = document.getElementById('pfFetchStatus');
+    sEl.textContent = '⚠ Los precios ARS (CEDEARs) no se pueden obtener automáticamente. Ingresalo desde Balanz/broker.';
+    sEl.style.display='block'; sEl.style.color='var(--yellow)'; return;
+  }
   var statusEl = document.getElementById('pfFetchStatus');
-  statusEl.textContent = '⟳ Buscando precio para ' + ticker + '...';
-  statusEl.style.display = 'block';
-  statusEl.style.color = 'var(--accent)';
+  statusEl.textContent = '⟳ Buscando precio USD para ' + ticker + '...';
+  statusEl.style.display = 'block'; statusEl.style.color = 'var(--accent)';
   pfFetchLivePrices([ticker], function(results) {
     var r = results && results[ticker];
-    if (r && r.price) {
-      document.getElementById('pfFPrecioActual').value = r.price.toFixed(4);
-      statusEl.textContent = '✓ Precio: U$D ' + r.price.toFixed(2) + (r.chgPct != null ? ' (' + (r.chgPct>=0?'+':'') + r.chgPct.toFixed(2) + '% hoy)' : '');
+    if (r && r.priceUSD) {
+      document.getElementById('pfFPrecioActual').value = r.priceUSD.toFixed(4);
+      statusEl.textContent = '✓ U$D ' + r.priceUSD.toFixed(2) + (r.chgPct!=null?' ('+(r.chgPct>=0?'+':'')+r.chgPct.toFixed(2)+'% hoy)':'');
       statusEl.style.color = 'var(--green)';
     } else {
-      statusEl.textContent = '⚠ No se pudo obtener el precio. Ingresalo manualmente.';
+      statusEl.textContent = '⚠ No se pudo obtener. Ingresalo manualmente.';
       statusEl.style.color = 'var(--yellow)';
     }
   });
 }
 
-// ── FETCH LIVE PRICES — múltiples proxies ─────────────────
-// Intenta: allorigins → corsproxy.io → manual
+// ── FETCH LIVE PRICES USD (Yahoo vía múltiples proxies) ───
 function pfFetchLivePrices(tickers, callback) {
-  var results = {};
-  var pending = tickers.length;
-  if (!pending) { if (callback) callback(results); return; }
+  var results = {}, pending = tickers.length;
+  if (!pending) { if(callback)callback(results); return; }
 
-  function done() { pending--; if (pending === 0 && callback) callback(results); }
+  function done() { pending--; if(pending===0&&callback)callback(results); }
 
-  function tryYahoo(ticker, proxyFn, onSuccess, onFail) {
-    var yhUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(ticker) + '?interval=1d&range=1d&includePrePost=false';
-    var url = proxyFn(yhUrl);
-    fetch(url, { signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined })
-      .then(function(r){ if (!r.ok) throw new Error('http'); return r.json(); })
+  function tryProxy(ticker, proxyUrl, onOk, onFail) {
+    fetch(proxyUrl)
+      .then(function(r){ if(!r.ok)throw new Error('http'); return r.json(); })
       .then(function(data) {
-        var res = data && data.chart && data.chart.result;
-        var meta = res && res[0] && res[0].meta;
+        var meta = data&&data.chart&&data.chart.result&&data.chart.result[0]&&data.chart.result[0].meta;
         if (meta && meta.regularMarketPrice) {
-          var price  = meta.regularMarketPrice;
-          var prev   = meta.chartPreviousClose || meta.previousClose || meta.regularMarketPreviousClose;
-          var chgPct = prev ? (price - prev) / prev * 100 : null;
-          pfLiveCache[ticker.toUpperCase()] = { price: price, chgPct: chgPct, ts: Date.now() };
-          results[ticker] = { price: price, chgPct: chgPct };
-          onSuccess();
+          var p = meta.regularMarketPrice;
+          var prev = meta.chartPreviousClose||meta.previousClose||meta.regularMarketPreviousClose;
+          var chg = prev ? (p-prev)/prev*100 : null;
+          pfLiveCache[ticker] = { priceUSD: p, chgPct: chg, ts: Date.now() };
+          results[ticker] = { priceUSD: p, chgPct: chg };
+          onOk();
         } else { onFail(); }
-      })
-      .catch(function(){ onFail(); });
+      }).catch(function(){ onFail(); });
   }
 
   tickers.forEach(function(ticker) {
     var tk = ticker.toUpperCase();
-    // Proxy 1: allorigins
-    tryYahoo(tk, function(u){ return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u); },
+    var yhUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(tk)+'?interval=1d&range=1d&includePrePost=false';
+    tryProxy(tk, 'https://api.allorigins.win/raw?url='+encodeURIComponent(yhUrl),
       function(){ done(); },
-      function() {
-        // Proxy 2: corsproxy.io
-        tryYahoo(tk, function(u){ return 'https://corsproxy.io/?'+encodeURIComponent(u); },
+      function(){
+        tryProxy(tk, 'https://corsproxy.io/?'+encodeURIComponent(yhUrl),
           function(){ done(); },
-          function() {
-            // Proxy 3: thingproxy
-            tryYahoo(tk, function(u){ return 'https://thingproxy.freeboard.io/fetch/'+u; },
-              function(){ done(); },
-              function(){ done(); } // todos fallaron
+          function(){
+            tryProxy(tk, 'https://thingproxy.freeboard.io/fetch/'+yhUrl,
+              function(){ done(); }, function(){ done(); }
             );
           }
         );
@@ -3335,244 +3395,192 @@ function pfFetchLivePrices(tickers, callback) {
   });
 }
 
-// ── REFRESH PRECIOS LIVE ───────────────────────────────────
 function pfRefreshLivePrices() {
-  var tickers = [];
+  var tickers=[];
   pfPositions.forEach(function(p){
-    var t = (p.ticker||'').toUpperCase();
-    if (t && tickers.indexOf(t) === -1) tickers.push(t);
+    // Solo fetch USD; para ARS no aplica Yahoo
+    if ((p.moneda||'ARS')==='USD') { var t=(p.ticker||'').toUpperCase(); if(t&&tickers.indexOf(t)===-1)tickers.push(t); }
   });
-  if (!tickers.length) return;
+  if(!tickers.length)return;
   pfFetchLivePrices(tickers, function(){ pfRenderAll(); });
 }
 
 // ── EXPORT CSV ─────────────────────────────────────────────
 function pfExportCSV() {
-  var bom = '\uFEFF'; // BOM para que Excel lo abra bien
-  var rows = [['Ticker','Nombre','Cantidad','P.Compra USD','P.Actual USD','Costo Total USD','Val.Actual USD','Rend. USD','Rend. %','Fecha','Indicador']];
-  pfPositions.forEach(function(pos) {
-    var c = pfCalc(pos);
-    var ind = c.rendPct >= 10 ? 'GANADORA' : c.rendPct <= -10 ? 'PERDEDORA' : 'NEUTRAL';
-    rows.push([
-      pos.ticker, pos.nombre||'', pos.cantidad,
+  var bom='\uFEFF';
+  var rows=[['Ticker','Nombre','Moneda','Cantidad','P.Compra (nativo)','P.Actual (nativo)','Costo Total (vista)','Val.Actual (vista)','Rend. (vista)','Rend. %','Fecha','Indicador','Vista']];
+  pfPositions.forEach(function(pos){
+    var c=pfCalc(pos);
+    var ind=c.rendPct>=10?'GANADORA':c.rendPct<=-10?'PERDEDORA':'NEUTRAL';
+    rows.push([pos.ticker,pos.nombre||'',pos.moneda||'ARS',pos.cantidad,
       (parseFloat(pos.precioCompra)||0).toFixed(2),
       c.pa.toFixed(2),
-      c.costTotal.toFixed(2), c.valActual.toFixed(2),
-      c.rendUsd.toFixed(2), c.rendPct.toFixed(2)+'%',
-      pos.fecha||'', ind
-    ]);
+      c.costView.toFixed(2),c.valView.toFixed(2),c.rendView.toFixed(2),
+      c.rendPct.toFixed(2)+'%',pos.fecha||'',ind,pfViewCurrency]);
   });
-  var csv = bom + rows.map(function(r){ return r.map(function(v){ return '"'+String(v).replace(/"/g,'""')+'"'; }).join(','); }).join('\n');
-  var blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-  var url  = URL.createObjectURL(blob);
-  var a    = document.createElement('a'); a.href=url; a.download='portafolio_dubz.csv'; a.click();
+  var csv=bom+rows.map(function(r){return r.map(function(v){return '"'+String(v).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
+  var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');a.href=url;a.download='portafolio_dubz.csv';a.click();
   URL.revokeObjectURL(url);
 }
 
-// ── IMPORT CSV BROKERS ─────────────────────────────────────
-// Detecta automáticamente: Balanz, Bull Market, o formato genérico
+// ── IMPORT CSV ────────────────────────────────────────────
 function pfOpenImportModal() {
   document.getElementById('pfImportOverlay').classList.add('open');
-  document.getElementById('pfImportResult').textContent = '';
-  document.getElementById('pfImportFileInput').value = '';
+  document.getElementById('pfImportResult').textContent='';
+  document.getElementById('pfImportFileInput').value='';
 }
-function pfCloseImportModal(e) {
-  if (!e || e.target === document.getElementById('pfImportOverlay')) {
-    document.getElementById('pfImportOverlay').classList.remove('open');
-  }
-}
-function pfCloseImportForce() {
-  document.getElementById('pfImportOverlay').classList.remove('open');
-}
+function pfCloseImportModal(e){ if(!e||e.target===document.getElementById('pfImportOverlay'))pfCloseImportForce(); }
+function pfCloseImportForce(){ document.getElementById('pfImportOverlay').classList.remove('open'); }
 
 function pfImportCSV() {
-  var fileInput = document.getElementById('pfImportFileInput');
-  var file = fileInput.files && fileInput.files[0];
-  if (!file) { document.getElementById('pfImportResult').textContent = '⚠ Seleccioná un archivo CSV primero.'; return; }
-
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    var text = e.target.result || '';
-    // Detectar encoding y limpiar BOM
-    text = text.replace(/^\uFEFF/, '');
-    var lines = text.split(/\r?\n/).filter(function(l){ return l.trim(); });
-    if (lines.length < 2) { document.getElementById('pfImportResult').textContent = '⚠ El archivo está vacío o tiene formato incorrecto.'; return; }
-
-    var header = lines[0].toLowerCase();
-    var imported = [];
-    var skipped  = 0;
-
-    // ── Detectar formato ─────────────────────────────────
-    if (header.indexOf('especie') !== -1 || header.indexOf('denominacion') !== -1) {
-      // ── FORMATO BALANZ ────────────────────────────────
-      // Columnas típicas: Especie, Denominacion, Cantidad, Precio Promedio de Compra, Precio de Mercado, Fecha
-      imported = pfParseBalanz(lines);
-    } else if (header.indexOf('simbolo') !== -1 || header.indexOf('símbolo') !== -1 || header.indexOf('ticker') !== -1) {
-      // ── FORMATO BULL MARKET / GENÉRICO ───────────────
-      imported = pfParseGeneric(lines);
-    } else if (header.indexOf('instrumento') !== -1 || header.indexOf('activo') !== -1) {
-      // ── FORMATO IOL / INVERTIRONLINE ─────────────────
-      imported = pfParseIOL(lines);
+  var file=(document.getElementById('pfImportFileInput').files||[])[0];
+  if(!file){document.getElementById('pfImportResult').textContent='⚠ Seleccioná un archivo CSV primero.';return;}
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var text=(e.target.result||'').replace(/^\uFEFF/,'');
+    var lines=text.split(/\r?\n/).filter(function(l){return l.trim();});
+    if(lines.length<2){document.getElementById('pfImportResult').textContent='⚠ Archivo vacío o formato incorrecto.';return;}
+    var header=lines[0].toLowerCase();
+    var imported=[];
+    if(header.indexOf('especie')!==-1||header.indexOf('denominacion')!==-1||header.indexOf('ppc')!==-1){
+      imported=pfParseBalanz(lines);
+    } else if(header.indexOf('ticker')!==-1||header.indexOf('simbolo')!==-1) {
+      imported=pfParseGeneric(lines);
     } else {
-      // ── INTENTAR GENÉRICO ─────────────────────────────
-      imported = pfParseGeneric(lines);
+      imported=pfParseGeneric(lines);
     }
-
-    var added = 0;
-    var merge = document.getElementById('pfImportMerge') && document.getElementById('pfImportMerge').checked;
-    if (!merge) {
-      // Reemplazar o agregar sin duplicar (por ticker+fecha)
-      imported.forEach(function(pos) {
-        // Buscar si ya existe mismo ticker + fecha de compra
-        var exists = pfPositions.some(function(p){ return p.ticker === pos.ticker && p.fecha === pos.fecha && Math.abs(parseFloat(p.precioCompra) - parseFloat(pos.precioCompra)) < 0.01; });
-        if (!exists) { pfPositions.push(pos); added++; }
-        else skipped++;
-      });
-    } else {
-      // Agregar todo sin verificar duplicados
-      imported.forEach(function(pos){ pfPositions.push(pos); added++; });
-    }
-
+    var added=0, skipped=0;
+    var merge=document.getElementById('pfImportMerge')&&document.getElementById('pfImportMerge').checked;
+    imported.forEach(function(pos){
+      if(!merge){
+        var dup=pfPositions.some(function(p){return p.ticker===pos.ticker&&p.fecha===pos.fecha&&Math.abs(parseFloat(p.precioCompra)-parseFloat(pos.precioCompra))<0.01;});
+        if(dup){skipped++;return;}
+      }
+      pfPositions.push(pos); added++;
+    });
     pfSave();
-    var msg = '✓ Importados: ' + added + ' registros.';
-    if (skipped > 0) msg += ' Omitidos (duplicados): ' + skipped + '.';
-    document.getElementById('pfImportResult').textContent = msg;
-    document.getElementById('pfImportResult').style.color = 'var(--green)';
-
-    // Fetch precios y renderizar
-    var newTickers = imported.map(function(p){ return p.ticker; }).filter(function(t,i,a){ return a.indexOf(t)===i; });
-    pfFetchLivePrices(newTickers, function(){ pfRenderAll(); });
+    var msg='✓ '+added+' posiciones importadas.'; if(skipped>0)msg+=' '+skipped+' duplicadas omitidas.';
+    document.getElementById('pfImportResult').textContent=msg;
+    document.getElementById('pfImportResult').style.color='var(--green)';
+    // Solo fetch USD
+    var newTickers=imported.filter(function(p){return (p.moneda||'ARS')==='USD';}).map(function(p){return p.ticker;}).filter(function(t,i,a){return a.indexOf(t)===i;});
+    if(newTickers.length)pfFetchLivePrices(newTickers, function(){pfRenderAll();});
     pfRenderAll();
-
-    setTimeout(function(){ pfCloseImportForce(); }, 2000);
+    setTimeout(function(){pfCloseImportForce();},2500);
   };
-  reader.readAsText(file, 'UTF-8');
+  reader.readAsText(file,'UTF-8');
 }
 
 // ── PARSER BALANZ ─────────────────────────────────────────
-// CSV de Balanz: Especie;Denominacion;Cantidad;PrecioCompra;PrecioMercado;...
+// Columnas Balanz: Ticker;Descripción;Nominales;Garantías;Precio;Fecha;%deT.;PPC;V.Actual;V.Inicial;Rendimiento;Var
+// Los precios son en ARS (pesos)
 function pfParseBalanz(lines) {
-  var results = [];
-  var header  = lines[0].toLowerCase().split(/[,;]/);
-  var idx = function(name) {
-    for (var i=0;i<header.length;i++) { if (header[i].indexOf(name) !== -1) return i; }
-    return -1;
-  };
-  var iEspecie = idx('especie'); if (iEspecie<0) iEspecie=0;
-  var iNombre  = idx('denominacion'); if (iNombre<0) iNombre=1;
-  var iCant    = idx('cantidad');
-  var iPCompra = idx('promedio') !== -1 ? idx('promedio') : idx('compra');
-  var iPMkt    = idx('mercado') !== -1 ? idx('mercado') : idx('actual');
-  var iFecha   = idx('fecha');
+  var results=[];
+  var sep=lines[0].indexOf(';')!==-1?';':',';
+  var header=lines[0].toLowerCase().split(sep);
+  var idx=function(names){for(var j=0;j<names.length;j++){for(var i=0;i<header.length;i++){if(header[i].indexOf(names[j])!==-1)return i;}}return -1;};
+  var iTicker  = idx(['especie','ticker','simbolo']); if(iTicker<0)iTicker=0;
+  var iNombre  = idx(['denominaci','descripci','nombre','name']);
+  var iCant    = idx(['nominal','cantidad','cant','qty']);
+  var iPPC     = idx(['ppc','precio promedio','p.compra','p promedio','compra']);
+  var iPMkt    = idx(['precio','price']); // precio de mercado actual
+  var iFecha   = idx(['fecha']);
 
-  for (var i=1; i<lines.length; i++) {
-    var cols = pfSplitCSVLine(lines[i]);
-    if (!cols[iEspecie]) continue;
-    var ticker    = (cols[iEspecie]||'').trim().toUpperCase().replace(/[^A-Z0-9.]/g,'');
-    var nombre    = (cols[iNombre]||'').trim();
-    var cantidad  = parseFloat((cols[iCant]||'0').replace(',','.'));
-    var pCompra   = parseFloat(((iPCompra>=0 ? cols[iPCompra] : '0')||'0').replace(',','.').replace(/[^0-9.]/g,''));
-    var pActual   = parseFloat(((iPMkt>=0 ? cols[iPMkt] : '0')||'0').replace(',','.').replace(/[^0-9.]/g,''));
-    var fecha     = iFecha >= 0 ? pfNormalizeDate(cols[iFecha]||'') : new Date().toISOString().slice(0,10);
-    if (!ticker || cantidad<=0 || pCompra<=0) continue;
-    results.push({ id:'pf_'+Date.now()+'_'+i, ticker:ticker, nombre:nombre, cantidad:cantidad, precioCompra:pCompra, precioActual:pActual||null, fecha:fecha });
+  for(var i=1;i<lines.length;i++){
+    var cols=pfSplitCSVLine(lines[i],sep);
+    if(!cols[iTicker])continue;
+    var ticker=(cols[iTicker]||'').trim().toUpperCase().replace(/[^A-Z0-9.]/g,'');
+    var nombre=iNombre>=0?(cols[iNombre]||'').trim():'';
+    // Limpiar números con puntos de miles y coma decimal (formato Argentina)
+    var cleanNum=function(s){return parseFloat((s||'0').replace(/\./g,'').replace(',','.').replace(/[^0-9.-]/g,''))||0;};
+    var cantidad=cleanNum(iCant>=0?cols[iCant]:'0');
+    var pCompra =cleanNum(iPPC>=0?cols[iPPC]:'0');
+    var pActual =iPMkt>=0?cleanNum(cols[iPMkt]):null;
+    var fecha   =iFecha>=0?pfNormalizeDate(cols[iFecha]||''):new Date().toISOString().slice(0,10);
+    if(!ticker||cantidad<=0||pCompra<=0)continue;
+    results.push({id:'pf_'+Date.now()+'_'+i, ticker:ticker, nombre:nombre, cantidad:cantidad, precioCompra:pCompra, precioActual:pActual||null, fecha:fecha, moneda:'ARS'});
   }
   return results;
 }
 
-// ── PARSER BULL MARKET / GENÉRICO ─────────────────────────
-// Acepta CSV con columnas: ticker/simbolo, cantidad, precio_compra/precio_promedio, precio_actual, fecha
+// ── PARSER GENÉRICO ────────────────────────────────────────
 function pfParseGeneric(lines) {
-  var results = [];
-  var header  = lines[0].toLowerCase().split(/[,;]/);
-  var idx = function(names) {
-    for (var j=0;j<names.length;j++) { for (var i=0;i<header.length;i++) { if (header[i].indexOf(names[j])!==-1) return i; } }
-    return -1;
-  };
-  var iTicker  = idx(['ticker','simbolo','símbolo','especie','instrumento','activo','symbol']);
+  var results=[];
+  var sep=lines[0].indexOf(';')!==-1?';':',';
+  var header=lines[0].toLowerCase().split(sep);
+  var idx=function(names){for(var j=0;j<names.length;j++){for(var i=0;i<header.length;i++){if(header[i].indexOf(names[j])!==-1)return i;}}return -1;};
+  var iTicker  = idx(['ticker','simbolo','símbolo','especie','instrumento','activo','symbol']); if(iTicker<0)iTicker=0;
   var iNombre  = idx(['nombre','denominacion','name','descripcion']);
-  var iCant    = idx(['cantidad','cant','cuotapartes','quantity','qty']);
-  var iPCompra = idx(['compra','promedio','costo','buy','purchase']);
-  var iPActual = idx(['actual','mercado','current','precio_actual','ultimo','last']);
+  var iCant    = idx(['cantidad','cant','cuotapartes','quantity','qty','nominal']); if(iCant<0)iCant=1;
+  var iPCompra = idx(['compra','promedio','costo','buy','ppc','p.compra']); if(iPCompra<0)iPCompra=2;
+  var iPActual = idx(['actual','mercado','current','precio_actual','ultimo','last','precio']);
   var iFecha   = idx(['fecha','date','fecha_compra']);
+  var iMoneda  = idx(['moneda','currency','cur']);
 
-  if (iTicker < 0) iTicker = 0;
-  if (iCant   < 0) iCant   = 1;
-  if (iPCompra< 0) iPCompra= 2;
-
-  for (var i=1; i<lines.length; i++) {
-    var cols = pfSplitCSVLine(lines[i]);
-    if (!cols[iTicker]) continue;
-    var ticker   = (cols[iTicker]||'').trim().toUpperCase().replace(/[^A-Z0-9.]/g,'');
-    var nombre   = iNombre>=0 ? (cols[iNombre]||'').trim() : '';
-    var cantidad = parseFloat((cols[iCant]||'0').replace(',','.').replace(/[^0-9.]/g,''));
-    var pCompra  = parseFloat((cols[iPCompra]||'0').replace(',','.').replace(/[^0-9.]/g,''));
-    var pActual  = iPActual>=0 ? parseFloat((cols[iPActual]||'0').replace(',','.').replace(/[^0-9.]/g,'')) : null;
-    var fecha    = iFecha>=0 ? pfNormalizeDate(cols[iFecha]||'') : new Date().toISOString().slice(0,10);
-    if (!ticker || cantidad<=0 || pCompra<=0) continue;
-    results.push({ id:'pf_'+Date.now()+'_'+i, ticker:ticker, nombre:nombre, cantidad:cantidad, precioCompra:pCompra, precioActual:pActual||null, fecha:fecha });
+  for(var i=1;i<lines.length;i++){
+    var cols=pfSplitCSVLine(lines[i],sep);
+    if(!cols[iTicker])continue;
+    var ticker=(cols[iTicker]||'').trim().toUpperCase().replace(/[^A-Z0-9.]/g,'');
+    var nombre=iNombre>=0?(cols[iNombre]||'').trim():'';
+    var cleanNum=function(s){return parseFloat((s||'0').replace(/\./g,'').replace(',','.').replace(/[^0-9.-]/g,''))||0;};
+    var cantidad=cleanNum(cols[iCant]);
+    var pCompra=cleanNum(cols[iPCompra]);
+    var pActual=iPActual>=0?cleanNum(cols[iPActual]):null;
+    var fecha=iFecha>=0?pfNormalizeDate(cols[iFecha]||''):new Date().toISOString().slice(0,10);
+    // Detectar moneda: si hay columna, usarla; si precios > 500 probablemente ARS
+    var moneda='USD';
+    if(iMoneda>=0){ moneda=(cols[iMoneda]||'USD').trim().toUpperCase().indexOf('ARS')!==-1?'ARS':'USD'; }
+    else if(pCompra>500){ moneda='ARS'; }
+    if(!ticker||cantidad<=0||pCompra<=0)continue;
+    results.push({id:'pf_'+Date.now()+'_'+i, ticker:ticker, nombre:nombre, cantidad:cantidad, precioCompra:pCompra, precioActual:pActual||null, fecha:fecha, moneda:moneda});
   }
   return results;
 }
 
-// ── PARSER IOL / InvertirOnLine ───────────────────────────
-function pfParseIOL(lines) {
-  // IOL tiene formato similar al genérico
-  return pfParseGeneric(lines);
-}
-
-// ── HELPERS CSV ───────────────────────────────────────────
-function pfSplitCSVLine(line) {
-  // Maneja campos entre comillas y separadores , o ;
-  var result = [], cur = '', inQ = false, sep = line.indexOf(';') !== -1 ? ';' : ',';
-  for (var i=0; i<line.length; i++) {
-    var ch = line[i];
-    if (ch === '"') { inQ = !inQ; }
-    else if (ch === sep && !inQ) { result.push(cur.trim()); cur = ''; }
-    else { cur += ch; }
+function pfSplitCSVLine(line, sep) {
+  if(!sep)sep=line.indexOf(';')!==-1?';':',';
+  var result=[],cur='',inQ=false;
+  for(var i=0;i<line.length;i++){
+    var ch=line[i];
+    if(ch==='"'){inQ=!inQ;}
+    else if(ch===sep&&!inQ){result.push(cur.trim());cur='';}
+    else{cur+=ch;}
   }
-  result.push(cur.trim());
-  return result;
+  result.push(cur.trim()); return result;
 }
 
 function pfNormalizeDate(s) {
-  s = (s||'').trim().replace(/['"]/g,'');
-  if (!s) return new Date().toISOString().slice(0,10);
-  // dd/mm/yyyy → yyyy-mm-dd
-  var m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
-  if (m) {
-    var y = m[3].length===2 ? '20'+m[3] : m[3];
-    return y+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
-  }
-  // yyyy-mm-dd
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+  s=(s||'').trim().replace(/['"]/g,'');
+  if(!s)return new Date().toISOString().slice(0,10);
+  var m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if(m){var y=m[3].length===2?'20'+m[3]:m[3]; return y+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');}
+  if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);
   return new Date().toISOString().slice(0,10);
 }
 
-// ── INICIALIZAR PORTAFOLIO ─────────────────────────────────
-(function pfInit() {
-  // Esperar a que el DOM esté listo
-  function _init() {
+// ── INICIALIZAR ───────────────────────────────────────────
+(function pfInit(){
+  function _init(){
     pfLoad();
-    // FIX: renderizar primero con precios manuales, luego actualizar con live
+    // Aplicar estado del toggle
+    var bu=document.getElementById('pfBtnUSD'), ba=document.getElementById('pfBtnARS');
+    if(bu)bu.classList.toggle('active',pfViewCurrency==='USD');
+    if(ba)ba.classList.toggle('active',pfViewCurrency==='ARS');
     pfRenderAll();
-    // Fetch live prices
-    var tickers = [];
-    pfPositions.forEach(function(p){ var t=(p.ticker||'').toUpperCase(); if(t && tickers.indexOf(t)===-1) tickers.push(t); });
-    if (tickers.length) pfFetchLivePrices(tickers, function(){ pfRenderAll(); });
-    // Auto-fetch dólar MEP al cargar
+    // Fetch solo posiciones USD
+    var tUSD=[];
+    pfPositions.forEach(function(p){if((p.moneda||'ARS')==='USD'){var t=(p.ticker||'').toUpperCase();if(t&&tUSD.indexOf(t)===-1)tUSD.push(t);}});
+    if(tUSD.length)pfFetchLivePrices(tUSD, function(){pfRenderAll();});
     pfFetchMepAuto();
-    // Auto-refresh precios cada 60s si el tab está activo
-    setInterval(function(){
-      var tabEl = document.getElementById('tab-portfolio');
-      if (tabEl && tabEl.classList.contains('active')) pfRefreshLivePrices();
-    }, 60000);
-    // Auto-refresh MEP cada 5 minutos
-    setInterval(function(){ pfFetchMepAuto(); }, 300000);
+    setInterval(function(){var el=document.getElementById('tab-portfolio');if(el&&el.classList.contains('active'))pfRefreshLivePrices();},60000);
+    setInterval(function(){pfFetchMepAuto();},300000);
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _init);
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',_init);
   else _init();
 })();
+
 </script>
 </body>
 </html>
