@@ -1098,6 +1098,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           <button class="btn btn-g btn-sm" onclick="pfExportCSV()">⬇ CSV</button>
           <button class="btn btn-y btn-sm" onclick="pfOpenImportModal()" style="font-size:11px">📥 IMPORTAR</button>
           <button class="btn btn-a btn-sm" onclick="pfOpenAddModal()">＋ AGREGAR</button>
+          <button class="btn btn-r btn-sm" onclick="pfClearAll()" title="Eliminar todo el portafolio" style="font-size:11px">🗑 BORRAR TODO</button>
         </div>
       </div>
 
@@ -3325,6 +3326,16 @@ function pfDeletePosition(id) {
   if(!confirm('¿Eliminar esta posición?'))return;
   pfPositions=pfPositions.filter(function(p){return p.id!==id;});
   pfSave(); pfRenderAll();
+}
+
+// ── BORRAR TODO ───────────────────────────────────────────
+function pfClearAll() {
+  if (pfPositions.length === 0) { alert('El portafolio ya está vacío.'); return; }
+  if (!confirm('⚠ ¿Eliminar TODAS las posiciones del portafolio?\n\nEsta acción no se puede deshacer.')) return;
+  pfPositions = [];
+  pfLiveCache = {};
+  pfSave();
+  pfRenderAll();
 }
 
 // ── FETCH PRECIO LIVE (botón modal) ──────────────────────
