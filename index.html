@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -1038,8 +1039,11 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
     <!-- ALL TAB -->
     <div class="tab-panel" id="tab-all">
 
+      <!-- 🌎 SECCIÓN GLOBAL (por sectores, renderizada dinámicamente) -->
+      <div id="globalSectorContainer"></div>
+
       <!-- 🇦🇷 SECCIÓN MERVAL -->
-      <div class="mkt-section" id="mervalSection">
+      <div class="mkt-section" id="mervalSection" style="margin-top:18px">
         <div class="mkt-section-header ar">
           <div class="mkt-title">
             <span>🇦🇷</span> MERVAL — ACCIONES ARGENTINAS
@@ -1064,36 +1068,6 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
               <th style="width:50px;text-align:center">📝</th>
             </tr></thead>
             <tbody id="mervalBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- 🌎 SECCIÓN GLOBAL -->
-      <div class="mkt-section" id="globalSection">
-        <div class="mkt-section-header gl">
-          <div class="mkt-title">
-            <span>🌎</span> GLOBAL — ACCIONES INTERNACIONALES
-            <span class="mkt-badge gl" id="globalBadge">0 tickers · USD</span>
-          </div>
-          <div class="mkt-stats" id="globalStats"></div>
-        </div>
-        <div class="tbl-wrap">
-          <table class="dt">
-            <thead><tr>
-              <th style="width:80px" onclick="tsMkt('gl','symbol',this)">Ticker<span class="sort-icon">⇅</span></th>
-              <th onclick="tsMkt('gl','price',this)">Precio<span class="sort-icon">⇅</span></th>
-              <th onclick="tsMkt('gl','chgPct',this)">% Día<span class="sort-icon">⇅</span></th>
-              <th onclick="tsMkt('gl','rsi',this)">RSI<span class="sort-icon">⇅</span></th>
-              <th onclick="tsMkt('gl','adx',this)">ADX<span class="sort-icon">⇅</span></th>
-              <th onclick="tsMkt('gl','distEma200',this)">Dist EMA200<span class="sort-icon">⇅</span></th>
-              <th onclick="tsMkt('gl','volume',this)">Volumen<span class="sort-icon">⇅</span></th>
-              <th onclick="tsMkt('gl','avgVol20',this)">VolProm20<span class="sort-icon">⇅</span></th>
-              <th onclick="tsMkt('gl','marketCap',this)">Cap. Mkt<span class="sort-icon">⇅</span></th>
-              <th onclick="tsMkt('gl','mom12m',this)">Mom 12M<span class="sort-icon">⇅</span></th>
-              <th style="min-width:120px">&#9670; CANSLIM</th>
-              <th style="width:50px;text-align:center">📝</th>
-            </tr></thead>
-            <tbody id="globalBody"></tbody>
           </table>
         </div>
       </div>
@@ -2274,13 +2248,13 @@ function renderTech(){
 
   var html = '';
 
-  if (mervalGroups.length) {
-    html += '<div style="margin-bottom:8px;padding:8px 12px;background:linear-gradient(135deg,rgba(0,230,118,0.07),rgba(0,180,90,0.03));border:1px solid rgba(0,230,118,0.25);border-radius:2px;font-family:var(--head);font-weight:900;font-size:13px;letter-spacing:3px;color:var(--green)">🇦🇷 MERVAL — ACCIONES ARGENTINAS</div>';
-    html += mervalGroups.map(renderGroup).join('');
-  }
   if (globalGroups.length) {
-    html += '<div style="margin-bottom:8px;margin-top:'+(mervalGroups.length?'18px':'0')+';padding:8px 12px;background:linear-gradient(135deg,rgba(0,212,255,0.06),rgba(0,153,204,0.03));border:1px solid rgba(0,212,255,0.2);border-radius:2px;font-family:var(--head);font-weight:900;font-size:13px;letter-spacing:3px;color:var(--accent)">🌎 GLOBAL — ACCIONES INTERNACIONALES</div>';
+    html += '<div style="margin-bottom:8px;padding:8px 12px;background:linear-gradient(135deg,rgba(0,212,255,0.06),rgba(0,153,204,0.03));border:1px solid rgba(0,212,255,0.2);border-radius:2px;font-family:var(--head);font-weight:900;font-size:13px;letter-spacing:3px;color:var(--accent)">🌎 GLOBAL — ACCIONES INTERNACIONALES</div>';
     html += globalGroups.map(renderGroup).join('');
+  }
+  if (mervalGroups.length) {
+    html += '<div style="margin-bottom:8px;margin-top:'+(globalGroups.length?'18px':'0')+';padding:8px 12px;background:linear-gradient(135deg,rgba(0,230,118,0.07),rgba(0,180,90,0.03));border:1px solid rgba(0,230,118,0.25);border-radius:2px;font-family:var(--head);font-weight:900;font-size:13px;letter-spacing:3px;color:var(--green)">🇦🇷 MERVAL — ACCIONES ARGENTINAS</div>';
+    html += mervalGroups.map(renderGroup).join('');
   }
 
   var techBody = document.getElementById('techBody');
@@ -2376,7 +2350,7 @@ function renderAllTab() {
   var arData = filtered.filter(function(d){ return isArgentineTicker(d.symbol); });
   var glData = filtered.filter(function(d){ return !isArgentineTicker(d.symbol); });
 
-  // Aplicar sort independiente
+  // Aplicar sort independiente para merval
   function sortData(data, mkt) {
     var st = mktSort[mkt];
     if (!st.field) return data;
@@ -2389,23 +2363,16 @@ function renderAllTab() {
   }
 
   arData = sortData(arData, 'ar');
-  glData = sortData(glData, 'gl');
 
   // ── MERVAL badge + stats
   var arStats = sectionStats(arData);
-  var glStats = sectionStats(glData);
   var arBadge = document.getElementById('mervalBadge');
-  var glBadge = document.getElementById('globalBadge');
   if (arBadge) arBadge.textContent = arData.length + ' ticker' + (arData.length !== 1 ? 's' : '') + ' · ARS';
-  if (glBadge) glBadge.textContent = glData.length + ' ticker' + (glData.length !== 1 ? 's' : '') + ' · USD';
   renderStatsBar(arStats, 'mervalStats', 'ar');
-  renderStatsBar(glStats, 'globalStats', 'gl');
 
-  // Ocultar secciones vacías
+  // Ocultar/mostrar sección merval
   var mervalSection = document.getElementById('mervalSection');
-  var globalSection = document.getElementById('globalSection');
   if (mervalSection) mervalSection.style.display = arData.length ? '' : 'none';
-  if (globalSection) globalSection.style.display = glData.length ? '' : 'none';
 
   // ── Render MERVAL rows
   var arRows = arData.map(function(d) {
@@ -2431,26 +2398,114 @@ function renderAllTab() {
   }).join('');
   document.getElementById('mervalBody').innerHTML = arRows || emptyRow(11);
 
-  // ── Render GLOBAL rows
-  var glRows = glData.map(function(d) {
-    return '<tr class="'+(d._flash==='up'?'flu':d._flash==='dn'?'fld':'')+'">' +
-      '<td><div class="tk-cell"><div class="sec-bar" style="background:'+(SEC_COLOR[d.sector]||'#78909c')+'"></div>' +
-        '<span class="tk-sym">'+d.symbol+'</span>' +
-      '</div></td>' +
-      '<td style="color:'+(d.chgPct>=0?'var(--green)':'var(--red)')+'">'+fp(d.price)+'</td>' +
-      '<td>'+chipChg(d.chgPct)+'</td>' +
-      '<td>'+rsiCell(d.rsi)+'</td>' +
-      '<td>'+adxCell(d.adx)+'</td>' +
-      '<td>'+distCell(d.distEma200)+'</td>' +
-      '<td>'+fv(d.volume)+'</td>' +
-      '<td>'+fv(d.avgVol20)+'</td>' +
-      '<td>'+fcap(d.marketCap)+'</td>' +
-      '<td>'+momCell(d.mom12m != null ? d.mom12m : d.mom6m)+'</td>' +
-      '<td>'+canslimCell(d)+'</td>' +
-      '<td style="text-align:center">'+getNoteIcon(d.symbol)+'</td>' +
-      '</tr>';
-  }).join('');
-  document.getElementById('globalBody').innerHTML = glRows || emptyRow(12);
+  // ── Render GLOBAL por sectores (arriba, en globalSectorContainer)
+  var glContainer = document.getElementById('globalSectorContainer');
+  if (!glContainer) return;
+
+  if (!glData.length) {
+    glContainer.innerHTML = '';
+    return;
+  }
+
+  // Cabecera global
+  var glStats = sectionStats(glData);
+  var glTotal = glData.length;
+  var glHeaderHtml =
+    '<div style="margin-bottom:8px;padding:8px 14px;background:linear-gradient(135deg,rgba(0,212,255,0.06),rgba(0,153,204,0.03));border:1px solid rgba(0,212,255,0.2);border-radius:2px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">' +
+      '<div style="font-family:var(--head);font-weight:900;font-size:15px;letter-spacing:3px;color:var(--accent);display:flex;align-items:center;gap:8px">' +
+        '<span>🌎</span> GLOBAL — ACCIONES INTERNACIONALES' +
+        '<span class="mkt-badge gl" style="font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:2px;letter-spacing:1px;border:1px solid;color:var(--accent);border-color:rgba(0,212,255,0.4);background:rgba(0,212,255,0.07)">'+glTotal+' tickers · USD</span>' +
+      '</div>' +
+      '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-family:var(--mono);font-size:12px">' +
+        (glStats.chgAvg != null ? '<span style="color:'+(glStats.chgAvg>=0?'var(--green)':'var(--red)')+'">Día prom: '+(glStats.chgAvg>=0?'+':'')+f2(glStats.chgAvg)+'%</span>' : '') +
+        (glStats.rsiAvg != null ? '<span style="color:var(--text-dim)">RSI: <span style="color:var(--yellow)">'+f1(glStats.rsiAvg)+'</span></span>' : '') +
+        '<span style="color:var(--text-dim)"><span style="color:var(--green)">▲'+glStats.up+'</span> <span style="color:var(--red)">▼'+glStats.dn+'</span></span>' +
+      '</div>' +
+    '</div>';
+
+  // Agrupar global por sector
+  var grouped = {};
+  glData.forEach(function(d) {
+    var sec = d.sector || 'Otros';
+    if (!grouped[sec]) grouped[sec] = [];
+    grouped[sec].push(d);
+  });
+
+  // Aplicar sort de global a cada sector individualmente
+  var glSortSt = mktSort['gl'];
+
+  function renderGlSector(sec) {
+    var secData = grouped[sec].slice();
+    if (glSortSt && glSortSt.field) {
+      var f = glSortSt.field, dir = glSortSt.dir;
+      secData.sort(function(a,b){
+        var av = a[f] != null ? a[f] : -Infinity;
+        var bv = b[f] != null ? b[f] : -Infinity;
+        if (typeof av === 'string') return av.localeCompare(bv) * dir;
+        return (av - bv) * dir;
+      });
+    }
+    var col = SEC_COLOR[sec] || '#78909c';
+    var icon = SEC_ICON[sec] || '?';
+    var upC = secData.filter(function(d){ return d.chgPct > 0; }).length;
+    var dnC = secData.filter(function(d){ return d.chgPct < 0; }).length;
+    var rows = secData.map(function(d) {
+      return '<tr class="'+(d._flash==='up'?'flu':d._flash==='dn'?'fld':'')+'">' +
+        '<td><div class="tk-cell"><div class="sec-bar" style="background:'+(SEC_COLOR[d.sector]||'#78909c')+'"></div>' +
+          '<span class="tk-sym">'+d.symbol+'</span>' +
+        '</div></td>' +
+        '<td style="color:'+(d.chgPct>=0?'var(--green)':'var(--red)')+'">'+fp(d.price)+'</td>' +
+        '<td>'+chipChg(d.chgPct)+'</td>' +
+        '<td>'+rsiCell(d.rsi)+'</td>' +
+        '<td>'+adxCell(d.adx)+'</td>' +
+        '<td>'+distCell(d.distEma200)+'</td>' +
+        '<td>'+fv(d.volume)+'</td>' +
+        '<td>'+fv(d.avgVol20)+'</td>' +
+        '<td>'+fcap(d.marketCap)+'</td>' +
+        '<td>'+momCell(d.mom12m != null ? d.mom12m : d.mom6m)+'</td>' +
+        '<td>'+canslimCell(d)+'</td>' +
+        '<td style="text-align:center">'+getNoteIcon(d.symbol)+'</td>' +
+        '</tr>';
+    }).join('');
+    return '<div class="mkt-section" style="margin-bottom:14px">' +
+      '<div style="display:flex;align-items:center;gap:8px;padding:7px 12px;background:var(--bg3);border:1px solid var(--border);border-bottom:none;border-radius:2px 2px 0 0">' +
+        '<div style="width:3px;height:14px;background:'+col+';border-radius:2px;flex-shrink:0"></div>' +
+        '<span style="color:'+col+';font-size:13px">'+icon+'</span>' +
+        '<span style="font-family:var(--head);font-weight:900;font-size:12px;letter-spacing:2px;color:'+col+';text-transform:uppercase">'+sec+'</span>' +
+        '<span style="font-family:var(--mono);font-size:11px;color:var(--text-dim);background:var(--bg);padding:1px 6px;border:1px solid var(--border);border-radius:2px">'+secData.length+'</span>' +
+        '<span style="font-family:var(--mono);font-size:11px;color:var(--green);margin-left:6px">▲'+upC+'</span>' +
+        '<span style="font-family:var(--mono);font-size:11px;color:var(--red)">▼'+dnC+'</span>' +
+      '</div>' +
+      '<div class="tbl-wrap" style="border-radius:0 0 2px 2px">' +
+        '<table class="dt">' +
+          '<thead><tr>' +
+            '<th style="width:80px" onclick="tsMkt(\'gl\',\'symbol\',this)">Ticker<span class="sort-icon">⇅</span></th>' +
+            '<th onclick="tsMkt(\'gl\',\'price\',this)">Precio<span class="sort-icon">⇅</span></th>' +
+            '<th onclick="tsMkt(\'gl\',\'chgPct\',this)">% Día<span class="sort-icon">⇅</span></th>' +
+            '<th onclick="tsMkt(\'gl\',\'rsi\',this)">RSI<span class="sort-icon">⇅</span></th>' +
+            '<th onclick="tsMkt(\'gl\',\'adx\',this)">ADX<span class="sort-icon">⇅</span></th>' +
+            '<th onclick="tsMkt(\'gl\',\'distEma200\',this)">Dist EMA200<span class="sort-icon">⇅</span></th>' +
+            '<th onclick="tsMkt(\'gl\',\'volume\',this)">Volumen<span class="sort-icon">⇅</span></th>' +
+            '<th onclick="tsMkt(\'gl\',\'avgVol20\',this)">VolProm20<span class="sort-icon">⇅</span></th>' +
+            '<th onclick="tsMkt(\'gl\',\'marketCap\',this)">Cap. Mkt<span class="sort-icon">⇅</span></th>' +
+            '<th onclick="tsMkt(\'gl\',\'mom12m\',this)">Mom 12M<span class="sort-icon">⇅</span></th>' +
+            '<th style="min-width:120px">&#9670; CANSLIM</th>' +
+            '<th style="width:50px;text-align:center">📝</th>' +
+          '</tr></thead>' +
+          '<tbody>'+rows+'</tbody>' +
+        '</table>' +
+      '</div>' +
+    '</div>';
+  }
+
+  var sectorsHtml = SEC_ORDER.filter(function(s){ return grouped[s] && grouped[s].length; })
+    .map(renderGlSector).join('');
+  // sectores no en SEC_ORDER
+  Object.keys(grouped).forEach(function(s){
+    if (SEC_ORDER.indexOf(s) === -1) sectorsHtml += renderGlSector(s);
+  });
+
+  glContainer.innerHTML = glHeaderHtml + sectorsHtml;
 }
 
 function renderEarningsTab() {
