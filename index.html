@@ -1026,9 +1026,9 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           <th data-field="adx" onclick="ts('adx',this)">ADX(14)<span class="sort-icon">⇅</span></th>
           <th data-field="distEma50" onclick="ts('distEma50',this)">Dist EMA50%<span class="sort-icon">⇅</span></th>
           <th data-field="distEma200" onclick="ts('distEma200',this)">Dist EMA200%<span class="sort-icon">⇅</span></th>
-          <th data-field="mom12m" onclick="ts('mom12m',this)">Mom 12M (Anual)<span class="sort-icon">⇅</span></th>
-          <th style="width:110px">Squeeze Mom</th>
-          <th data-field="beta" onclick="ts('beta',this)">Beta<span class="sort-icon">⇅</span></th>
+          <th style="width:80px" data-field="mom12m" onclick="ts('mom12m',this)">Mom 12M<span class="sort-icon">⇅</span></th>
+          <th style="width:140px">Squeeze Mom</th>
+          <th style="width:60px" data-field="beta" onclick="ts('beta',this)">Beta<span class="sort-icon">⇅</span></th>
           <th style="width:70px">Spark</th>
           <th style="width:60px">Chart</th>
         </tr></thead>
@@ -2181,7 +2181,7 @@ function renderTech(){
       '<td>'+distCell(d.distEma50)+'</td><td>'+distCell(d.distEma200)+'</td>'+
       '<td>'+momCell(d.mom12m!=null?d.mom12m:d.mom6m)+'</td>'+
       '<td>'+squeezeCell(d)+'</td>'+
-      '<td>'+(d.beta?f2(d.beta):'--')+'</td>'+
+      '<td>'+(d.beta!=null?'<span class="chip cy" style="font-size:11px">β '+f2(d.beta)+'</span>':'<span style="color:var(--text-dim)">--</span>')+'</td>'+
       '<td>'+doSpark(d.spark)+'</td>'+
       '<td><button class="tv-btn" onclick="openTVChart(\''+d.symbol+'\')">&#128200;</button></td>'+
       '</tr>';
@@ -2239,7 +2239,7 @@ function renderTech(){
         '<thead><tr>' +
           '<th style="width:90px">Ticker</th><th>Precio</th><th>% Día</th>' +
           '<th>RSI(14)</th><th>ADX(14)</th><th>Dist EMA50%</th><th>Dist EMA200%</th>' +
-          '<th>Mom 12M</th><th style="width:110px">Squeeze Mom</th><th>Beta</th>' +
+          '<th style="width:80px">Mom 12M</th><th style="width:140px">Squeeze Mom</th><th style="width:60px">Beta</th>' +
           '<th style="width:70px">Spark</th><th style="width:60px">Chart</th>' +
         '</tr></thead>' +
         '<tbody>' + secData.map(makeRow).join('') + '</tbody>' +
@@ -2604,7 +2604,8 @@ function adxCell(v){
 }
 function momCell(v){
   if(v==null)return '<span style="color:var(--text-dim)">--</span>';
-  return '<span style="color:'+(v>=0?'var(--green)':'var(--red)')+'">'+(v>=0?'+':'')+f1(v)+'%</span>';
+  var cls=v>=20?'cg':v<0?'cr':'cy';
+  return '<span class="chip '+cls+'" style="font-size:11px">'+(v>=0?'+':'')+f1(v)+'%</span>';
 }
 function chipChg(v){
   if(v==null)return '--';
@@ -2867,18 +2868,19 @@ function squeezeCell(d) {
     barColor = !rising ? 'var(--red)'  : '#6b0010';       // rojo brillante / oscuro
   }
 
-  // ── Barra de intensidad ──────────────────────
-  var absMax  = 5;   // rango normalización (ajustá si los valores son muy grandes)
+  // ── Barra de intensidad (recuadro fijo) ──────
+  var absMax  = 5;   // rango normalización
   var intensity = Math.min(Math.abs(mom) / absMax, 1);
-  var barW    = Math.max(3, Math.round(intensity * 36));
+  var fillPct = Math.max(4, Math.round(intensity * 100));
   var sign    = mom >= 0 ? '+' : '';
 
+  // Recuadro fijo: borde siempre visible, relleno proporcional
   return '<div style="display:flex;align-items:center;gap:5px;justify-content:flex-end">' +
-    '<div style="display:flex;align-items:center;gap:3px">' +
-      '<div style="width:'+barW+'px;height:8px;background:'+barColor+';border-radius:1px"></div>' +
-      '<span style="font-family:var(--mono);font-size:11px;color:'+barColor+'">'+sign+f2(mom)+'</span>' +
+    '<span style="font-family:var(--mono);font-size:11px;color:'+barColor+';min-width:40px;text-align:right">'+sign+f2(mom)+'</span>' +
+    '<div style="width:40px;height:10px;background:var(--bg3);border:1px solid '+(mom>=0?'rgba(0,230,118,0.35)':'rgba(255,61,90,0.35)')+';border-radius:2px;overflow:hidden;flex-shrink:0" title="Momentum: '+sign+f2(mom)+'">' +
+      '<div style="height:100%;width:'+fillPct+'%;background:'+barColor+';border-radius:1px;transition:width .3s"></div>' +
     '</div>' +
-    '<div title="'+dotTitle+'" style="width:9px;height:9px;border-radius:50%;background:'+dotColor+';box-shadow:0 0 6px '+dotColor+';flex-shrink:0"></div>' +
+    '<div title="'+dotTitle+'" style="width:9px;height:9px;border-radius:50%;background:'+dotColor+';box-shadow:0 0 5px '+dotColor+';flex-shrink:0"></div>' +
   '</div>';
 }
 
