@@ -2181,7 +2181,7 @@ function renderTech(){
       '<td>'+distCell(d.distEma50)+'</td><td>'+distCell(d.distEma200)+'</td>'+
       '<td>'+momCell(d.mom12m!=null?d.mom12m:d.mom6m)+'</td>'+
       '<td>'+squeezeCell(d)+'</td>'+
-      '<td>'+(d.beta!=null?'<span class="chip cy" style="font-size:11px">β '+f2(d.beta)+'</span>':'<span style="color:var(--text-dim)">--</span>')+'</td>'+
+      '<td style="color:var(--text-dim)">'+(d.beta!=null?f2(d.beta):'--')+'</td>'+
       '<td>'+doSpark(d.spark)+'</td>'+
       '<td><button class="tv-btn" onclick="openTVChart(\''+d.symbol+'\')">&#128200;</button></td>'+
       '</tr>';
@@ -2874,10 +2874,10 @@ function squeezeCell(d) {
   var fillPct = Math.max(4, Math.round(intensity * 100));
   var sign    = mom >= 0 ? '+' : '';
 
-  // Recuadro fijo: borde siempre visible, relleno proporcional
+  // Recuadro fijo: borde siempre visible, relleno de derecha a izquierda
   return '<div style="display:flex;align-items:center;gap:5px;justify-content:flex-end">' +
     '<span style="font-family:var(--mono);font-size:11px;color:'+barColor+';min-width:40px;text-align:right">'+sign+f2(mom)+'</span>' +
-    '<div style="width:40px;height:10px;background:var(--bg3);border:1px solid '+(mom>=0?'rgba(0,230,118,0.35)':'rgba(255,61,90,0.35)')+';border-radius:2px;overflow:hidden;flex-shrink:0" title="Momentum: '+sign+f2(mom)+'">' +
+    '<div style="width:40px;height:10px;background:var(--bg3);border:1px solid '+(mom>=0?'rgba(0,230,118,0.35)':'rgba(255,61,90,0.35)')+';border-radius:2px;overflow:hidden;flex-shrink:0;direction:rtl" title="Momentum: '+sign+f2(mom)+'">' +
       '<div style="height:100%;width:'+fillPct+'%;background:'+barColor+';border-radius:1px;transition:width .3s"></div>' +
     '</div>' +
     '<div title="'+dotTitle+'" style="width:9px;height:9px;border-radius:50%;background:'+dotColor+';box-shadow:0 0 5px '+dotColor+';flex-shrink:0"></div>' +
