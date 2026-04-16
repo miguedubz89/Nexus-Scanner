@@ -1019,18 +1019,17 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
     <div class="tab-panel" id="tab-technical">
       <div class="tbl-wrap"><table class="dt" id="techTable">
         <thead><tr>
-          <th style="width:90px" data-field="symbol" onclick="ts('symbol',this)">Ticker<span class="sort-icon">⇅</span></th>
-          <th data-field="price" onclick="ts('price',this)">Precio<span class="sort-icon">⇅</span></th>
-          <th data-field="chgPct" onclick="ts('chgPct',this)">% Día<span class="sort-icon">⇅</span></th>
-          <th data-field="rsi" onclick="ts('rsi',this)">RSI(14)<span class="sort-icon">⇅</span></th>
-          <th data-field="adx" onclick="ts('adx',this)">ADX(14)<span class="sort-icon">⇅</span></th>
-          <th data-field="distEma50" onclick="ts('distEma50',this)">Dist EMA50%<span class="sort-icon">⇅</span></th>
-          <th data-field="distEma200" onclick="ts('distEma200',this)">Dist EMA200%<span class="sort-icon">⇅</span></th>
-          <th style="width:80px" data-field="mom12m" onclick="ts('mom12m',this)">Mom 12M<span class="sort-icon">⇅</span></th>
-          <th style="width:140px">Squeeze Mom</th>
-          <th style="width:60px" data-field="beta" onclick="ts('beta',this)">Beta<span class="sort-icon">⇅</span></th>
-          <th style="width:70px">Spark</th>
-          <th style="width:60px">Chart</th>
+          <th style="width:80px" data-field="symbol" onclick="ts('symbol',this)">Ticker<span class="sort-icon">⇅</span></th>
+          <th style="width:75px" data-field="price" onclick="ts('price',this)">Precio<span class="sort-icon">⇅</span></th>
+          <th style="width:60px" data-field="chgPct" onclick="ts('chgPct',this)">% Día<span class="sort-icon">⇅</span></th>
+          <th style="width:60px" data-field="rsi" onclick="ts('rsi',this)">RSI<span class="sort-icon">⇅</span></th>
+          <th style="width:60px" data-field="adx" onclick="ts('adx',this)">ADX<span class="sort-icon">⇅</span></th>
+          <th style="width:80px" data-field="distEma50" onclick="ts('distEma50',this)">EMA50%<span class="sort-icon">⇅</span></th>
+          <th style="width:80px" data-field="distEma200" onclick="ts('distEma200',this)">EMA200%<span class="sort-icon">⇅</span></th>
+          <th style="width:120px">Squeeze Mom</th>
+          <th style="width:50px" data-field="beta" onclick="ts('beta',this)">Beta<span class="sort-icon">⇅</span></th>
+          <th style="width:60px">Spark</th>
+          <th style="width:50px">Chart</th>
         </tr></thead>
         <tbody id="techBody"></tbody>
       </table></div>
@@ -1825,19 +1824,25 @@ function loadAndRefresh() {
   cargarCompleto();
 }
 
-// ── CACHE DE TICKERS (sessionStorage, TTL 5 min) ─────
-var TICKER_CACHE_KEY = 'dubz_ticker_cache';
-var TICKER_CACHE_TTL = 5 * 60 * 1000; // 5 minutos en ms
+// ── CACHE DE TICKERS (localStorage, TTL 30 min) ──────
+// Usamos localStorage en lugar de sessionStorage para que
+// el cache sobreviva cuando el celular pone la página en
+// segundo plano y el navegador libera la sesión.
+var TICKER_CACHE_KEY = 'dubz_ticker_cache_v2';
+var TICKER_CACHE_TTL = 30 * 60 * 1000; // 30 minutos en ms
 
 function saveTickerCache(data) {
   try {
-    sessionStorage.setItem(TICKER_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data }));
-  } catch(e) {}
+    localStorage.setItem(TICKER_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data }));
+  } catch(e) {
+    // Si localStorage está lleno, intentar limpiar cache viejo
+    try { localStorage.removeItem(TICKER_CACHE_KEY); localStorage.setItem(TICKER_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data })); } catch(e2) {}
+  }
 }
 
 function loadTickerCache() {
   try {
-    var raw = sessionStorage.getItem(TICKER_CACHE_KEY);
+    var raw = localStorage.getItem(TICKER_CACHE_KEY);
     if (!raw) return null;
     var obj = JSON.parse(raw);
     if (!obj || !obj.data || !obj.ts) return null;
@@ -1845,6 +1850,15 @@ function loadTickerCache() {
     return obj.data;
   } catch(e) { return null; }
 }
+
+// Mostrar datos del cache al volver de segundo plano (Page Visibility API)
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'visible' && allData && allData.length) {
+    // Si tenemos datos en memoria, sólo refrescar la UI sin recargar
+    applyFilters();
+    buildTape();
+  }
+});
 
 async function cargarCompleto() {
   if (!tickers.length) return;
@@ -1872,8 +1886,8 @@ async function cargarCompleto() {
   if (!cached) document.getElementById('progressWrap').style.display = 'block';
   var total = tickers.length, done = 0;
   var nuevaData = [];
-  for (var i = 0; i < tickers.length; i += 3) {
-    var batch = tickers.slice(i, i+3);
+  for (var i = 0; i < tickers.length; i += 5) {
+    var batch = tickers.slice(i, i+5);
     var results = await Promise.all(batch.map(fetchQuote));
     results.forEach(function(r){ if(r) nuevaData.push(r); });
     done += batch.length;
@@ -2179,7 +2193,6 @@ function renderTech(){
       '<td>'+rsiCell(d.rsi)+'</td>'+
       '<td>'+adxCell(d.adx)+'</td>'+
       '<td>'+distCell(d.distEma50)+'</td><td>'+distCell(d.distEma200)+'</td>'+
-      '<td>'+momCell(d.mom12m!=null?d.mom12m:d.mom6m)+'</td>'+
       '<td>'+squeezeCell(d)+'</td>'+
       '<td style="color:var(--text-dim)">'+(d.beta!=null?f2(d.beta):'--')+'</td>'+
       '<td>'+doSpark(d.spark)+'</td>'+
@@ -2235,12 +2248,12 @@ function renderTech(){
         '<span style="font-family:var(--mono);font-size:11px;color:var(--green);margin-left:6px">▲'+upC+'</span>' +
         '<span style="font-family:var(--mono);font-size:11px;color:var(--red)">▼'+dnC+'</span>' +
       '</div>' +
-      '<div class="tbl-wrap" style="border-radius:0 0 2px 2px"><table class="dt" style="min-width:860px">' +
+      '<div class="tbl-wrap" style="border-radius:0 0 2px 2px"><table class="dt" style="min-width:760px">' +
         '<thead><tr>' +
-          '<th style="width:90px">Ticker</th><th>Precio</th><th>% Día</th>' +
-          '<th>RSI(14)</th><th>ADX(14)</th><th>Dist EMA50%</th><th>Dist EMA200%</th>' +
-          '<th style="width:80px">Mom 12M</th><th style="width:140px">Squeeze Mom</th><th style="width:60px">Beta</th>' +
-          '<th style="width:70px">Spark</th><th style="width:60px">Chart</th>' +
+          '<th style="width:80px">Ticker</th><th style="width:75px">Precio</th><th style="width:60px">% Día</th>' +
+          '<th style="width:60px">RSI</th><th style="width:60px">ADX</th><th style="width:80px">EMA50%</th><th style="width:80px">EMA200%</th>' +
+          '<th style="width:120px">Squeeze Mom</th><th style="width:50px">Beta</th>' +
+          '<th style="width:60px">Spark</th><th style="width:50px">Chart</th>' +
         '</tr></thead>' +
         '<tbody>' + secData.map(makeRow).join('') + '</tbody>' +
       '</table></div></div>';
