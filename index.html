@@ -514,10 +514,10 @@ textarea.ti-area:focus{border-color:var(--accent)}
 .sum-sub{font-size:12px;color:var(--text-dim);font-family:var(--mono);margin-top:2px}
 .tbl-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:2px;overflow:hidden;margin-bottom:4px}
 table.dt{width:100%;border-collapse:collapse;table-layout:fixed}
-table.dt th{background:var(--bg3);color:var(--text-dim);font-family:var(--head);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:8px 10px;text-align:right;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap}
+table.dt th{background:var(--bg3);color:var(--text-dim);font-family:var(--head);font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:7px 8px;text-align:right;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap}
 table.dt th:first-child{text-align:left}
 table.dt th:hover{color:var(--accent)}
-table.dt td{padding:7px 10px;text-align:right;border-bottom:1px solid rgba(30,45,61,0.5);font-family:var(--mono);font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+table.dt td{padding:6px 8px;text-align:right;border-bottom:1px solid rgba(30,45,61,0.5);font-family:var(--mono);font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 table.dt td:first-child{text-align:left}
 table.dt tr:last-child td{border-bottom:none}
 table.dt tr:hover td{background:rgba(0,212,255,0.04)}
@@ -869,7 +869,6 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
         <div class="ticker-add-row">
           <input class="ticker-input" id="tickerInputNew" placeholder="Ej: AAPL" maxlength="10"
             onkeydown="if(event.key==='Enter')addTickerFromInput()">
-          <button class="btn btn-a btn-sm" onclick="addTickerFromInput()" title="Agregar ticker">＋</button>
         </div>
         <div class="ticker-list" id="tickerList"></div>
         <div class="ticker-count" id="tickerCount">0 tickers</div>
@@ -1952,7 +1951,12 @@ async function fetchPrecio(sym) {
 
 async function fetchQuote(sym) {
   try {
-    var r = await fetch(API+'/quote?symbol='+sym, {signal: AbortSignal.timeout(15000)});
+    // Si el ticker está en MERVAL_TICKERS (sin sufijo .BA) y no tiene el sufijo, agregarlo para Yahoo Finance
+    var fetchSym = sym;
+    if (!sym.endsWith('.BA') && MERVAL_TICKERS[sym.toUpperCase()] === 1) {
+      fetchSym = sym + '.BA';
+    }
+    var r = await fetch(API+'/quote?symbol='+fetchSym, {signal: AbortSignal.timeout(15000)});
     if (!r.ok) {
       markTickerError(sym, 'HTTP '+r.status);
       return null;
@@ -2493,17 +2497,17 @@ function renderAllTab() {
         '<table class="dt">' +
           '<thead><tr>' +
             '<th style="width:80px" onclick="tsMkt(\'gl\',\'symbol\',this)">Ticker<span class="sort-icon">⇅</span></th>' +
-            '<th onclick="tsMkt(\'gl\',\'price\',this)">Precio<span class="sort-icon">⇅</span></th>' +
-            '<th onclick="tsMkt(\'gl\',\'chgPct\',this)">% Día<span class="sort-icon">⇅</span></th>' +
-            '<th onclick="tsMkt(\'gl\',\'rsi\',this)">RSI<span class="sort-icon">⇅</span></th>' +
-            '<th onclick="tsMkt(\'gl\',\'adx\',this)">ADX<span class="sort-icon">⇅</span></th>' +
-            '<th onclick="tsMkt(\'gl\',\'distEma200\',this)">Dist EMA200<span class="sort-icon">⇅</span></th>' +
-            '<th onclick="tsMkt(\'gl\',\'volume\',this)">Volumen<span class="sort-icon">⇅</span></th>' +
-            '<th onclick="tsMkt(\'gl\',\'avgVol20\',this)">VolProm20<span class="sort-icon">⇅</span></th>' +
-            '<th onclick="tsMkt(\'gl\',\'marketCap\',this)">Cap. Mkt<span class="sort-icon">⇅</span></th>' +
-            '<th onclick="tsMkt(\'gl\',\'mom12m\',this)">Mom 12M<span class="sort-icon">⇅</span></th>' +
-            '<th style="min-width:120px">&#9670; CANSLIM</th>' +
-            '<th style="width:50px;text-align:center">📝</th>' +
+            '<th style="width:72px" onclick="tsMkt(\'gl\',\'price\',this)">Precio<span class="sort-icon">⇅</span></th>' +
+            '<th style="width:62px" onclick="tsMkt(\'gl\',\'chgPct\',this)">% Día<span class="sort-icon">⇅</span></th>' +
+            '<th style="width:62px" onclick="tsMkt(\'gl\',\'rsi\',this)">RSI<span class="sort-icon">⇅</span></th>' +
+            '<th style="width:62px" onclick="tsMkt(\'gl\',\'adx\',this)">ADX<span class="sort-icon">⇅</span></th>' +
+            '<th style="width:78px" onclick="tsMkt(\'gl\',\'distEma200\',this)">EMA200%<span class="sort-icon">⇅</span></th>' +
+            '<th style="width:72px" onclick="tsMkt(\'gl\',\'volume\',this)">Vol<span class="sort-icon">⇅</span></th>' +
+            '<th style="width:72px" onclick="tsMkt(\'gl\',\'avgVol20\',this)">Vol20<span class="sort-icon">⇅</span></th>' +
+            '<th style="width:72px" onclick="tsMkt(\'gl\',\'marketCap\',this)">Cap<span class="sort-icon">⇅</span></th>' +
+            '<th style="width:62px" onclick="tsMkt(\'gl\',\'mom12m\',this)">Mom12M<span class="sort-icon">⇅</span></th>' +
+            '<th style="width:110px">&#9670; CANSLIM</th>' +
+            '<th style="width:36px;text-align:center">📝</th>' +
           '</tr></thead>' +
           '<tbody>'+rows+'</tbody>' +
         '</table>' +
