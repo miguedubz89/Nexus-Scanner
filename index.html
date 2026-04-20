@@ -119,9 +119,9 @@
 
       // Cargar tickers personalizados
       const cloudTickers = await window.loadTickersCloud(user.uid);
-      if (cloudTickers) {
+      if (cloudTickers && cloudTickers.length > 0) {
         window.tickerList = cloudTickers;
-      } else {
+      } else if (!window.tickerList || window.tickerList.length === 0) {
         window.tickerList = DEFAULT_TICKERS.slice();
         window.saveTickersCloud(window.tickerList);
       }
@@ -869,6 +869,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
         <div class="ticker-add-row">
           <input class="ticker-input" id="tickerInputNew" placeholder="Ej: AAPL" maxlength="10"
             onkeydown="if(event.key==='Enter')addTickerFromInput()">
+          <button class="btn btn-a btn-sm" onclick="addTickerFromInput()" title="Agregar ticker" style="padding:7px 12px;font-size:16px;line-height:1">＋</button>
         </div>
         <div class="ticker-list" id="tickerList"></div>
         <div class="ticker-count" id="tickerCount">0 tickers</div>
