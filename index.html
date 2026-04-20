@@ -1891,7 +1891,7 @@ async function cargarCompleto() {
   for (var i = 0; i < tickers.length; i += 5) {
     var batch = tickers.slice(i, i+5);
     var results = await Promise.all(batch.map(fetchQuote));
-    results.forEach(function(r){ if(r) nuevaData.push(r); });
+    results.forEach(function(r){ if(r) nuevaData.push(r); }); // r siempre es objeto (nunca null)
     done += batch.length;
     if (!cached) {
       document.getElementById('progressFill').style.width = Math.round(done/total*100)+'%';
@@ -1961,12 +1961,12 @@ async function fetchQuote(sym) {
     var r = await fetch(API+'/quote?symbol='+fetchSym, {signal: AbortSignal.timeout(15000)});
     if (!r.ok) {
       markTickerError(sym, 'HTTP '+r.status);
-      return null;
+      return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, marketCap: null, mom12m: null, mom6m: null, sector: SECTORS[sym] || (isArgentineTicker(sym) ? 'Merval' : 'Otros'), _error: true, _flash: '' };
     }
     var d = await r.json();
     if (d.error) {
       markTickerError(sym, d.error);
-      return null;
+      return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, marketCap: null, mom12m: null, mom6m: null, sector: SECTORS[sym] || (isArgentineTicker(sym) ? 'Merval' : 'Otros'), _error: true, _flash: '' };
     }
     clearTickerError(sym);
     d.sector = SECTORS[sym] || (isArgentineTicker(sym) ? 'Merval' : 'Otros');
@@ -1977,7 +1977,7 @@ async function fetchQuote(sym) {
   } catch(e) {
     markTickerError(sym, 'Timeout/Error');
     console.warn('Error fetching', sym, e.message);
-    return null;
+    return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, marketCap: null, mom12m: null, mom6m: null, sector: SECTORS[sym] || (isArgentineTicker(sym) ? 'Merval' : 'Otros'), _error: true, _flash: '' };
   }
 }
 
