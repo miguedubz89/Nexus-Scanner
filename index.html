@@ -1952,19 +1952,10 @@ async function fetchPrecio(sym) {
   } catch(e) { return null; }
 }
 
-// Mapeo de símbolos locales a su ticker real en Yahoo Finance
-var YF_SYMBOL_MAP = {
-  'YPF': 'YPFD.BA',   // YPF cotiza como YPFD.BA en Yahoo Finance
-  'YPFD': 'YPFD.BA'
-};
-
 async function fetchQuote(sym) {
   try {
     var fetchSym = sym;
-    // Primero revisar si tiene un mapeo especial
-    if (YF_SYMBOL_MAP[sym.toUpperCase()]) {
-      fetchSym = YF_SYMBOL_MAP[sym.toUpperCase()];
-    } else if (!sym.endsWith('.BA') && MERVAL_TICKERS[sym.toUpperCase()] === 1) {
+    if (!sym.endsWith('.BA') && MERVAL_TICKERS[sym.toUpperCase()] === 1) {
       fetchSym = sym + '.BA';
     }
     var r = await fetch(API+'/quote?symbol='+fetchSym, {signal: AbortSignal.timeout(15000)});
@@ -2843,17 +2834,10 @@ function addTickerFromInput() {
   window.tickerList.push(sym);
   window.renderTickerList();
   saveTickersFromList();
-  // Limpiar cache para que el nuevo ticker se cargue en el proximo refresh
-  try { localStorage.removeItem(TICKER_CACHE_KEY); } catch(e) {}
   inp.value = '';
   inp.focus();
   var ul = document.getElementById('tickerList');
   ul.scrollTop = ul.scrollHeight;
-  // Si el servidor esta disponible, recargar todo inmediatamente
-  if (serverOk) {
-    tickers = window.tickerList.slice();
-    cargarCompleto();
-  }
 }
 
 function removeTicker(idx) {
