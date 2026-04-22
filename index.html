@@ -1960,17 +1960,42 @@ async function fetchPrecio(sym) {
 
 // Mapeo de símbolos locales a su ticker real en Yahoo Finance
 var YF_SYMBOL_MAP = {
-  'YPF': 'YPFD.BA',   // YPF cotiza como YPFD.BA en Yahoo Finance
-  'YPFD': 'YPFD.BA'
+  'YPFD': 'YPFD.BA'   // YPFD (con D) siempre en pesos
+};
+
+// Acciones argentinas con ADR en NYSE — se fetchean en USD cuando se cargan SIN .BA
+var ARG_ADR_MAP = {
+  'YPF':  'YPF',   // NYSE: YPF
+  'GGAL': 'GGAL',  // NYSE: GGAL
+  'PAM':  'PAM',   // NYSE: PAM  (Pampa Energía)
+  'PAMP': 'PAM',   // alias local → NYSE PAM
+  'BMA':  'BMA',   // NYSE: BMA  (Banco Macro)
+  'SUPV': 'SUPV',  // NYSE: SUPV (Grupo Supervielle)
+  'CEPU': 'CEPU',  // NYSE: CEPU
+  'EDN':  'EDN',   // NYSE: EDN  (Edenor)
+  'LOMA': 'LOMA',  // NYSE: LOMA (Loma Negra)
+  'IRSA': 'IRS',   // NYSE: IRS
+  'TGS':  'TGS',   // NYSE: TGS  (Transportadora Gas del Sur)
+  'CRESY':'CRESY', // NYSE: CRESY (Cresud)
+  'CRES': 'CRESY', // alias local → NYSE CRESY
+  'DESP': 'DESP',  // NYSE: DESP (Despegar)
+  'MELI': 'MELI',  // NYSE: MELI (MercadoLibre) — no es .BA pero por las dudas
+  'GLOB': 'GLOB',  // NYSE: GLOB (Globant)
+  'BIOX': 'BIOX',  // NYSE: BIOX (Bioceres)
 };
 
 async function fetchQuote(sym) {
   try {
     var fetchSym = sym;
-    // Primero revisar si tiene un mapeo especial
-    if (YF_SYMBOL_MAP[sym.toUpperCase()]) {
-      fetchSym = YF_SYMBOL_MAP[sym.toUpperCase()];
-    } else if (!sym.endsWith('.BA') && MERVAL_TICKERS[sym.toUpperCase()] === 1) {
+    var symUp = sym.toUpperCase();
+    // Primero revisar si tiene un mapeo especial forzado
+    if (YF_SYMBOL_MAP[symUp]) {
+      fetchSym = YF_SYMBOL_MAP[symUp];
+    // Si es una acción argentina con ADR y se cargó SIN .BA → usar ADR en USD
+    } else if (!sym.endsWith('.BA') && ARG_ADR_MAP[symUp]) {
+      fetchSym = ARG_ADR_MAP[symUp];
+    // Si es argentina sin ADR conocido → agregar .BA para cotización en pesos
+    } else if (!sym.endsWith('.BA') && MERVAL_TICKERS[symUp] === 1) {
       fetchSym = sym + '.BA';
     }
     var r = await fetch(API+'/quote?symbol='+fetchSym, {signal: AbortSignal.timeout(15000)});
