@@ -120,6 +120,12 @@
       // Cargar tickers personalizados
       const cloudTickers = await window.loadTickersCloud(user.uid);
       if (cloudTickers && cloudTickers.length > 0) {
+        // Si la lista nube difiere de la local, invalidar cache de datos
+        const prevList = (window.tickerList || []).slice().sort().join(',');
+        const newList  = cloudTickers.slice().sort().join(',');
+        if (prevList !== newList) {
+          try { localStorage.removeItem('dubz_ticker_cache_v2'); } catch(e) {}
+        }
         window.tickerList = cloudTickers;
       } else if (!window.tickerList || window.tickerList.length === 0) {
         window.tickerList = DEFAULT_TICKERS.slice();
@@ -2860,6 +2866,14 @@ function removeTicker(idx) {
   window.tickerList.splice(idx, 1);
   window.renderTickerList();
   saveTickersFromList();
+  // Limpiar cache para que el ticker eliminado desaparezca en el próximo refresh
+  try { localStorage.removeItem(TICKER_CACHE_KEY); } catch(e) {}
+  // Actualizar la variable activa de tickers
+  tickers = window.tickerList.slice();
+  // Quitar el ticker de allData y filtered también
+  var newList = window.tickerList;
+  allData = allData.filter(function(d){ return newList.indexOf(d.symbol) !== -1; });
+  applyFilters();
 }
 
 function saveTickersFromList() {
