@@ -1837,7 +1837,7 @@ function loadAndRefresh() {
 // el cache sobreviva cuando el celular pone la página en
 // segundo plano y el navegador libera la sesión.
 var TICKER_CACHE_KEY = 'dubz_ticker_cache_v2';
-var TICKER_CACHE_TTL = 30 * 60 * 1000; // 30 minutos en ms
+var TICKER_CACHE_TTL = 60 * 60 * 1000; // 60 minutos en ms (era 30, ampliado para celular)
 
 function saveTickerCache(data) {
   try {
@@ -1894,8 +1894,9 @@ async function cargarCompleto() {
   if (!cached) document.getElementById('progressWrap').style.display = 'block';
   var total = tickers.length, done = 0;
   var nuevaData = [];
-  for (var i = 0; i < tickers.length; i += 5) {
-    var batch = tickers.slice(i, i+5);
+  var BATCH_SIZE = 10; // ⚡ Aumentado de 5 → 10 para carga más rápida
+  for (var i = 0; i < tickers.length; i += BATCH_SIZE) {
+    var batch = tickers.slice(i, i+BATCH_SIZE);
     var results = await Promise.all(batch.map(fetchQuote));
     results.forEach(function(r){ if(r) nuevaData.push(r); }); // r siempre es objeto (nunca null)
     done += batch.length;
@@ -1907,6 +1908,7 @@ async function cargarCompleto() {
   }
   allData = nuevaData;
   saveTickerCache(allData); // guardar en cache
+  tryActivateWakeLock(); // 🔒 Mantener activo en 2do plano
   document.getElementById('progressWrap').style.display = 'none';
   document.getElementById('loadStatus').textContent = '';
   document.getElementById('progress-txt').textContent = allData.length+' tickers';
@@ -1927,8 +1929,9 @@ async function doRefresh() {
   if (!ok) { setStatus('err','SIN SERVIDOR'); return; }
   setStatus('loading', 'ACTUALIZANDO PRECIOS...');
 
-  for (var i = 0; i < allData.length; i += 5) {
-    var batch = allData.slice(i, i+5);
+  var BATCH_SIZE_R = 10; // ⚡ Aumentado para refresh más rápido
+  for (var i = 0; i < allData.length; i += BATCH_SIZE_R) {
+    var batch = allData.slice(i, i+BATCH_SIZE_R);
     var results = await Promise.all(batch.map(function(d){ return fetchPrecio(d.symbol); }));
     results.forEach(function(r, idx) {
       if (!r) return;
@@ -1942,6 +1945,7 @@ async function doRefresh() {
   }
   setStatus('live', 'LIVE — Yahoo Finance');
   saveTickerCache(allData); // actualizar cache tras refresh
+  tryActivateWakeLock(); // 🔒 Mantener activo en 2do plano
   applyFilters();
   buildTape();
   startCountdown();
@@ -1998,7 +2002,7 @@ async function fetchQuote(sym) {
     } else if (!sym.endsWith('.BA') && MERVAL_TICKERS[symUp] === 1) {
       fetchSym = sym + '.BA';
     }
-    var r = await fetch(API+'/quote?symbol='+fetchSym, {signal: AbortSignal.timeout(15000)});
+    var r = await fetch(API+'/quote?symbol='+fetchSym, {signal: AbortSignal.timeout(8000)});
     if (!r.ok) {
       markTickerError(sym, 'HTTP '+r.status);
       return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, marketCap: null, mom12m: null, mom6m: null, sector: SECTORS[sym] || (isArgentineTicker(sym) ? 'Merval' : 'Otros'), _error: true, _flash: '' };
@@ -2735,11 +2739,54 @@ function startCountdown(){
   },1000);
 }
 
+// ── WAKE LOCK — Mantiene la app activa en 2do plano hasta 15 min ──
+var _wakeLock = null;
+var _wakeLockTimer = null;
+var WAKE_LOCK_MAX_MS = 15 * 60 * 1000; // 15 minutos
+
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) return; // No soportado en este browser
+  try {
+    if (_wakeLock && !_wakeLock.released) return; // ya activo
+    _wakeLock = await navigator.wakeLock.request('screen');
+    console.log('[DUBZ] Wake Lock activado');
+    // Soltar automáticamente después de 15 min para no agotar batería
+    if (_wakeLockTimer) clearTimeout(_wakeLockTimer);
+    _wakeLockTimer = setTimeout(function() { releaseWakeLock(); }, WAKE_LOCK_MAX_MS);
+    // Si se suelta por el sistema, loguearlo
+    _wakeLock.addEventListener('release', function() {
+      console.log('[DUBZ] Wake Lock liberado por el sistema');
+    });
+  } catch(e) {
+    console.warn('[DUBZ] Wake Lock no disponible:', e.message);
+  }
+}
+
+function releaseWakeLock() {
+  if (_wakeLock && !_wakeLock.released) {
+    _wakeLock.release().catch(function(){});
+    _wakeLock = null;
+  }
+  if (_wakeLockTimer) { clearTimeout(_wakeLockTimer); _wakeLockTimer = null; }
+}
+
+// Activar Wake Lock cuando la app tiene datos y está visible
+function tryActivateWakeLock() {
+  if (allData && allData.length > 0) requestWakeLock();
+}
+
 // ── VOLVER DE BACKGROUND (celular) ───────────────
 // Si la pestaña vuelve a primer plano y el cache es fresco (< 5 min),
 // solo actualiza precios. Si está vencido, recarga completo sin la barra de progreso.
 document.addEventListener('visibilitychange', function() {
-  if (document.visibilityState !== 'visible') return;
+  if (document.visibilityState !== 'visible') {
+    // Yendo a 2do plano — el Wake Lock se mantiene activo hasta 15 min
+    return;
+  }
+  // Volviendo a primer plano — reactivar Wake Lock si fue liberado
+  if (allData && allData.length > 0) {
+    requestWakeLock();
+  }
   if (!allData.length) return; // todavía cargando, no hacer nada
   var cached = loadTickerCache();
   if (cached && cached.length) {
@@ -2749,6 +2796,8 @@ document.addEventListener('visibilitychange', function() {
     // Cache vencido → recarga completa (silenciosa, sin barra de progreso)
     cargarCompleto();
   }
+  // Reiniciar countdown
+  if (autoOn) startCountdown();
 });
 
 function toggleAuto(){
