@@ -7,6 +7,103 @@
 <title>DUBZ MONITOR — Live</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
 
+<!-- ── SERVICE WORKER (mantiene app activa en 2do plano) ── -->
+<script>
+(function() {
+  if (!('serviceWorker' in navigator)) return;
+  // Crear el SW inline como blob para no necesitar archivo externo
+  var swCode = `
+const CACHE_NAME = 'dubz-v3';
+const STATIC_ASSETS = ['/'];
+
+// Instalar: cachear assets básicos
+self.addEventListener('install', e => {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+    ).then(() => self.clients.claim())
+  );
+});
+
+// Fetch: network-first para /quote y /precio, cache para el resto
+self.addEventListener('fetch', e => {
+  const url = e.request.url;
+  // Para APIs de datos siempre ir a red
+  if (url.includes('/quote') || url.includes('/precio') || url.includes('/health')) {
+    e.respondWith(fetch(e.request).catch(() => new Response('{"error":"offline"}', {headers:{'Content-Type':'application/json'}})));
+    return;
+  }
+  // Para fonts y assets: cache-first
+  if (url.includes('fonts.googleapis') || url.includes('fonts.gstatic')) {
+    e.respondWith(
+      caches.match(e.request).then(cached => cached || fetch(e.request).then(resp => {
+        const clone = resp.clone();
+        caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
+        return resp;
+      }))
+    );
+    return;
+  }
+  // Para la app principal: network-first con fallback a cache
+  e.respondWith(
+    fetch(e.request).then(resp => {
+      if (resp.status === 200) {
+        const clone = resp.clone();
+        caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
+      }
+      return resp;
+    }).catch(() => caches.match(e.request))
+  );
+});
+
+// Periodic Background Sync (Chrome Android)
+self.addEventListener('periodicsync', e => {
+  if (e.tag === 'dubz-refresh') {
+    e.waitUntil(
+      self.clients.matchAll().then(clients => {
+        clients.forEach(client => client.postMessage({ type: 'BG_REFRESH' }));
+      })
+    );
+  }
+});
+
+// Push para mantener el SW activo con mensajes periódicos
+self.addEventListener('message', e => {
+  if (e.data && e.data.type === 'KEEP_ALIVE') {
+    e.ports[0] && e.ports[0].postMessage({ type: 'ACK' });
+  }
+});
+`;
+  try {
+    var blob = new Blob([swCode], { type: 'application/javascript' });
+    var swUrl = URL.createObjectURL(blob);
+    navigator.serviceWorker.register(swUrl, { scope: '/' }).then(function(reg) {
+      console.log('[DUBZ] Service Worker registrado');
+      // Intentar Periodic Background Sync (Chrome Android >= 80)
+      if ('periodicSync' in reg) {
+        navigator.permissions.query({ name: 'periodic-background-sync' }).then(function(status) {
+          if (status.state === 'granted') {
+            reg.periodicSync.register('dubz-refresh', { minInterval: 15 * 60 * 1000 });
+            console.log('[DUBZ] Periodic Sync registrado (15 min)');
+          }
+        }).catch(function(){});
+      }
+    }).catch(function(e) { console.warn('[DUBZ] SW error:', e); });
+
+    // Escuchar mensajes del SW (BG_REFRESH)
+    navigator.serviceWorker.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'BG_REFRESH') {
+        if (window.doRefresh) window.doRefresh();
+      }
+    });
+  } catch(e) { console.warn('[DUBZ] SW blob error:', e); }
+})();
+</script>
+
 <!-- ═══════════════════════════════════════════════════════════════════
      FIREBASE SDK
      INSTRUCCIONES DE CONFIGURACIÓN:
@@ -1832,31 +1929,90 @@ function loadAndRefresh() {
   cargarCompleto();
 }
 
-// ── CACHE DE TICKERS (localStorage, TTL 30 min) ──────
-// Usamos localStorage en lugar de sessionStorage para que
-// el cache sobreviva cuando el celular pone la página en
-// segundo plano y el navegador libera la sesión.
+// ── CACHE DE TICKERS ──────────────────────────────────
+// Estrategia dual: localStorage (rápido) + IndexedDB (fallback pesado)
+// TTL mínimo garantizado: 15 minutos. TTL normal: 60 minutos.
 var TICKER_CACHE_KEY = 'dubz_ticker_cache_v2';
-var TICKER_CACHE_TTL = 60 * 60 * 1000; // 60 minutos en ms (era 30, ampliado para celular)
+var TICKER_CACHE_TTL     = 60 * 60 * 1000;  // 60 min → recarga completa
+var TICKER_CACHE_MIN_TTL = 15 * 60 * 1000;  // 15 min → nunca descartar antes de esto
+
+// ── IndexedDB para cache pesado (sobrevive más que localStorage en móvil) ──
+var _idb = null;
+(function() {
+  try {
+    var req = indexedDB.open('dubz_cache', 1);
+    req.onupgradeneeded = function(e) {
+      e.target.result.createObjectStore('cache');
+    };
+    req.onsuccess = function(e) { _idb = e.target.result; };
+    req.onerror = function() { _idb = null; };
+  } catch(e) { _idb = null; }
+})();
+
+function idbSet(key, value) {
+  if (!_idb) return;
+  try {
+    var tx = _idb.transaction('cache', 'readwrite');
+    tx.objectStore('cache').put(value, key);
+  } catch(e) {}
+}
+function idbGet(key, cb) {
+  if (!_idb) { cb(null); return; }
+  try {
+    var tx = _idb.transaction('cache', 'readonly');
+    var req = tx.objectStore('cache').get(key);
+    req.onsuccess = function(e) { cb(e.target.result || null); };
+    req.onerror = function() { cb(null); };
+  } catch(e) { cb(null); }
+}
 
 function saveTickerCache(data) {
+  var payload = JSON.stringify({ ts: Date.now(), data: data });
+  // 1) localStorage (rápido)
   try {
-    localStorage.setItem(TICKER_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data }));
+    localStorage.setItem(TICKER_CACHE_KEY, payload);
   } catch(e) {
-    // Si localStorage está lleno, intentar limpiar cache viejo
-    try { localStorage.removeItem(TICKER_CACHE_KEY); localStorage.setItem(TICKER_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data })); } catch(e2) {}
+    try { localStorage.removeItem(TICKER_CACHE_KEY); localStorage.setItem(TICKER_CACHE_KEY, payload); } catch(e2) {}
   }
+  // 2) IndexedDB (backup robusto para móvil)
+  idbSet(TICKER_CACHE_KEY, payload);
 }
 
 function loadTickerCache() {
+  // Intentar localStorage primero
   try {
     var raw = localStorage.getItem(TICKER_CACHE_KEY);
-    if (!raw) return null;
-    var obj = JSON.parse(raw);
-    if (!obj || !obj.data || !obj.ts) return null;
-    if (Date.now() - obj.ts > TICKER_CACHE_TTL) return null; // expirado
-    return obj.data;
-  } catch(e) { return null; }
+    if (raw) {
+      var obj = JSON.parse(raw);
+      if (obj && obj.data && obj.ts) {
+        var age = Date.now() - obj.ts;
+        // Dentro del TTL máximo → devolver
+        if (age <= TICKER_CACHE_TTL) return obj.data;
+        // Entre 15 min y 60 min → devolver con flag "stale" para refrescar en BG
+        if (age <= TICKER_CACHE_TTL * 2) {
+          obj.data._stale = true;
+          return obj.data;
+        }
+      }
+    }
+  } catch(e) {}
+  return null; // no hay en localStorage, el caller va a intentar IDB de forma async
+}
+
+// Versión async que también busca en IndexedDB
+function loadTickerCacheAsync(cb) {
+  var fromLS = loadTickerCache();
+  if (fromLS) { cb(fromLS); return; }
+  // Fallback: buscar en IndexedDB
+  idbGet(TICKER_CACHE_KEY, function(raw) {
+    if (!raw) { cb(null); return; }
+    try {
+      var obj = JSON.parse(raw);
+      if (obj && obj.data && obj.ts && (Date.now() - obj.ts) <= TICKER_CACHE_TTL * 2) {
+        cb(obj.data);
+      } else { cb(null); }
+    } catch(e) { cb(null); }
+  });
 }
 
 // Mostrar datos del cache al volver de segundo plano (Page Visibility API)
@@ -1871,16 +2027,25 @@ document.addEventListener('visibilitychange', function() {
 async function cargarCompleto() {
   if (!tickers.length) return;
 
-  // ── Mostrar cache inmediatamente si existe (< 5 min) ──
-  var cached = loadTickerCache();
-  if (cached && cached.length) {
-    allData = cached;
-    applyFilters();
-    buildTape();
-    startCountdown();
-    document.getElementById('expInfo').textContent = allData.length+' tickers | Cache: '+new Date().toLocaleTimeString('es-AR')+' (actualizando...)';
-    document.getElementById('progress-txt').textContent = allData.length+' tickers (cache)';
-  }
+  // ── Mostrar cache inmediatamente (incluyendo IDB como fallback) ──
+  await new Promise(function(resolve) {
+    loadTickerCacheAsync(function(cached) {
+      if (cached && (Array.isArray(cached) ? cached.length : Object.keys(cached).length)) {
+        var arr = Array.isArray(cached) ? cached : cached;
+        // Limpiar flag de stale antes de asignar
+        if (arr._stale) delete arr._stale;
+        allData = arr;
+        applyFilters();
+        buildTape();
+        startCountdown();
+        document.getElementById('expInfo').textContent = allData.length+' tickers | Cache: '+new Date().toLocaleTimeString('es-AR')+' (actualizando...)';
+        document.getElementById('progress-txt').textContent = allData.length+' tickers (cache)';
+      }
+      resolve(cached);
+    });
+  });
+
+  var cached = allData.length ? allData : null;
 
   var ok = await checkServer();
   if (!ok) {
@@ -1909,6 +2074,7 @@ async function cargarCompleto() {
   allData = nuevaData;
   saveTickerCache(allData); // guardar en cache
   tryActivateWakeLock(); // 🔒 Mantener activo en 2do plano
+  startSwKeepAlive();    // 🔄 SW keep-alive activo
   document.getElementById('progressWrap').style.display = 'none';
   document.getElementById('loadStatus').textContent = '';
   document.getElementById('progress-txt').textContent = allData.length+' tickers';
@@ -2739,23 +2905,25 @@ function startCountdown(){
   },1000);
 }
 
-// ── WAKE LOCK — Mantiene la app activa en 2do plano hasta 15 min ──
+// ── WAKE LOCK — Mantiene la app activa en 2do plano ──────────────
+// Combina Screen Wake Lock API + SW keep-alive ping para máxima cobertura
 var _wakeLock = null;
 var _wakeLockTimer = null;
+var _swKeepAliveTimer = null;
 var WAKE_LOCK_MAX_MS = 15 * 60 * 1000; // 15 minutos
 
 async function requestWakeLock() {
-  if (!('wakeLock' in navigator)) return; // No soportado en este browser
+  if (!('wakeLock' in navigator)) return;
   try {
     if (_wakeLock && !_wakeLock.released) return; // ya activo
     _wakeLock = await navigator.wakeLock.request('screen');
     console.log('[DUBZ] Wake Lock activado');
-    // Soltar automáticamente después de 15 min para no agotar batería
     if (_wakeLockTimer) clearTimeout(_wakeLockTimer);
     _wakeLockTimer = setTimeout(function() { releaseWakeLock(); }, WAKE_LOCK_MAX_MS);
-    // Si se suelta por el sistema, loguearlo
+    // Si el sistema lo suelta (ej: pantalla apagada), intentar re-adquirir al volver
     _wakeLock.addEventListener('release', function() {
-      console.log('[DUBZ] Wake Lock liberado por el sistema');
+      console.log('[DUBZ] Wake Lock liberado por el sistema — se reactivará al volver a primer plano');
+      _wakeLock = null;
     });
   } catch(e) {
     console.warn('[DUBZ] Wake Lock no disponible:', e.message);
@@ -2775,28 +2943,56 @@ function tryActivateWakeLock() {
   if (allData && allData.length > 0) requestWakeLock();
 }
 
-// ── VOLVER DE BACKGROUND (celular) ───────────────
-// Si la pestaña vuelve a primer plano y el cache es fresco (< 5 min),
-// solo actualiza precios. Si está vencido, recarga completo sin la barra de progreso.
+// ── SW Keep-Alive: ping periódico para mantener el SW activo ──────
+// El navegador puede "dormir" el SW; este ping lo mantiene despierto
+function startSwKeepAlive() {
+  if (_swKeepAliveTimer) return; // ya corriendo
+  if (!('serviceWorker' in navigator)) return;
+  function ping() {
+    if (!navigator.serviceWorker.controller) return;
+    var ch = new MessageChannel();
+    navigator.serviceWorker.controller.postMessage({ type: 'KEEP_ALIVE' }, [ch.port2]);
+  }
+  _swKeepAliveTimer = setInterval(ping, 20000); // cada 20 seg
+  ping();
+}
+function stopSwKeepAlive() {
+  if (_swKeepAliveTimer) { clearInterval(_swKeepAliveTimer); _swKeepAliveTimer = null; }
+}
+
+// ── VOLVER DE BACKGROUND (celular) ───────────────────────────────
+// Estrategia:
+//   - Página oculta → SW keep-alive activo, Wake Lock mantenido
+//   - Página visible → re-adquirir Wake Lock, refrescar datos
 document.addEventListener('visibilitychange', function() {
-  if (document.visibilityState !== 'visible') {
-    // Yendo a 2do plano — el Wake Lock se mantiene activo hasta 15 min
+  if (document.visibilityState === 'hidden') {
+    // Entrando a 2do plano → activar keep-alive del SW
+    startSwKeepAlive();
     return;
   }
-  // Volviendo a primer plano — reactivar Wake Lock si fue liberado
+
+  // Volviendo a primer plano
+  stopSwKeepAlive();
   if (allData && allData.length > 0) {
-    requestWakeLock();
+    requestWakeLock(); // re-adquirir si fue liberado
   }
-  if (!allData.length) return; // todavía cargando, no hacer nada
+  if (!allData.length) return;
+
+  // Revisar si el cache sigue siendo válido (mínimo 15 min)
   var cached = loadTickerCache();
   if (cached && cached.length) {
-    // Cache fresco → solo refresh de precios (rápido)
-    doRefresh();
+    if (serverOk) {
+      // Cache fresco o servidor disponible → solo refresh de precios
+      doRefresh();
+    } else {
+      // Sin servidor → mostrar lo que hay en cache
+      applyFilters();
+      buildTape();
+    }
   } else {
-    // Cache vencido → recarga completa (silenciosa, sin barra de progreso)
+    // Cache vencido → recarga completa
     cargarCompleto();
   }
-  // Reiniciar countdown
   if (autoOn) startCountdown();
 });
 
