@@ -1024,12 +1024,12 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
         <input type="range" id="rmx" min="0" max="100" value="100" oninput="document.getElementById('rmxV').textContent=this.value;applyFilters()">
       </div>
       <div class="range-wrap">
-        <label>DIST EMA200 MIN: <span id="dmiV" style="color:var(--accent)">-100</span>%</label>
-        <input type="range" id="dmi" min="-100" max="100" value="-100" oninput="document.getElementById('dmiV').textContent=this.value;applyFilters()">
+        <label>DIST EMA200 MIN: <span id="dmiV" style="color:var(--accent)">-200</span>%</label>
+        <input type="range" id="dmi" min="-200" max="500" value="-200" oninput="document.getElementById('dmiV').textContent=this.value;applyFilters()">
       </div>
       <div class="range-wrap">
-        <label>DIST EMA200 MAX: <span id="dmxV" style="color:var(--accent)">100</span>%</label>
-        <input type="range" id="dmx" min="-100" max="100" value="100" oninput="document.getElementById('dmxV').textContent=this.value;applyFilters()">
+        <label>DIST EMA200 MAX: <span id="dmxV" style="color:var(--accent)">500</span>%</label>
+        <input type="range" id="dmx" min="-200" max="500" value="500" oninput="document.getElementById('dmxV').textContent=this.value;applyFilters()">
       </div>
       <button class="btn btn-r btn-full btn-sm" onclick="resetFilters()">✕ RESET FILTROS</button>
     </div>
@@ -2220,8 +2220,8 @@ function resetFilters(){
   document.getElementById('fSector').value='';
   document.getElementById('rmi').value=0;   document.getElementById('rmiV').textContent='0';
   document.getElementById('rmx').value=100; document.getElementById('rmxV').textContent='100';
-  document.getElementById('dmi').value=-100; document.getElementById('dmiV').textContent='-100';
-  document.getElementById('dmx').value=100;  document.getElementById('dmxV').textContent='100';
+  document.getElementById('dmi').value=-200; document.getElementById('dmiV').textContent='-200';
+  document.getElementById('dmx').value=500;  document.getElementById('dmxV').textContent='500';
   document.getElementById('sortBy').value='';
   applyFilters();
 }
