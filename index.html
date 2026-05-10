@@ -694,7 +694,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:var(--bg)}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
-@media(max-width:1100px){.sc-grid{grid-template-columns:repeat(3,1fr)}.sum-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:1100px){.sc-grid{grid-template-columns:repeat(3,1fr)}.sum-grid{grid-template-columns:repeat(3,1fr)}.pf-summary-grid{grid-template-columns:repeat(3,1fr)!important}}
 @media(max-width:800px){
   .layout{grid-template-columns:1fr!important}
   .sidebar{max-height:none;position:relative;width:100%!important;min-width:0!important;transition:none}
@@ -720,6 +720,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
   #tab-technical table.dt th,#tab-technical table.dt td{padding:10px 7px;font-size:11px}
   .sum-grid{grid-template-columns:repeat(2,1fr)!important}
   .sc-grid{grid-template-columns:repeat(2,1fr)!important}
+  .pf-summary-grid{grid-template-columns:repeat(2,1fr)!important}
   .movers-grid{grid-template-columns:1fr}
   .topbar{padding:8px 12px;gap:8px}
   .status-bar{gap:10px;font-size:11px}
@@ -829,9 +830,11 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 .pf-search-input::placeholder{color:var(--text-dim)}
 
 /* Summary cards */
-.pf-summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.pf-summary-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
 .pf-sum-card{background:var(--bg2);border:1px solid var(--border);border-radius:2px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px;transition:border-color .2s}
 .pf-sum-card:hover{border-color:var(--border2)}
+.pf-today-card{border-color:rgba(255,214,0,0.2)!important;background:linear-gradient(135deg,rgba(255,214,0,0.04),transparent)!important}
+.pf-today-card:hover{border-color:var(--yellow2)!important}
 .pf-sum-icon{font-size:24px;line-height:1;flex-shrink:0}
 .pf-sum-body{flex:1;min-width:0}
 .pf-sum-lbl{font-family:var(--head);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:4px}
@@ -1258,6 +1261,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           </select>
           <button class="btn btn-g btn-sm" onclick="pfExportCSV()">⬇ CSV</button>
           <button class="btn btn-y btn-sm" onclick="pfOpenImportModal()" style="font-size:11px">📥 IMPORTAR</button>
+          <button class="btn btn-a btn-sm" id="pfRefreshBtn" onclick="pfRefreshAllPrices()" title="Actualizar todos los precios en tiempo real" style="font-size:11px">⟳ PRECIOS</button>
           <button class="btn btn-a btn-sm" onclick="pfOpenAddModal()">＋ AGREGAR</button>
           <button class="btn btn-r btn-sm" onclick="pfClearAll()" title="Eliminar todo el portafolio" style="font-size:11px">🗑 BORRAR TODO</button>
         </div>
@@ -1276,7 +1280,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
         <div class="pf-sum-card">
           <div class="pf-sum-icon">📈</div>
           <div class="pf-sum-body">
-            <div class="pf-sum-lbl">Ganancia / Pérdida</div>
+            <div class="pf-sum-lbl">Ganancia / Pérdida <span style="font-size:9px;opacity:.6;letter-spacing:1px">HISTÓRICA</span></div>
             <div class="pf-sum-val" id="pfGanancia">—</div>
             <div class="pf-sum-sub" id="pfGananciaSub">—</div>
           </div>
@@ -1284,9 +1288,18 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
         <div class="pf-sum-card">
           <div class="pf-sum-icon">📊</div>
           <div class="pf-sum-body">
-            <div class="pf-sum-lbl">Rendimiento Total</div>
+            <div class="pf-sum-lbl">Rendimiento <span style="font-size:9px;opacity:.6;letter-spacing:1px">HISTÓRICO</span></div>
             <div class="pf-sum-val" id="pfRendTotal">—</div>
-            <div class="pf-sum-sub">vs costo total</div>
+            <div class="pf-sum-sub" id="pfRendTotalSub">vs costo total</div>
+          </div>
+        </div>
+        <!-- CARD DIARIA -->
+        <div class="pf-sum-card pf-today-card">
+          <div class="pf-sum-icon">⚡</div>
+          <div class="pf-sum-body">
+            <div class="pf-sum-lbl">Resultado <span style="font-size:9px;opacity:.6;letter-spacing:1px">HOY</span></div>
+            <div class="pf-sum-val" id="pfGananciaHoy">—</div>
+            <div class="pf-sum-sub" id="pfGananciaHoySub">variación del día</div>
           </div>
         </div>
         <!-- LIQUIDEZ DUAL ARS + USD -->
@@ -3722,45 +3735,84 @@ function pfRenderAll() {
 // ── SUMMARY CARDS ─────────────────────────────────────────
 function pfRenderSummary() {
   var totalCostView = 0, totalValView = 0;
+  var totalHoyView  = 0; // ganancia del día en valor absoluto (vista)
+
   pfPositions.forEach(function(pos) {
     var c = pfCalc(pos);
     totalCostView += c.costView;
     totalValView  += c.valView;
+
+    // Ganancia diaria: valActual × (chgPct / 100) — cuánto cambió hoy
+    var cached = pfLiveCache[(pos.ticker||'').toUpperCase()];
+    if (cached && cached.chgPct != null && c.valView > 0) {
+      // valView ya está en la moneda de vista; la variación % del día es la misma
+      var ganHoyPos = c.valView * (cached.chgPct / 100);
+      totalHoyView += ganHoyPos;
+    }
   });
-  var ganView = totalValView - totalCostView;
-  var rendPct = totalCostView > 0 ? (ganView / totalCostView * 100) : 0;
+
+  var ganView  = totalValView - totalCostView;
+  var rendPct  = totalCostView > 0 ? (ganView / totalCostView * 100) : 0;
+  // % diario ponderado = ganancia_día / valor_previo_día ≈ ganancia_día / (valHoy - ganHoy)
+  var valAyer  = totalValView - totalHoyView;
+  var rendHoyPct = valAyer > 0 ? (totalHoyView / valAyer * 100) : 0;
 
   // Liquidez en vista actual
   var liqViewDisplay;
   if (pfViewCurrency === 'ARS') {
-    // ARS directo + USD convertido a ARS
-    var liqTotalARS = pfLiqARS + pfLiqUSD_val * pfMepRate;
     liqViewDisplay = '$ ' + pfFmt(pfLiqARS, 2) + ' + U$D ' + pfFmt(pfLiqUSD_val, 2);
   } else {
-    // USD directo + ARS convertido a USD
-    var liqTotalUSD = pfLiqUSD_val + pfLiqARS / pfMepRate;
     liqViewDisplay = 'U$D ' + pfFmt(pfLiqUSD_val, 2) + ' + $ ' + pfFmt(pfLiqARS, 2);
   }
 
-  var vtEl = document.getElementById('pfValTotal');
-  var vsEl = document.getElementById('pfValTotalSub');
-  var gaEl = document.getElementById('pfGanancia');
-  var gsEl = document.getElementById('pfGananciaSub');
-  var reEl = document.getElementById('pfRendTotal');
-  var ldEl = document.getElementById('pfLiquidezDisplay');
-  var bdEl = document.getElementById('pfCurrencyBadge');
-  var buEl = document.getElementById('pfBtnUSD');
-  var baEl = document.getElementById('pfBtnARS');
+  var vtEl  = document.getElementById('pfValTotal');
+  var vsEl  = document.getElementById('pfValTotalSub');
+  var gaEl  = document.getElementById('pfGanancia');
+  var gsEl  = document.getElementById('pfGananciaSub');
+  var reEl  = document.getElementById('pfRendTotal');
+  var rsEl  = document.getElementById('pfRendTotalSub');
+  var ghEl  = document.getElementById('pfGananciaHoy');
+  var ghsEl = document.getElementById('pfGananciaHoySub');
+  var ldEl  = document.getElementById('pfLiquidezDisplay');
+  var bdEl  = document.getElementById('pfCurrencyBadge');
+  var buEl  = document.getElementById('pfBtnUSD');
+  var baEl  = document.getElementById('pfBtnARS');
 
+  // Valor total
   if (vtEl) vtEl.textContent = pfFmtDisplay(totalValView);
-  if (vsEl) vsEl.textContent = pfPositions.length + ' posicion' + (pfPositions.length===1?'':'es');
-  // Show active account name in subtitle
   var acct = pfActiveAcct();
   var acctName = acct ? acct.name : 'Mi Portafolio';
-  if (vsEl && acctName) vsEl.textContent = '📁 ' + acctName + ' · ' + pfPositions.length + ' posicion' + (pfPositions.length===1?'':'es');
-  if (gaEl) { gaEl.textContent = pfFmtDisplay(ganView); gaEl.style.color = ganView >= 0 ? 'var(--green)' : 'var(--red)'; }
+  if (vsEl) vsEl.textContent = '📁 ' + acctName + ' · ' + pfPositions.length + ' posicion' + (pfPositions.length===1?'':'es');
+
+  // Ganancia histórica
+  if (gaEl) { gaEl.textContent = (ganView >= 0 ? '+' : '') + pfFmtDisplay(ganView); gaEl.style.color = ganView >= 0 ? 'var(--green)' : 'var(--red)'; }
   if (gsEl) gsEl.textContent = (ganView >= 0 ? '▲' : '▼') + ' vs costo ' + pfFmtDisplay(totalCostView);
+
+  // Rendimiento histórico %
   if (reEl) { reEl.textContent = (rendPct >= 0 ? '+' : '') + pfFmt(rendPct, 2) + '%'; reEl.style.color = rendPct >= 0 ? 'var(--green)' : 'var(--red)'; }
+  if (rsEl) rsEl.textContent = 'desde precio de compra';
+
+  // Ganancia del día
+  var hoyTieneDatos = pfPositions.some(function(p){ var c=pfLiveCache[(p.ticker||'').toUpperCase()]; return c&&c.chgPct!=null; });
+  if (ghEl) {
+    if (!hoyTieneDatos) {
+      ghEl.textContent = '— sin datos';
+      ghEl.style.color = 'var(--text-dim)';
+    } else {
+      ghEl.textContent = (totalHoyView >= 0 ? '+' : '') + pfFmtDisplay(totalHoyView);
+      ghEl.style.color = totalHoyView >= 0 ? 'var(--green)' : 'var(--red)';
+    }
+  }
+  if (ghsEl) {
+    if (hoyTieneDatos) {
+      ghsEl.textContent = (rendHoyPct >= 0 ? '▲ +' : '▼ ') + pfFmt(rendHoyPct, 2) + '% en el día';
+      ghsEl.style.color = rendHoyPct >= 0 ? 'var(--green)' : 'var(--red)';
+    } else {
+      ghsEl.textContent = 'actualizá los precios (⟳)';
+      ghsEl.style.color = 'var(--text-dim)';
+    }
+  }
+
   if (ldEl) ldEl.textContent = liqViewDisplay;
   if (bdEl) { bdEl.textContent = pfViewCurrency; bdEl.className = 'pf-currency-badge' + (pfViewCurrency==='ARS' ? ' ars' : ''); }
   if (buEl) buEl.classList.toggle('active', pfViewCurrency==='USD');
@@ -4126,6 +4178,59 @@ function pfRefreshLivePrices() {
   tickers=tickers.filter(function(t,i,a){return a.indexOf(t)===i;});
   if(!tickers.length)return;
   pfFetchLivePrices(tickers, function(){ pfRenderAll(); }, monedaMap);
+}
+
+// ── REFRESH MANUAL con feedback visual ────────────────────
+function pfRefreshAllPrices() {
+  var btn = document.getElementById('pfRefreshBtn');
+  if (!btn) { pfRefreshLivePrices(); return; }
+  if (btn._loading) return; // evitar doble click
+  if (pfPositions.length === 0) { return; }
+
+  btn._loading = true;
+  var origText = btn.textContent;
+  btn.textContent = '⟳ ...';
+  btn.style.opacity = '0.6';
+  btn.disabled = true;
+
+  // Animar el ícono
+  var dots = 0;
+  var anim = setInterval(function() {
+    dots = (dots + 1) % 4;
+    btn.textContent = '⟳ ' + ['   ','·  ','·· ','···'][dots];
+  }, 200);
+
+  var tickers = [], monedaMap = {};
+  pfPositions.forEach(function(p) {
+    var t = (p.ticker||'').toUpperCase();
+    if (t) { tickers.push(t); monedaMap[t] = (p.moneda||'USD'); }
+  });
+  tickers = tickers.filter(function(t,i,a){ return a.indexOf(t)===i; });
+
+  if (!tickers.length) {
+    clearInterval(anim);
+    btn.textContent = origText;
+    btn.style.opacity = '';
+    btn.disabled = false;
+    btn._loading = false;
+    return;
+  }
+
+  pfFetchLivePrices(tickers, function() {
+    clearInterval(anim);
+    pfRenderAll();
+    btn.textContent = '✓ OK';
+    btn.style.color = 'var(--green)';
+    btn.style.borderColor = 'var(--green)';
+    btn.style.opacity = '1';
+    btn.disabled = false;
+    btn._loading = false;
+    setTimeout(function() {
+      btn.textContent = origText;
+      btn.style.color = '';
+      btn.style.borderColor = '';
+    }, 2500);
+  }, monedaMap);
 }
 
 // ── EXPORT CSV ─────────────────────────────────────────────
