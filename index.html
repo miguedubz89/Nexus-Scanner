@@ -162,34 +162,51 @@ self.addEventListener('message', e => {
     return null;
   };
 
-  // ── Guardar portafolio en Firestore ───────────────
+  // ── Guardar portafolio en Firestore (multi-cuenta) ───────────────
   window.savePortfolioCloud = async function(data) {
     const user = auth.currentUser;
     if (!user) return;
     try {
       await setDoc(doc(db, 'users', user.uid), {
-        portfolio: data.positions,
-        pf_mep:    data.mep,
-        pf_liq_ars: data.liqARS,
-        pf_liq_usd: data.liqUSD,
-        pf_view:   data.view
+        pf_accounts:     data.accounts,
+        pf_active_acct:  data.activeAccount,
+        pf_mep:          data.mep,
+        pf_view:         data.view
       }, { merge: true });
     } catch(e) { console.warn('Error guardando portafolio en nube:', e); }
   };
 
-  // ── Cargar portafolio de Firestore ────────────────
+  // ── Cargar portafolio de Firestore (multi-cuenta) ────────────────
   window.loadPortfolioCloud = async function(uid) {
     try {
       const snap = await getDoc(doc(db, 'users', uid));
       if (snap.exists()) {
         const d = snap.data();
-        if (d.portfolio && Array.isArray(d.portfolio)) {
+        // Formato nuevo: multi-cuenta
+        if (d.pf_accounts && Array.isArray(d.pf_accounts) && d.pf_accounts.length > 0) {
           return {
+            accounts:      d.pf_accounts,
+            activeAccount: d.pf_active_acct || d.pf_accounts[0].id,
+            mep:           d.pf_mep      || null,
+            view:          d.pf_view     || 'USD',
+            _multiAccount: true
+          };
+        }
+        // Formato legado: una sola cuenta → migrar
+        if (d.portfolio && Array.isArray(d.portfolio)) {
+          const legacyAcct = {
+            id: 'acct_main',
+            name: 'Mi Portafolio',
             positions: d.portfolio,
-            mep:       d.pf_mep      || null,
-            liqARS:    d.pf_liq_ars  || 0,
-            liqUSD:    d.pf_liq_usd  || 0,
-            view:      d.pf_view     || 'USD'
+            liqARS: d.pf_liq_ars || 0,
+            liqUSD: d.pf_liq_usd || 0
+          };
+          return {
+            accounts:      [legacyAcct],
+            activeAccount: 'acct_main',
+            mep:           d.pf_mep || null,
+            view:          d.pf_view || 'USD',
+            _multiAccount: false
           };
         }
       }
@@ -774,6 +791,25 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 .tab-portfolio{border-color:rgba(255,214,0,0.4)!important;color:var(--yellow)!important}
 .tab-portfolio.active{background:rgba(255,214,0,0.12)!important;border-color:var(--yellow)!important;color:var(--yellow)!important}
 
+/* Account tabs bar */
+.pf-account-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:2px}
+.pf-account-tabs{display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex:1;min-width:0}
+.pf-acct-tab{
+  display:inline-flex;align-items:center;gap:6px;
+  background:var(--bg3);border:1px solid var(--border2);color:var(--text-dim);
+  font-family:var(--head);font-weight:700;font-size:12px;letter-spacing:1.5px;
+  padding:5px 12px;border-radius:2px;cursor:pointer;
+  transition:all .18s;white-space:nowrap;position:relative;
+}
+.pf-acct-tab:hover{border-color:var(--yellow2);color:var(--yellow)}
+.pf-acct-tab.active{background:rgba(255,214,0,0.1);border-color:var(--yellow);color:var(--yellow)}
+.pf-acct-tab-name{max-width:140px;overflow:hidden;text-overflow:ellipsis}
+.pf-acct-rename-btn{font-size:11px;opacity:.5;cursor:pointer;padding:0 2px;transition:opacity .15s;line-height:1;background:none;border:none;color:inherit}
+.pf-acct-rename-btn:hover{opacity:1}
+.pf-acct-add-btn{border-color:rgba(0,212,255,0.3);color:var(--accent);font-size:16px;padding:4px 11px;letter-spacing:0}
+.pf-acct-add-btn:hover{background:rgba(0,212,255,0.1);border-color:var(--accent)}
+.pf-acct-del-btn{white-space:nowrap;flex-shrink:0}
+
 /* Toolbar */
 .pf-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;background:var(--bg2);border:1px solid var(--border);border-radius:2px;padding:10px 14px}
 .pf-toolbar-left{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
@@ -1189,6 +1225,12 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
          PORTAFOLIO TAB
     ═══════════════════════════════════════════════════════ -->
     <div class="tab-panel" id="tab-portfolio">
+
+      <!-- ACCOUNT TABS -->
+      <div class="pf-account-bar" id="pfAccountBar">
+        <div class="pf-account-tabs" id="pfAccountTabs"></div>
+        <button class="btn btn-r btn-sm pf-acct-del-btn" onclick="pfDeleteAccount(pfActiveAcctId)" title="Eliminar cuenta activa" style="font-size:11px;padding:3px 9px">🗑 Cuenta</button>
+      </div>
 
       <!-- TOP TOOLBAR -->
       <div class="pf-toolbar">
@@ -3321,14 +3363,108 @@ function canslimCell(d) {
    ✓ Import CSV Balanz (ARS) / genérico
 ═══════════════════════════════════════════════════════════════════ */
 
-var pfPositions    = [];
-var pfViewCurrency = 'USD';   // 'USD' o 'ARS' — lo que se muestra
-var pfMepRate      = 1200;    // tipo de cambio MEP
-var pfLiqARS       = 0;       // liquidez en pesos
-var pfLiqUSD_val   = 0;       // liquidez en dólares
-var pfSortCol      = null;
-var pfSortDir      = 1;
-var pfLiveCache    = {};       // { TICKER: { priceUSD, chgPct, ts } }
+var pfAccounts      = [];          // array de cuentas { id, name, positions, liqARS, liqUSD }
+var pfActiveAcctId  = null;        // id de la cuenta activa
+var pfPositions     = [];          // alias → pfActiveAcct().positions (referencia viva)
+var pfViewCurrency  = 'USD';   // 'USD' o 'ARS' — lo que se muestra
+var pfMepRate       = 1200;    // tipo de cambio MEP
+var pfLiqARS        = 0;       // liquidez en pesos (cuenta activa)
+var pfLiqUSD_val    = 0;       // liquidez en dólares (cuenta activa)
+var pfSortCol       = null;
+var pfSortDir       = 1;
+var pfLiveCache     = {};       // { TICKER: { priceUSD, chgPct, ts } }
+
+// ── HELPERS DE CUENTA ─────────────────────────────────────────────
+function pfActiveAcct() {
+  var a = pfAccounts.find(function(x){ return x.id === pfActiveAcctId; });
+  if (!a && pfAccounts.length > 0) { pfActiveAcctId = pfAccounts[0].id; a = pfAccounts[0]; }
+  return a || null;
+}
+
+function pfMakeAcctId() {
+  return 'acct_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+}
+
+// Sincroniza pfPositions/pfLiqARS/pfLiqUSD_val desde la cuenta activa
+function pfSyncFromAcct() {
+  var a = pfActiveAcct();
+  if (!a) { pfPositions = []; pfLiqARS = 0; pfLiqUSD_val = 0; return; }
+  pfPositions  = a.positions  = Array.isArray(a.positions)  ? a.positions  : [];
+  pfLiqARS     = a.liqARS     = parseFloat(a.liqARS)        || 0;
+  pfLiqUSD_val = a.liqUSD     = parseFloat(a.liqUSD)        || 0;
+}
+
+// Sincroniza campos de liquidez de la cuenta activa → inputs de UI
+function pfSyncLiqInputs() {
+  var laqEl = document.getElementById('pfLiquidezARS');
+  var luEl  = document.getElementById('pfLiquidezUSD');
+  if (laqEl) laqEl.value = pfLiqARS || '';
+  if (luEl)  luEl.value  = pfLiqUSD_val || '';
+}
+
+// ── RENDER DE SELECTOR DE CUENTAS (tabs) ──────────────────────────
+function pfRenderAccountTabs() {
+  var container = document.getElementById('pfAccountTabs');
+  if (!container) return;
+  var html = pfAccounts.map(function(a) {
+    var isActive = a.id === pfActiveAcctId;
+    return '<button class="pf-acct-tab' + (isActive ? ' active' : '') + '" onclick="pfSwitchAccount(\'' + a.id + '\')" title="' + (a.name||'Cuenta') + '">' +
+      '<span class="pf-acct-tab-name" id="pf-tab-name-' + a.id + '">' + (a.name||'Cuenta') + '</span>' +
+      (isActive ? '<span class="pf-acct-rename-btn" onclick="pfPromptRename(event,\'' + a.id + '\')" title="Renombrar">✏</span>' : '') +
+    '</button>';
+  }).join('');
+  html += '<button class="pf-acct-tab pf-acct-add-btn" onclick="pfAddAccount()" title="Agregar cuenta">＋</button>';
+  container.innerHTML = html;
+}
+
+// ── CAMBIAR CUENTA ────────────────────────────────────────────────
+function pfSwitchAccount(id) {
+  pfActiveAcctId = id;
+  pfSyncFromAcct();
+  pfSyncLiqInputs();
+  localStorage.setItem('dubz_active_acct', id);
+  pfRenderAccountTabs();
+  pfRenderAll();
+  // Fetch precios para tickers de esta cuenta
+  var tAll=[], mMap={};
+  pfPositions.forEach(function(p){ var t=(p.ticker||'').toUpperCase(); if(t){tAll.push(t);mMap[t]=(p.moneda||'USD');} });
+  tAll=tAll.filter(function(t,i,a){return a.indexOf(t)===i;});
+  if(tAll.length) pfFetchLivePrices(tAll, function(){pfRenderAll();}, mMap);
+}
+
+// ── AGREGAR CUENTA ────────────────────────────────────────────────
+function pfAddAccount() {
+  var nombre = prompt('Nombre para la nueva cuenta:', 'Cuenta ' + (pfAccounts.length + 1));
+  if (!nombre || !nombre.trim()) return;
+  var newAcct = { id: pfMakeAcctId(), name: nombre.trim(), positions: [], liqARS: 0, liqUSD: 0 };
+  pfAccounts.push(newAcct);
+  pfSaveAccounts();
+  pfSwitchAccount(newAcct.id);
+}
+
+// ── RENOMBRAR CUENTA ──────────────────────────────────────────────
+function pfPromptRename(evt, id) {
+  evt.stopPropagation();
+  var acct = pfAccounts.find(function(a){ return a.id === id; });
+  if (!acct) return;
+  var nuevo = prompt('Nuevo nombre para "' + acct.name + '":', acct.name);
+  if (!nuevo || !nuevo.trim()) return;
+  acct.name = nuevo.trim();
+  pfSaveAccounts();
+  pfRenderAccountTabs();
+}
+
+// ── ELIMINAR CUENTA ───────────────────────────────────────────────
+function pfDeleteAccount(id) {
+  if (pfAccounts.length <= 1) { alert('No podés eliminar la única cuenta. Creá una nueva primero.'); return; }
+  var acct = pfAccounts.find(function(a){ return a.id === id; });
+  if (!acct) return;
+  if (!confirm('¿Eliminar la cuenta "' + acct.name + '" y todas sus posiciones?')) return;
+  pfAccounts = pfAccounts.filter(function(a){ return a.id !== id; });
+  if (pfActiveAcctId === id) pfActiveAcctId = pfAccounts[0].id;
+  pfSaveAccounts();
+  pfSwitchAccount(pfActiveAcctId);
+}
 
 var PF_COLORS = [
   '#00d4ff','#00e676','#ffd600','#ff8c00','#b44aff',
@@ -3357,58 +3493,100 @@ function pfToView(valor, monedaOrigen) {
 // ── LOAD / SAVE ───────────────────────────────────────────
 function pfLoad() {
   try {
-    // Prioridad: datos cargados desde Firestore en el login
     if (window._cloudPortfolio) {
       var cp = window._cloudPortfolio;
-      pfPositions = Array.isArray(cp.positions) ? cp.positions : [];
-      pfPositions.forEach(function(p){ if (!p.moneda) p.moneda = 'USD'; });
-      if (cp.mep)    pfMepRate    = parseFloat(cp.mep);
-      if (cp.liqARS) pfLiqARS     = parseFloat(cp.liqARS);
-      if (cp.liqUSD) pfLiqUSD_val = parseFloat(cp.liqUSD);
-      if (cp.view)   pfViewCurrency = cp.view;
-      window._cloudPortfolio = null; // consumido
-      // Sincronizar también en localStorage como fallback
-      localStorage.setItem('dubz_portfolio', JSON.stringify(pfPositions));
-      localStorage.setItem('dubz_mep',       pfMepRate);
-      localStorage.setItem('dubz_liq_ars',   pfLiqARS);
-      localStorage.setItem('dubz_liq_usd',   pfLiqUSD_val);
-      localStorage.setItem('dubz_pf_view',   pfViewCurrency);
+      // Soporte nuevo formato multi-cuenta
+      if (cp.accounts && cp.accounts.length > 0) {
+        pfAccounts = cp.accounts.map(function(a) {
+          if (!Array.isArray(a.positions)) a.positions = [];
+          a.positions.forEach(function(p){ if(!p.moneda) p.moneda='USD'; });
+          a.liqARS = parseFloat(a.liqARS)||0;
+          a.liqUSD = parseFloat(a.liqUSD)||0;
+          return a;
+        });
+        pfActiveAcctId = cp.activeAccount || pfAccounts[0].id;
+      } else {
+        // Legado: crear cuenta principal
+        pfAccounts = [{ id:'acct_main', name:'Mi Portafolio', positions:[], liqARS:0, liqUSD:0 }];
+        pfActiveAcctId = 'acct_main';
+      }
+      if (cp.mep)  pfMepRate       = parseFloat(cp.mep);
+      if (cp.view) pfViewCurrency   = cp.view;
+      window._cloudPortfolio = null;
+      pfSyncFromAcct();
+      pfSaveToLocalStorage();
     } else {
-      // Fallback a localStorage (mismo dispositivo / sin internet)
-      var raw = localStorage.getItem('dubz_portfolio');
-      var parsed = raw ? JSON.parse(raw) : [];
-      pfPositions = Array.isArray(parsed) ? parsed : [];
-      pfPositions.forEach(function(p){ if (!p.moneda) p.moneda = 'USD'; });
-      pfMepRate   = parseFloat(localStorage.getItem('dubz_mep') || '1200');
-      pfLiqARS    = parseFloat(localStorage.getItem('dubz_liq_ars') || '0');
-      pfLiqUSD_val= parseFloat(localStorage.getItem('dubz_liq_usd') || '0');
+      // Fallback a localStorage
+      var rawAccts = localStorage.getItem('dubz_pf_accounts');
+      if (rawAccts) {
+        try {
+          pfAccounts = JSON.parse(rawAccts) || [];
+          pfAccounts.forEach(function(a){
+            if(!Array.isArray(a.positions)) a.positions=[];
+            a.positions.forEach(function(p){ if(!p.moneda) p.moneda='USD'; });
+            a.liqARS=parseFloat(a.liqARS)||0;
+            a.liqUSD=parseFloat(a.liqUSD)||0;
+          });
+        } catch(e){ pfAccounts=[]; }
+      }
+      // Migrar formato legado si no hay cuentas
+      if (!pfAccounts || pfAccounts.length === 0) {
+        var raw = localStorage.getItem('dubz_portfolio');
+        var parsed = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(parsed)) parsed = [];
+        parsed.forEach(function(p){ if(!p.moneda) p.moneda='USD'; });
+        pfAccounts = [{
+          id: 'acct_main', name: 'Mi Portafolio',
+          positions: parsed,
+          liqARS: parseFloat(localStorage.getItem('dubz_liq_ars')||'0'),
+          liqUSD: parseFloat(localStorage.getItem('dubz_liq_usd')||'0')
+        }];
+      }
+      pfActiveAcctId = localStorage.getItem('dubz_active_acct') || (pfAccounts[0]&&pfAccounts[0].id) || 'acct_main';
+      // Asegurarse de que la cuenta activa existe
+      if (!pfAccounts.find(function(a){ return a.id===pfActiveAcctId; })) {
+        pfActiveAcctId = pfAccounts[0].id;
+      }
+      pfMepRate      = parseFloat(localStorage.getItem('dubz_mep') || '1200');
       pfViewCurrency = localStorage.getItem('dubz_pf_view') || 'USD';
+      pfSyncFromAcct();
     }
     var mepEl = document.getElementById('pfMepRate');
     if (mepEl) mepEl.value = pfMepRate;
-    var laqEl = document.getElementById('pfLiquidezARS');
-    var luEl  = document.getElementById('pfLiquidezUSD');
-    if (laqEl) laqEl.value = pfLiqARS || '';
-    if (luEl)  luEl.value  = pfLiqUSD_val || '';
-  } catch(e) { pfPositions = []; }
+    pfSyncLiqInputs();
+  } catch(e) { console.warn('pfLoad error', e); pfAccounts=[{id:'acct_main',name:'Mi Portafolio',positions:[],liqARS:0,liqUSD:0}]; pfActiveAcctId='acct_main'; pfSyncFromAcct(); }
+}
+
+function pfSaveToLocalStorage() {
+  localStorage.setItem('dubz_pf_accounts',  JSON.stringify(pfAccounts));
+  localStorage.setItem('dubz_active_acct',  pfActiveAcctId || '');
+  localStorage.setItem('dubz_mep',          pfMepRate);
+  localStorage.setItem('dubz_pf_view',      pfViewCurrency);
+}
+
+// ── SAVE ACCOUNTS (local + cloud) ─────────────────────────────────
+function pfSaveAccounts() {
+  pfSyncFromAcct(); // asegura que pfPositions apunte a cuenta activa
+  pfSaveToLocalStorage();
+  if (window.savePortfolioCloud) {
+    window.savePortfolioCloud({
+      accounts:      pfAccounts,
+      activeAccount: pfActiveAcctId,
+      mep:           pfMepRate,
+      view:          pfViewCurrency
+    });
+  }
 }
 
 function pfSave() {
-  localStorage.setItem('dubz_portfolio',  JSON.stringify(pfPositions));
-  localStorage.setItem('dubz_mep',        pfMepRate);
-  localStorage.setItem('dubz_liq_ars',    pfLiqARS);
-  localStorage.setItem('dubz_liq_usd',    pfLiqUSD_val);
-  localStorage.setItem('dubz_pf_view',    pfViewCurrency);
-  // Sincronizar con Firestore (cloud) para que funcione en todos los dispositivos
-  if (window.savePortfolioCloud) {
-    window.savePortfolioCloud({
-      positions: pfPositions,
-      mep:       pfMepRate,
-      liqARS:    pfLiqARS,
-      liqUSD:    pfLiqUSD_val,
-      view:      pfViewCurrency
-    });
+  // Sincronizar liquidez de inputs → cuenta activa
+  var a = pfActiveAcct();
+  if (a) {
+    a.positions = pfPositions;
+    a.liqARS    = pfLiqARS;
+    a.liqUSD    = pfLiqUSD_val;
   }
+  pfSaveAccounts();
 }
 
 // ── TOGGLE VISTA ──────────────────────────────────────────
@@ -3433,6 +3611,8 @@ function pfRefreshAll() {
 function pfUpdateLiquidez() {
   pfLiqARS     = parseFloat(document.getElementById('pfLiquidezARS').value) || 0;
   pfLiqUSD_val = parseFloat(document.getElementById('pfLiquidezUSD').value) || 0;
+  var a = pfActiveAcct();
+  if (a) { a.liqARS = pfLiqARS; a.liqUSD = pfLiqUSD_val; }
   pfSave();
   pfRenderSummary();
 }
@@ -3574,6 +3754,10 @@ function pfRenderSummary() {
 
   if (vtEl) vtEl.textContent = pfFmtDisplay(totalValView);
   if (vsEl) vsEl.textContent = pfPositions.length + ' posicion' + (pfPositions.length===1?'':'es');
+  // Show active account name in subtitle
+  var acct = pfActiveAcct();
+  var acctName = acct ? acct.name : 'Mi Portafolio';
+  if (vsEl && acctName) vsEl.textContent = '📁 ' + acctName + ' · ' + pfPositions.length + ' posicion' + (pfPositions.length===1?'':'es');
   if (gaEl) { gaEl.textContent = pfFmtDisplay(ganView); gaEl.style.color = ganView >= 0 ? 'var(--green)' : 'var(--red)'; }
   if (gsEl) gsEl.textContent = (ganView >= 0 ? '▲' : '▼') + ' vs costo ' + pfFmtDisplay(totalCostView);
   if (reEl) { reEl.textContent = (rendPct >= 0 ? '+' : '') + pfFmt(rendPct, 2) + '%'; reEl.style.color = rendPct >= 0 ? 'var(--green)' : 'var(--red)'; }
@@ -3839,15 +4023,18 @@ function pfSavePosition() {
 function pfDeletePosition(id) {
   if(!confirm('¿Eliminar esta posición?'))return;
   pfPositions=pfPositions.filter(function(p){return p.id!==id;});
+  var a=pfActiveAcct(); if(a) a.positions=pfPositions;
   pfSave(); pfRenderAll();
 }
 
 // ── BORRAR TODO ───────────────────────────────────────────
 function pfClearAll() {
-  if (pfPositions.length === 0) { alert('El portafolio ya está vacío.'); return; }
-  if (!confirm('⚠ ¿Eliminar TODAS las posiciones del portafolio?\n\nEsta acción no se puede deshacer.')) return;
+  var a = pfActiveAcct();
+  var nombre = a ? '"' + a.name + '"' : 'esta cuenta';
+  if (pfPositions.length === 0) { alert('El portafolio está vacío.'); return; }
+  if (!confirm('⚠ ¿Eliminar TODAS las posiciones de ' + nombre + '?\n\nEsta acción no se puede deshacer.')) return;
   pfPositions = [];
-  pfLiveCache = {};
+  if (a) a.positions = pfPositions;
   pfSave();
   pfRenderAll();
 }
@@ -4101,6 +4288,7 @@ function pfNormalizeDate(s) {
 (function pfInit(){
   function _init(){
     pfLoad();
+    pfRenderAccountTabs();
     // Aplicar estado del toggle
     var bu=document.getElementById('pfBtnUSD'), ba=document.getElementById('pfBtnARS');
     if(bu)bu.classList.toggle('active',pfViewCurrency==='USD');
