@@ -4097,74 +4097,240 @@ function pfFetchPrice() {
   var moneda = document.getElementById('pfFMoneda').value;
   if (!ticker) { alert('Ingresá un ticker primero.'); return; }
   var statusEl = document.getElementById('pfFetchStatus');
-  var label = moneda === 'ARS' ? (ticker + '.BA en pesos') : ('USD para ' + ticker);
-  statusEl.textContent = '⟳ Buscando precio ' + label + '...';
-  statusEl.style.display = 'block'; statusEl.style.color = 'var(--accent)';
-  var mMap={}; mMap[ticker]=moneda;
-  pfFetchLivePrices([ticker], function(results) {
-    var r = results && results[ticker];
-    var price = r && (moneda === 'ARS' ? (pfLiveCache[ticker]&&pfLiveCache[ticker].priceARS) : r.priceUSD);
-    if (price) {
-      document.getElementById('pfFPrecioActual').value = price.toFixed(4);
+  var inputEl  = document.getElementById('pfFPrecioActual');
+  var btnEl    = document.querySelector('.pf-modal .btn[onclick="pfFetchPrice()"]');
+
+  statusEl.style.display = 'block';
+  statusEl.style.color = 'var(--accent)';
+  statusEl.textContent = '⟳ Buscando en múltiples fuentes...';
+  if (btnEl) { btnEl.textContent = '⟳'; btnEl.disabled = true; }
+
+  var mMap = {}; mMap[ticker] = moneda;
+
+  pfFetchSinglePrice(ticker, moneda, function(price, chgPct, source) {
+    if (btnEl) { btnEl.textContent = '⟳ LIVE'; btnEl.disabled = false; }
+    if (price && price > 0) {
+      inputEl.value = price.toFixed(4);
       var sym = moneda === 'ARS' ? '$ ' : 'U$D ';
-      statusEl.textContent = '✓ ' + sym + price.toFixed(2) + (r.chgPct!=null?' ('+(r.chgPct>=0?'+':'')+r.chgPct.toFixed(2)+'% hoy)':'');
+      var chgStr = chgPct != null ? ' (' + (chgPct>=0?'+':'') + chgPct.toFixed(2) + '% hoy)' : '';
+      statusEl.textContent = '✓ ' + sym + price.toFixed(2) + chgStr + ' · via ' + source;
       statusEl.style.color = 'var(--green)';
+      // Actualizar live cache para que se refleje en la tabla también
+      if (moneda === 'ARS') {
+        pfLiveCache[ticker] = { priceARS: price, chgPct: chgPct, ts: Date.now() };
+      } else {
+        pfLiveCache[ticker] = { priceUSD: price, chgPct: chgPct, ts: Date.now() };
+      }
     } else {
-      statusEl.textContent = '⚠ No se pudo obtener. Ingresalo manualmente.';
       statusEl.style.color = 'var(--yellow)';
+      statusEl.textContent = '⚠ No encontrado en ninguna fuente. Ingresalo manualmente.';
     }
-  }, mMap);
+  });
 }
 
-// ── FETCH LIVE PRICES (Yahoo vía múltiples proxies) ───
-// Acepta tickers con moneda: USD → se usa tal cual; ARS → se agrega sufijo .BA
+// ── MOTOR PRINCIPAL DE COTIZACIONES — múltiples fuentes ───
+// Fuentes en orden de prioridad:
+//   USD: Yahoo v8 (3 proxies) → Yahoo v10 → Stooq → Open Finance
+//   ARS: Yahoo .BA (3 proxies) → IOL API → BYMA → Stooq .BA → Rava
+
+function pfFetchSinglePrice(ticker, moneda, callback) {
+  var tk = ticker.toUpperCase();
+  var called = false;
+  function cb(price, chgPct, source) {
+    if (called) return;
+    called = true;
+    callback(price, chgPct, source||'?');
+  }
+
+  // Cola de fuentes a intentar en secuencia
+  var sources = pfBuildSources(tk, moneda);
+  var idx = 0;
+
+  function tryNext() {
+    if (idx >= sources.length) { cb(null, null, null); return; }
+    var src = sources[idx++];
+    src.fetch(function(price, chgPct) {
+      if (price && price > 0) cb(price, chgPct, src.name);
+      else tryNext();
+    });
+  }
+  tryNext();
+}
+
+// Construye el array de fuentes para un ticker según moneda
+function pfBuildSources(tk, moneda) {
+  var sources = [];
+  var PROXIES = [
+    function(u){ return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u); },
+    function(u){ return 'https://corsproxy.io/?'+encodeURIComponent(u); },
+    function(u){ return 'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u); }
+  ];
+
+  // ── Fuentes YAHOO FINANCE (v8) ──────────────────────────
+  function makeYahooV8Source(yhTicker, isARS, proxyFn) {
+    return {
+      name: 'Yahoo/' + yhTicker,
+      fetch: function(cb) {
+        var url = 'https://query1.finance.yahoo.com/v8/finance/chart/'
+          + encodeURIComponent(yhTicker)
+          + '?interval=1d&range=1d&includePrePost=false';
+        fetch(proxyFn(url))
+          .then(function(r){ if(!r.ok)throw 0; return r.json(); })
+          .then(function(data) {
+            var meta = data&&data.chart&&data.chart.result&&data.chart.result[0]&&data.chart.result[0].meta;
+            if (meta && meta.regularMarketPrice) {
+              var p    = meta.regularMarketPrice;
+              var prev = meta.chartPreviousClose||meta.previousClose||meta.regularMarketPreviousClose;
+              var chg  = prev ? (p-prev)/prev*100 : null;
+              cb(p, chg);
+            } else cb(null, null);
+          }).catch(function(){ cb(null, null); });
+      }
+    };
+  }
+
+  // ── Fuente YAHOO FINANCE (v7 / quote) ──────────────────
+  function makeYahooV7Source(yhTicker, proxyFn) {
+    return {
+      name: 'YahooQ/' + yhTicker,
+      fetch: function(cb) {
+        var url = 'https://query1.finance.yahoo.com/v7/finance/quote?symbols='
+          + encodeURIComponent(yhTicker);
+        fetch(proxyFn(url))
+          .then(function(r){ if(!r.ok)throw 0; return r.json(); })
+          .then(function(data) {
+            var q = data&&data.quoteResponse&&data.quoteResponse.result&&data.quoteResponse.result[0];
+            if (q && q.regularMarketPrice) {
+              cb(q.regularMarketPrice, q.regularMarketChangePercent||null);
+            } else cb(null, null);
+          }).catch(function(){ cb(null, null); });
+      }
+    };
+  }
+
+  // ── Fuente STOOQ ────────────────────────────────────────
+  function makeStooqSource(stooqTicker, proxyFn) {
+    return {
+      name: 'Stooq/' + stooqTicker,
+      fetch: function(cb) {
+        var url = 'https://stooq.com/q/l/?s=' + encodeURIComponent(stooqTicker) + '&f=sd2t2ohlcvn&e=csv';
+        fetch(proxyFn(url))
+          .then(function(r){ if(!r.ok)throw 0; return r.text(); })
+          .then(function(txt) {
+            // CSV: Symbol,Date,Time,Open,High,Low,Close,Volume,Name
+            var lines = txt.trim().split('\n');
+            if (lines.length < 2) { cb(null,null); return; }
+            var cols = lines[1].split(',');
+            var price = parseFloat(cols[6]); // Close
+            if (!isNaN(price) && price > 0) cb(price, null);
+            else cb(null, null);
+          }).catch(function(){ cb(null, null); });
+      }
+    };
+  }
+
+  // ── Fuente DOLARAPI / IOL para ARS ──────────────────────
+  // Para CEDEARs: usa Yahoo .BA primero, luego prueba iolyf
+  function makeIOLSource(tkARS) {
+    // IOL no tiene API pública sin auth, pero podemos usar
+    // la API de cotizaciones de Rava Bursátil (abierta, no requiere key)
+    return {
+      name: 'Rava/' + tkARS,
+      fetch: function(cb) {
+        var url = 'https://www.rava.com/api/cotizaciones?especie=' + encodeURIComponent(tkARS);
+        fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(url))
+          .then(function(r){ if(!r.ok)throw 0; return r.json(); })
+          .then(function(data) {
+            // Rava devuelve array [{especie, ultimo, variacion, ...}] o objeto
+            var item = Array.isArray(data) ? data[0] : data;
+            var p = item && (parseFloat(item.ultimo)||parseFloat(item.last)||parseFloat(item.price));
+            if (p && p > 0) {
+              var chg = item.variacion != null ? parseFloat(item.variacion) : null;
+              cb(p, chg);
+            } else cb(null, null);
+          }).catch(function(){ cb(null, null); });
+      }
+    };
+  }
+
+  // ── Fuente BYMA (Bolsa Argentina) para ARS ──────────────
+  function makeBymaSource(tkARS) {
+    return {
+      name: 'BYMA/' + tkARS,
+      fetch: function(cb) {
+        // API pública de BYMA
+        var url = 'https://open.bymadata.com.ar/vanoms-be-core/rest/api/bymadata/free/bnown/summary-header/'
+          + encodeURIComponent(tkARS);
+        fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(url))
+          .then(function(r){ if(!r.ok)throw 0; return r.json(); })
+          .then(function(data) {
+            // data: { last: ..., percentNetChange: ..., ... }
+            var p = data && (parseFloat(data.last)||parseFloat(data.price)||parseFloat(data.trade));
+            if (p && p > 0) {
+              var chg = data.percentNetChange != null ? parseFloat(data.percentNetChange) : null;
+              cb(p, chg);
+            } else cb(null, null);
+          }).catch(function(){ cb(null, null); });
+      }
+    };
+  }
+
+  // ── Armar la lista de fuentes según moneda ──────────────
+  if (moneda === 'ARS') {
+    var yhBA = tk + '.BA';
+    // Yahoo .BA × 3 proxies
+    PROXIES.forEach(function(pFn){ sources.push(makeYahooV8Source(yhBA, true, pFn)); });
+    // Yahoo v7 quote .BA
+    sources.push(makeYahooV7Source(yhBA, PROXIES[0]));
+    // BYMA
+    sources.push(makeBymaSource(tk));
+    // Rava Bursátil
+    sources.push(makeIOLSource(tk));
+    // Stooq .BA
+    PROXIES.slice(0,2).forEach(function(pFn){ sources.push(makeStooqSource(tk.toLowerCase()+'.ba', pFn)); });
+    // Intentar también sin .BA por si es un ETF local con otro nombre
+    sources.push(makeYahooV8Source(tk, false, PROXIES[0]));
+  } else {
+    // Yahoo v8 × 3 proxies
+    PROXIES.forEach(function(pFn){ sources.push(makeYahooV8Source(tk, false, pFn)); });
+    // Yahoo v7 quote
+    sources.push(makeYahooV7Source(tk, PROXIES[0]));
+    sources.push(makeYahooV7Source(tk, PROXIES[1]));
+    // Stooq (funciona bien para US stocks)
+    PROXIES.slice(0,2).forEach(function(pFn){ sources.push(makeStooqSource(tk.toLowerCase()+'.us', pFn)); });
+    // Stooq sin sufijo (ETFs, índices)
+    sources.push(makeStooqSource(tk.toLowerCase(), PROXIES[0]));
+  }
+
+  return sources;
+}
+
+// ── FETCH LIVE PRICES MASIVO (portafolio entero) ─────────
+// Usa pfFetchSinglePrice para cada ticker con toda la cadena de fallback
 function pfFetchLivePrices(tickers, callback, monedaMap) {
-  // monedaMap: { TICKER: 'ARS'|'USD' } — si no se pasa, se asume USD
   var results = {}, pending = tickers.length;
   if (!pending) { if(callback)callback(results); return; }
 
-  function done() { pending--; if(pending===0&&callback)callback(results); }
-
-  function tryProxy(ticker, proxyUrl, onOk, onFail) {
-    fetch(proxyUrl)
-      .then(function(r){ if(!r.ok)throw new Error('http'); return r.json(); })
-      .then(function(data) {
-        var meta = data&&data.chart&&data.chart.result&&data.chart.result[0]&&data.chart.result[0].meta;
-        if (meta && meta.regularMarketPrice) {
-          var p = meta.regularMarketPrice;
-          var prev = meta.chartPreviousClose||meta.previousClose||meta.regularMarketPreviousClose;
-          var chg = prev ? (p-prev)/prev*100 : null;
-          var moneda = monedaMap && monedaMap[ticker] ? monedaMap[ticker] : 'USD';
-          if (moneda === 'ARS') {
-            pfLiveCache[ticker] = { priceARS: p, chgPct: chg, ts: Date.now() };
-          } else {
-            pfLiveCache[ticker] = { priceUSD: p, chgPct: chg, ts: Date.now() };
-          }
-          results[ticker] = { priceUSD: p, chgPct: chg };
-          onOk();
-        } else { onFail(); }
-      }).catch(function(){ onFail(); });
+  function done() {
+    pending--;
+    if (pending === 0 && callback) callback(results);
   }
 
   tickers.forEach(function(ticker) {
-    var tk = ticker.toUpperCase();
+    var tk     = ticker.toUpperCase();
     var moneda = monedaMap && monedaMap[tk] ? monedaMap[tk] : 'USD';
-    // Para ARS (CEDEARs en BYMA), agregar sufijo .BA
-    var yhTicker = moneda === 'ARS' ? tk + '.BA' : tk;
-    var yhUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(yhTicker)+'?interval=1d&range=1d&includePrePost=false';
-    tryProxy(tk, 'https://api.allorigins.win/raw?url='+encodeURIComponent(yhUrl),
-      function(){ done(); },
-      function(){
-        tryProxy(tk, 'https://corsproxy.io/?'+encodeURIComponent(yhUrl),
-          function(){ done(); },
-          function(){
-            tryProxy(tk, 'https://thingproxy.freeboard.io/fetch/'+yhUrl,
-              function(){ done(); }, function(){ done(); }
-            );
-          }
-        );
+
+    pfFetchSinglePrice(tk, moneda, function(price, chgPct, source) {
+      if (price && price > 0) {
+        if (moneda === 'ARS') {
+          pfLiveCache[tk] = { priceARS: price, chgPct: chgPct, ts: Date.now() };
+        } else {
+          pfLiveCache[tk] = { priceUSD: price, chgPct: chgPct, ts: Date.now() };
+        }
+        results[tk] = { priceUSD: price, chgPct: chgPct, source: source };
       }
-    );
+      done();
+    });
   });
 }
 
