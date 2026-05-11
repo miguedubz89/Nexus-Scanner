@@ -3385,33 +3385,7 @@ var pfLiqARS        = 0;       // liquidez en pesos (cuenta activa)
 var pfLiqUSD_val    = 0;       // liquidez en dólares (cuenta activa)
 var pfSortCol       = null;
 var pfSortDir       = 1;
-var pfLiveCache     = {};       // { TICKER: { priceUSD|priceARS, chgPct, ts } }
-var PF_CACHE_KEY    = 'dubz_pf_live_cache_v1';
-var PF_CACHE_TTL    = 15 * 60 * 1000; // 15 minutos
-
-// Restaurar cache persistido al iniciar
-(function pfRestoreCache() {
-  try {
-    var raw = localStorage.getItem(PF_CACHE_KEY);
-    if (!raw) return;
-    var saved = JSON.parse(raw);
-    var now = Date.now();
-    Object.keys(saved).forEach(function(tk) {
-      var entry = saved[tk];
-      // Solo restaurar entradas con menos de TTL
-      if (entry && entry.ts && (now - entry.ts) < PF_CACHE_TTL) {
-        pfLiveCache[tk] = entry;
-      }
-    });
-  } catch(e) {}
-})();
-
-// Guardar pfLiveCache a localStorage (llamar luego de cada fetch masivo)
-function pfPersistLiveCache() {
-  try {
-    localStorage.setItem(PF_CACHE_KEY, JSON.stringify(pfLiveCache));
-  } catch(e) {}
-}
+var pfLiveCache     = {};       // { TICKER: { priceUSD, chgPct, ts } }
 
 // ── HELPERS DE CUENTA ─────────────────────────────────────────────
 function pfActiveAcct() {
@@ -3468,7 +3442,7 @@ function pfSwitchAccount(id) {
   var tAll=[], mMap={};
   pfPositions.forEach(function(p){ var t=(p.ticker||'').toUpperCase(); if(t){tAll.push(t);mMap[t]=(p.moneda||'USD');} });
   tAll=tAll.filter(function(t,i,a){return a.indexOf(t)===i;});
-  if(tAll.length) pfFetchLivePricesAndPersist(tAll, function(){pfRenderAll();}, mMap);
+  if(tAll.length) pfFetchLivePrices(tAll, function(){pfRenderAll();}, mMap);
 }
 
 // ── AGREGAR CUENTA ────────────────────────────────────────────────
@@ -3549,7 +3523,7 @@ function pfLoad() {
         pfAccounts = [{ id:'acct_main', name:'Mi Portafolio', positions:[], liqARS:0, liqUSD:0 }];
         pfActiveAcctId = 'acct_main';
       }
-    if (cp.mep)  pfMepRate       = parseFloat(cp.mep);
+      if (cp.mep)  pfMepRate       = parseFloat(cp.mep);
       if (cp.view) pfViewCurrency   = cp.view;
       window._cloudPortfolio = null;
       pfSyncFromAcct();
@@ -3590,21 +3564,6 @@ function pfLoad() {
       pfViewCurrency = localStorage.getItem('dubz_pf_view') || 'USD';
       pfSyncFromAcct();
     }
-    // Seed pfLiveCache con precioActual guardado manualmente para posiciones
-    // que no tengan entrada en cache o cuya entrada ya venció — evita mostrar
-    // el precio de compra en el primer render mientras llegan los fetches live
-    pfPositions.forEach(function(p) {
-      var tk = (p.ticker||'').toUpperCase();
-      if (!tk) return;
-      var pa = parseFloat(p.precioActual);
-      if (pa && pa > 0 && !pfLiveCache[tk]) {
-        if ((p.moneda||'USD') === 'ARS') {
-          pfLiveCache[tk] = { priceARS: pa, chgPct: null, ts: 0 };
-        } else {
-          pfLiveCache[tk] = { priceUSD: pa, chgPct: null, ts: 0 };
-        }
-      }
-    });
     var mepEl = document.getElementById('pfMepRate');
     if (mepEl) mepEl.value = pfMepRate;
     pfSyncLiqInputs();
@@ -4368,20 +4327,11 @@ function pfFetchLivePrices(tickers, callback, monedaMap) {
         } else {
           pfLiveCache[tk] = { priceUSD: price, chgPct: chgPct, ts: Date.now() };
         }
-        results[tk] = { price: price, chgPct: chgPct, source: source };
+        results[tk] = { priceUSD: price, chgPct: chgPct, source: source };
       }
       done();
     });
   });
-}
-
-// Wrapper de done() para persistir al terminar todos
-// (ya está dentro de pfFetchLivePrices — se agrega persist al callback externo)
-function pfFetchLivePricesAndPersist(tickers, callback, monedaMap) {
-  pfFetchLivePrices(tickers, function(results) {
-    pfPersistLiveCache();
-    if (callback) callback(results);
-  }, monedaMap);
 }
 
 function pfRefreshLivePrices() {
@@ -4393,7 +4343,7 @@ function pfRefreshLivePrices() {
   // Deduplicar
   tickers=tickers.filter(function(t,i,a){return a.indexOf(t)===i;});
   if(!tickers.length)return;
-  pfFetchLivePricesAndPersist(tickers, function(){ pfRenderAll(); }, monedaMap);
+  pfFetchLivePrices(tickers, function(){ pfRenderAll(); }, monedaMap);
 }
 
 // ── REFRESH MANUAL con feedback visual ────────────────────
@@ -4432,7 +4382,7 @@ function pfRefreshAllPrices() {
     return;
   }
 
-  pfFetchLivePricesAndPersist(tickers, function() {
+  pfFetchLivePrices(tickers, function() {
     clearInterval(anim);
     pfRenderAll();
     btn.textContent = '✓ OK';
@@ -4511,7 +4461,7 @@ function pfImportCSV() {
     // Fetch live para todos los tickers importados (USD y ARS)
     var newTickers=imported.map(function(p){return p.ticker;}).filter(function(t,i,a){return a.indexOf(t)===i;});
     var newMMap={}; imported.forEach(function(p){newMMap[p.ticker]=(p.moneda||'ARS');});
-    if(newTickers.length)pfFetchLivePricesAndPersist(newTickers, function(){pfRenderAll();}, newMMap);
+    if(newTickers.length)pfFetchLivePrices(newTickers, function(){pfRenderAll();}, newMMap);
     pfRenderAll();
     setTimeout(function(){pfCloseImportForce();},2500);
   };
@@ -4619,7 +4569,7 @@ function pfNormalizeDate(s) {
     var tAll=[], mMap={};
     pfPositions.forEach(function(p){var t=(p.ticker||'').toUpperCase();if(t){tAll.push(t);mMap[t]=(p.moneda||'USD');}});
     tAll=tAll.filter(function(t,i,a){return a.indexOf(t)===i;});
-    if(tAll.length)pfFetchLivePricesAndPersist(tAll, function(){pfRenderAll();}, mMap);
+    if(tAll.length)pfFetchLivePrices(tAll, function(){pfRenderAll();}, mMap);
     pfFetchMepAuto();
     setInterval(function(){var el=document.getElementById('tab-portfolio');if(el&&el.classList.contains('active'))pfRefreshLivePrices();},60000);
     setInterval(function(){pfFetchMepAuto();},300000);
