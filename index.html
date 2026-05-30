@@ -1369,8 +1369,8 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
     </div><!-- /#tab-portfolio -->
 
     <!-- MODAL: Agregar / Editar posición -->
-    <div class="pf-modal-overlay" id="pfModalOverlay" onclick="pfCloseModal(event)">
-      <div class="pf-modal">
+    <div class="pf-modal-overlay" id="pfModalOverlay">
+      <div class="pf-modal" onclick="event.stopPropagation()">
         <div class="pf-modal-header">
           <div class="pf-modal-title" id="pfModalTitle">＋ AGREGAR POSICIÓN</div>
           <button class="tv-close" onclick="pfCloseModalForce()">✕</button>
@@ -1447,8 +1447,8 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 </div>
 
     <!-- MODAL: Importar CSV broker -->
-    <div class="pf-modal-overlay" id="pfImportOverlay" onclick="pfCloseImportModal(event)">
-      <div class="pf-modal" style="max-width:560px">
+    <div class="pf-modal-overlay" id="pfImportOverlay">
+      <div class="pf-modal" style="max-width:560px" onclick="event.stopPropagation()">
         <div class="pf-modal-header">
           <div class="pf-modal-title">📥 IMPORTAR DESDE CSV</div>
           <button class="tv-close" onclick="pfCloseImportForce()">✕</button>
@@ -4041,6 +4041,20 @@ function pfEditPosition(id) {
 function pfCloseModal(e) { if(e&&e.target===document.getElementById('pfModalOverlay'))pfCloseModalForce(); }
 function pfCloseModalForce() { document.getElementById('pfModalOverlay').classList.remove('open'); }
 
+// Registrar cierre del overlay solo al hacer mousedown directamente en el fondo (no en el modal)
+(function(){
+  var overlay = document.getElementById('pfModalOverlay');
+  if (!overlay) return;
+  var _downOnOverlay = false;
+  overlay.addEventListener('mousedown', function(e) {
+    _downOnOverlay = (e.target === overlay);
+  });
+  overlay.addEventListener('click', function(e) {
+    if (_downOnOverlay && e.target === overlay) pfCloseModalForce();
+    _downOnOverlay = false;
+  });
+})();
+
 function pfSavePosition() {
   var ticker       = (document.getElementById('pfFTicker').value||'').trim().toUpperCase().replace(/[^A-Z0-9.]/g,'');
   var nombre       = (document.getElementById('pfFNombre').value||'').trim();
@@ -4486,6 +4500,20 @@ function pfOpenImportModal() {
 }
 function pfCloseImportModal(e){ if(!e||e.target===document.getElementById('pfImportOverlay'))pfCloseImportForce(); }
 function pfCloseImportForce(){ document.getElementById('pfImportOverlay').classList.remove('open'); }
+
+// Registrar cierre del overlay de importar igual que el principal
+(function(){
+  var overlay = document.getElementById('pfImportOverlay');
+  if (!overlay) return;
+  var _downOnOverlay = false;
+  overlay.addEventListener('mousedown', function(e) {
+    _downOnOverlay = (e.target === overlay);
+  });
+  overlay.addEventListener('click', function(e) {
+    if (_downOnOverlay && e.target === overlay) pfCloseImportForce();
+    _downOnOverlay = false;
+  });
+})();
 
 function pfImportCSV() {
   var file=(document.getElementById('pfImportFileInput').files||[])[0];
