@@ -4136,9 +4136,14 @@ function pfFetchPrice() {
 function pfFetchSinglePrice(ticker, moneda, callback) {
   var tk = ticker.toUpperCase();
   var called = false;
+  var timer = setTimeout(function() {
+    if (!called) { called = true; callback(null, null, 'timeout'); }
+  }, 12000); // 12s máximo — si ninguna fuente responde, desistir
+
   function cb(price, chgPct, source) {
     if (called) return;
     called = true;
+    clearTimeout(timer);
     callback(price, chgPct, source||'?');
   }
 
@@ -4307,11 +4312,19 @@ function pfBuildSources(tk, moneda) {
 
 // ── FETCH LIVE PRICES MASIVO (portafolio entero) ─────────
 // Usa pfFetchSinglePrice para cada ticker con toda la cadena de fallback
+// Token global para cancelar fetches anteriores si se lanza uno nuevo
+var _pfFetchToken = 0;
+
 function pfFetchLivePrices(tickers, callback, monedaMap) {
   var results = {}, pending = tickers.length;
   if (!pending) { if(callback)callback(results); return; }
 
+  // Incrementar token — cualquier fetch anterior con token viejo es ignorado
+  var myToken = ++_pfFetchToken;
+
   function done() {
+    // Si ya hay un fetch más nuevo en vuelo, ignorar este resultado
+    if (myToken !== _pfFetchToken) return;
     pending--;
     if (pending === 0 && callback) callback(results);
   }
@@ -4321,13 +4334,15 @@ function pfFetchLivePrices(tickers, callback, monedaMap) {
     var moneda = monedaMap && monedaMap[tk] ? monedaMap[tk] : 'USD';
 
     pfFetchSinglePrice(tk, moneda, function(price, chgPct, source) {
+      // Si ya hay un fetch más nuevo, descartar este resultado
+      if (myToken !== _pfFetchToken) return;
       if (price && price > 0) {
         if (moneda === 'ARS') {
           pfLiveCache[tk] = { priceARS: price, chgPct: chgPct, ts: Date.now() };
         } else {
           pfLiveCache[tk] = { priceUSD: price, chgPct: chgPct, ts: Date.now() };
         }
-        results[tk] = { priceUSD: price, chgPct: chgPct, source: source };
+        results[tk] = { price: price, chgPct: chgPct, source: source };
       }
       done();
     });
@@ -4571,7 +4586,20 @@ function pfNormalizeDate(s) {
     tAll=tAll.filter(function(t,i,a){return a.indexOf(t)===i;});
     if(tAll.length)pfFetchLivePrices(tAll, function(){pfRenderAll();}, mMap);
     pfFetchMepAuto();
-    setInterval(function(){var el=document.getElementById('tab-portfolio');if(el&&el.classList.contains('active'))pfRefreshLivePrices();},60000);
+    // Auto-refresh cada 60s con lock para evitar solapamiento de fetches
+    var _autoRefreshBusy = false;
+    setInterval(function(){
+      var el=document.getElementById('tab-portfolio');
+      if(el&&el.classList.contains('active')&&!_autoRefreshBusy){
+        _autoRefreshBusy=true;
+        var t2=[], m2={};
+        pfPositions.forEach(function(p){var t=(p.ticker||'').toUpperCase();if(t){t2.push(t);m2[t]=(p.moneda||'USD');}});
+        t2=t2.filter(function(t,i,a){return a.indexOf(t)===i;});
+        if(t2.length){
+          pfFetchLivePrices(t2, function(){pfRenderAll();_autoRefreshBusy=false;}, m2);
+        } else { _autoRefreshBusy=false; }
+      }
+    },60000);
     setInterval(function(){pfFetchMepAuto();},300000);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',_init);
