@@ -830,7 +830,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 .pf-search-input::placeholder{color:var(--text-dim)}
 
 /* Summary cards */
-.pf-summary-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
+.pf-summary-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:14px}
 .pf-sum-card{background:var(--bg2);border:1px solid var(--border);border-radius:2px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px;transition:border-color .2s}
 .pf-sum-card:hover{border-color:var(--border2)}
 .pf-today-card{border-color:rgba(255,214,0,0.2)!important;background:linear-gradient(135deg,rgba(255,214,0,0.04),transparent)!important}
@@ -888,6 +888,21 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 
 /* Live price badge */
 .pf-live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);animation:pulse 1.5s infinite}
+
+/* ── SELL BUTTON ── */
+.pf-action-btn.sell{border-color:rgba(255,214,0,0.4);color:var(--yellow)}
+.pf-action-btn.sell:hover{border-color:var(--yellow);color:var(--yellow);background:rgba(255,214,0,0.1)}
+
+/* ── CLOSED TRADES TABLE ── */
+.pf-closed-section{margin-top:22px}
+.pf-closed-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px;flex-wrap:wrap}
+.pf-closed-title{font-family:var(--head);font-size:11px;font-weight:900;letter-spacing:3px;text-transform:uppercase;color:var(--text-bright);display:flex;align-items:center;gap:8px}
+.pf-trade-result{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.5px;padding:2px 6px;border-radius:2px;border:1px solid;white-space:nowrap}
+.pf-trade-result.win{color:var(--green);border-color:var(--green2);background:rgba(0,230,118,0.1)}
+.pf-trade-result.loss{color:var(--red);border-color:var(--red2);background:rgba(255,61,90,0.1)}
+.pf-trade-result.even{color:var(--text-dim);border-color:var(--border2);background:var(--bg3)}
+.pf-sum-card.realized{border-color:rgba(180,74,255,0.3)!important;background:linear-gradient(135deg,rgba(180,74,255,0.05),transparent)!important}
+.pf-sum-card.realized:hover{border-color:rgba(180,74,255,0.6)!important}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
 /* View USD/ARS tabs */
@@ -1320,6 +1335,15 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
             </div>
           </div>
         </div>
+        <!-- REALIZADO -->
+        <div class="pf-sum-card realized">
+          <div class="pf-sum-icon">🏁</div>
+          <div class="pf-sum-body">
+            <div class="pf-sum-lbl">Realizado <span style="font-size:9px;opacity:.6;letter-spacing:1px">TRADES CERRADOS</span></div>
+            <div class="pf-sum-val" id="pfRealizado">—</div>
+            <div class="pf-sum-sub" id="pfRealizadoSub">0 trades cerrados</div>
+          </div>
+        </div>
       </div>
 
       <!-- DISTRIBUTION BAR -->
@@ -1354,7 +1378,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
               <th onclick="pfSortByCol('rendPct',this)">Rend (%)<span class="sort-icon">⇅</span></th>
               <th onclick="pfSortByCol('fecha',this)">Fecha<span class="sort-icon">⇅</span></th>
               <th style="width:90px;text-align:center">Indicador</th>
-              <th style="width:70px;text-align:center">Acciones</th>
+              <th style="width:110px;text-align:center">Acciones</th>
             </tr>
           </thead>
           <tbody id="pfBody"></tbody>
@@ -1364,6 +1388,39 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
         <div style="font-size:48px;margin-bottom:12px">💼</div>
         <div style="font-size:14px;letter-spacing:2px">SIN POSICIONES REGISTRADAS</div>
         <div style="font-size:12px;margin-top:6px">Hacé clic en <strong style="color:var(--accent)">＋ AGREGAR</strong> para cargar tu primera inversión</div>
+      </div>
+
+      <!-- ── TRADES CERRADOS ── -->
+      <div class="pf-closed-section" id="pfClosedSection" style="display:none">
+        <div class="pf-closed-header">
+          <span class="pf-closed-title">🏁 TRADES CERRADOS <span class="sec-cnt" id="pfClosedCount">0</span></span>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span style="font-family:var(--mono);font-size:11px;color:var(--text-dim)">P&L realizado:</span>
+            <span id="pfClosedPnlBadge" style="font-family:var(--mono);font-size:13px;font-weight:700">—</span>
+            <button class="btn btn-sm" style="border-color:rgba(255,61,90,0.4);color:var(--red);font-size:11px;padding:3px 8px" onclick="pfClearClosedTrades()" title="Eliminar todos los trades cerrados">🗑 Limpiar</button>
+          </div>
+        </div>
+        <div class="tbl-wrap" style="overflow-x:auto">
+          <table class="dt" id="pfClosedTable">
+            <thead>
+              <tr>
+                <th style="width:110px">Ticker</th>
+                <th>Cant.</th>
+                <th>P.Compra</th>
+                <th>P.Venta</th>
+                <th>Costo Total</th>
+                <th>Valor Venta</th>
+                <th>P&L ($)</th>
+                <th>P&L (%)</th>
+                <th>F.Compra</th>
+                <th>F.Venta</th>
+                <th style="width:90px;text-align:center">Resultado</th>
+                <th style="width:50px;text-align:center">✕</th>
+              </tr>
+            </thead>
+            <tbody id="pfClosedBody"></tbody>
+          </table>
+        </div>
       </div>
 
     </div><!-- /#tab-portfolio -->
@@ -1428,6 +1485,45 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
   </div>
 </div>
 
+
+<!-- MODAL: Vender posición -->
+<div class="pf-modal-overlay" id="pfSellModalOverlay">
+  <div class="pf-modal" style="max-width:500px" onclick="event.stopPropagation()">
+    <div class="pf-modal-header">
+      <div class="pf-modal-title" style="color:var(--yellow)">💰 REGISTRAR VENTA</div>
+      <button class="tv-close" onclick="pfCloseSellModalForce()">✕</button>
+    </div>
+    <div class="pf-modal-body">
+      <input type="hidden" id="pfSellPosId">
+      <div id="pfSellInfo" style="background:rgba(255,214,0,0.06);border:1px solid rgba(255,214,0,0.25);border-radius:2px;padding:12px;margin-bottom:12px;font-family:var(--mono);font-size:12px;color:var(--text-dim);display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div><div style="font-size:10px;letter-spacing:1px;margin-bottom:3px">TICKER</div><div id="pfSellTicker" style="color:var(--text-bright);font-weight:700;font-size:15px;letter-spacing:2px">—</div></div>
+        <div><div style="font-size:10px;letter-spacing:1px;margin-bottom:3px">TENENCIA</div><div id="pfSellTenencia" style="color:var(--text-bright)">—</div></div>
+        <div><div style="font-size:10px;letter-spacing:1px;margin-bottom:3px">P.COMPRA</div><div id="pfSellPCompra" style="color:var(--text-bright)">—</div></div>
+      </div>
+      <div class="pf-form-grid">
+        <div class="pf-field"><label>Cantidad a vender *</label><input type="number" id="pfSellCantidad" class="pf-input" placeholder="Ej: 100" min="0" step="any" oninput="pfSellCalcPreview()"></div>
+        <div class="pf-field"><label>Precio de Venta * <span id="pfSellMonedaLabel" style="color:var(--yellow)">(ARS)</span></label><div style="display:flex;gap:6px"><input type="number" id="pfSellPrecioVenta" class="pf-input" placeholder="Precio" min="0" step="any" style="flex:1" oninput="pfSellCalcPreview()"><button class="btn btn-a btn-sm" onclick="pfSellFetchLive()">⟳ LIVE</button></div></div>
+        <div class="pf-field"><label>Fecha de Venta</label><input type="date" id="pfSellFecha" class="pf-input"></div>
+        <div class="pf-field"><label>Nota / Motivo</label><input type="text" id="pfSellNota" class="pf-input" placeholder="Ej: Take profit, stop loss..."></div>
+      </div>
+      <div id="pfSellPreview" style="display:none;margin-top:12px;background:var(--bg3);border:1px solid var(--border2);border-radius:2px;padding:12px;font-family:var(--mono);font-size:12px">
+        <div style="font-size:10px;letter-spacing:2px;color:var(--text-dim);margin-bottom:10px;font-family:var(--head);font-weight:700">PREVIEW P&amp;L</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+          <div><div style="font-size:10px;color:var(--text-dim);letter-spacing:1px;margin-bottom:2px">COSTO</div><div id="pfSellPreviewCosto" style="color:var(--text-bright)">—</div></div>
+          <div><div style="font-size:10px;color:var(--text-dim);letter-spacing:1px;margin-bottom:2px">INGRESO</div><div id="pfSellPreviewIngreso" style="color:var(--text-bright)">—</div></div>
+          <div><div style="font-size:10px;color:var(--text-dim);letter-spacing:1px;margin-bottom:2px">P&amp;L</div><div id="pfSellPreviewPnl" style="font-weight:700;font-size:14px">—</div></div>
+        </div>
+        <div id="pfSellPartialNote" style="display:none;margin-top:8px;font-size:10px;color:var(--yellow);letter-spacing:.5px">⚡ Venta parcial — la posición se actualizará con la cantidad restante</div>
+      </div>
+      <div id="pfSellError" style="display:none;background:rgba(255,61,90,0.1);border:1px solid var(--red2);color:var(--red);font-family:var(--mono);font-size:12px;padding:8px 12px;border-radius:2px;margin-top:8px"></div>
+      <div id="pfSellLiveStatus" style="display:none;font-family:var(--mono);font-size:11px;color:var(--accent);margin-top:6px;letter-spacing:1px"></div>
+    </div>
+    <div class="pf-modal-footer">
+      <button class="btn btn-r btn-sm" onclick="pfCloseSellModalForce()">Cancelar</button>
+      <button class="btn btn-sm" style="background:rgba(255,214,0,0.15);border-color:var(--yellow);color:var(--yellow);font-weight:700" onclick="pfConfirmSell()">💰 CONFIRMAR VENTA</button>
+    </div>
+  </div>
+</div>
 <!-- TRADINGVIEW MODAL -->
 <div class="tv-modal-overlay" id="tvModalOverlay" onclick="closeTVModal(event)">
   <div class="tv-modal">
@@ -3137,7 +3233,10 @@ function closeTVModal(e) {
 }
 
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') document.getElementById('tvModalOverlay').classList.remove('open');
+  if (e.key === 'Escape') {
+    document.getElementById('tvModalOverlay').classList.remove('open');
+    pfCloseSellModalForce();
+  }
 });
 
 // ── TICKER MANAGER ────────────────────────────────
@@ -3513,6 +3612,7 @@ function pfLoad() {
         pfAccounts = cp.accounts.map(function(a) {
           if (!Array.isArray(a.positions)) a.positions = [];
           a.positions.forEach(function(p){ if(!p.moneda) p.moneda='USD'; });
+          if (!Array.isArray(a.closedTrades)) a.closedTrades = [];
           a.liqARS = parseFloat(a.liqARS)||0;
           a.liqUSD = parseFloat(a.liqUSD)||0;
           return a;
@@ -3537,6 +3637,7 @@ function pfLoad() {
           pfAccounts.forEach(function(a){
             if(!Array.isArray(a.positions)) a.positions=[];
             a.positions.forEach(function(p){ if(!p.moneda) p.moneda='USD'; });
+            if(!Array.isArray(a.closedTrades)) a.closedTrades=[];
             a.liqARS=parseFloat(a.liqARS)||0;
             a.liqUSD=parseFloat(a.liqUSD)||0;
           });
@@ -3730,6 +3831,7 @@ function pfRenderAll() {
   pfRenderSummary();
   pfRenderDistribution();
   pfRenderTable();
+  pfRenderClosedTrades();
 }
 
 // ── SUMMARY CARDS ─────────────────────────────────────────
@@ -3960,6 +4062,7 @@ function pfRenderTable() {
       '<td>'+ind+'</td>'+
       '<td style="text-align:center">'+
         '<div style="display:flex;gap:4px;justify-content:center">'+
+        '<button class="pf-action-btn sell" data-pid="'+pid+'" onclick="pfOpenSellModal(this.dataset.pid)" title="Registrar venta">💰</button>'+
         '<button class="pf-action-btn" data-pid="'+pid+'" onclick="pfEditPosition(this.dataset.pid)">✏</button>'+
         '<button class="pf-action-btn del" data-pid="'+pid+'" onclick="pfDeletePosition(this.dataset.pid)">✕</button>'+
         '</div>'+
@@ -4055,6 +4158,15 @@ function pfCloseModalForce() { document.getElementById('pfModalOverlay').classLi
   });
 })();
 
+// Sell modal overlay dismiss
+(function(){
+  var overlay = document.getElementById('pfSellModalOverlay');
+  if (!overlay) return;
+  var _down = false;
+  overlay.addEventListener('mousedown', function(e){ _down = (e.target === overlay); });
+  overlay.addEventListener('click', function(e){ if (_down && e.target === overlay) pfCloseSellModalForce(); _down = false; });
+})();
+
 function pfSavePosition() {
   var ticker       = (document.getElementById('pfFTicker').value||'').trim().toUpperCase().replace(/[^A-Z0-9.]/g,'');
   var nombre       = (document.getElementById('pfFNombre').value||'').trim();
@@ -4090,6 +4202,300 @@ function pfDeletePosition(id) {
   if(!confirm('¿Eliminar esta posición?'))return;
   pfPositions=pfPositions.filter(function(p){return p.id!==id;});
   var a=pfActiveAcct(); if(a) a.positions=pfPositions;
+  pfSave(); pfRenderAll();
+}
+
+// ══════════════════════════════════════════════════════════════
+// ── REGISTRO DE VENTAS / TRADES CERRADOS ─────────────────────
+// ══════════════════════════════════════════════════════════════
+
+// Array de trades cerrados (por cuenta activa → se guarda en la cuenta)
+var pfClosedTrades = [];
+
+function pfGetClosedTrades() {
+  var a = pfActiveAcct();
+  if (!a) return [];
+  if (!Array.isArray(a.closedTrades)) a.closedTrades = [];
+  return a.closedTrades;
+}
+
+function pfSaveClosedTrades() {
+  var a = pfActiveAcct();
+  if (!a) return;
+  a.closedTrades = pfClosedTrades;
+  pfSave();
+}
+
+// ── ABRIR MODAL VENTA ─────────────────────────────────────────
+function pfOpenSellModal(id) {
+  var pos = null;
+  for (var i = 0; i < pfPositions.length; i++) { if (pfPositions[i].id === id) { pos = pfPositions[i]; break; } }
+  if (!pos) return;
+
+  document.getElementById('pfSellPosId').value = id;
+  document.getElementById('pfSellTicker').textContent = pos.ticker || '?';
+  document.getElementById('pfSellTenencia').textContent = pfFmt(parseFloat(pos.cantidad)||0, 2) + ' acc.';
+  document.getElementById('pfSellPCompra').textContent = pfFmtDisplay(pfToView(parseFloat(pos.precioCompra)||0, pos.moneda||'USD'));
+  var monLbl = pos.moneda === 'ARS' ? '(ARS)' : '(USD)';
+  document.getElementById('pfSellMonedaLabel').textContent = monLbl;
+  document.getElementById('pfSellMonedaLabel').style.color = pos.moneda === 'ARS' ? 'var(--yellow)' : 'var(--accent)';
+
+  // Pre-llenar precio live si está disponible
+  var cached = pfLiveCache[(pos.ticker||'').toUpperCase()];
+  var livePrice = null;
+  if (cached) {
+    livePrice = pos.moneda === 'ARS' ? cached.priceARS : cached.priceUSD;
+  }
+  document.getElementById('pfSellCantidad').value = pos.cantidad || '';
+  document.getElementById('pfSellPrecioVenta').value = livePrice ? livePrice.toFixed(4) : '';
+  document.getElementById('pfSellFecha').value = new Date().toISOString().slice(0,10);
+  document.getElementById('pfSellNota').value = '';
+  document.getElementById('pfSellError').style.display = 'none';
+  document.getElementById('pfSellLiveStatus').style.display = 'none';
+
+  pfSellCalcPreview();
+  document.getElementById('pfSellModalOverlay').classList.add('open');
+  setTimeout(function(){ document.getElementById('pfSellCantidad').focus(); }, 100);
+}
+
+function pfCloseSellModal(e) {
+  if (e && e.target === document.getElementById('pfSellModalOverlay')) pfCloseSellModalForce();
+}
+function pfCloseSellModalForce() {
+  document.getElementById('pfSellModalOverlay').classList.remove('open');
+}
+
+// ── PREVIEW P&L EN TIEMPO REAL ────────────────────────────────
+function pfSellCalcPreview() {
+  var id       = document.getElementById('pfSellPosId').value;
+  var pos      = null;
+  for (var i = 0; i < pfPositions.length; i++) { if (pfPositions[i].id === id) { pos = pfPositions[i]; break; } }
+  if (!pos) return;
+
+  var qty      = parseFloat(document.getElementById('pfSellCantidad').value) || 0;
+  var pVenta   = parseFloat(document.getElementById('pfSellPrecioVenta').value) || 0;
+  var pCompra  = parseFloat(pos.precioCompra) || 0;
+  var qTotal   = parseFloat(pos.cantidad) || 0;
+  var moneda   = pos.moneda || 'USD';
+
+  var previewEl = document.getElementById('pfSellPreview');
+  if (!qty || !pVenta) { previewEl.style.display = 'none'; return; }
+
+  var costoNat   = pCompra * qty;
+  var ingresoNat = pVenta  * qty;
+  var pnlNat     = ingresoNat - costoNat;
+  var pnlPct     = costoNat > 0 ? (pnlNat / costoNat * 100) : 0;
+  var isPartial  = qty < qTotal;
+
+  var costoView   = pfToView(costoNat,   moneda);
+  var ingresoView = pfToView(ingresoNat, moneda);
+  var pnlView     = pfToView(pnlNat,     moneda);
+  var pnlColor    = pnlView >= 0 ? 'var(--green)' : 'var(--red)';
+  var pnlSign     = pnlView >= 0 ? '+' : '';
+
+  document.getElementById('pfSellPreviewCosto').textContent   = pfFmtDisplay(costoView);
+  document.getElementById('pfSellPreviewIngreso').textContent = pfFmtDisplay(ingresoView);
+  document.getElementById('pfSellPreviewPnl').textContent     = pnlSign + pfFmtDisplay(pnlView) + ' (' + pnlSign + pfFmt(pnlPct, 2) + '%)';
+  document.getElementById('pfSellPreviewPnl').style.color     = pnlColor;
+  document.getElementById('pfSellPartialNote').style.display  = isPartial ? 'block' : 'none';
+  previewEl.style.display = 'block';
+}
+
+// ── FETCH PRECIO LIVE (botón LIVE en modal venta) ────────────
+function pfSellFetchLive() {
+  var id  = document.getElementById('pfSellPosId').value;
+  var pos = null;
+  for (var i = 0; i < pfPositions.length; i++) { if (pfPositions[i].id === id) { pos = pfPositions[i]; break; } }
+  if (!pos) return;
+
+  var statusEl = document.getElementById('pfSellLiveStatus');
+  statusEl.style.display = 'block';
+  statusEl.style.color   = 'var(--accent)';
+  statusEl.textContent   = '⟳ Buscando precio actual...';
+
+  pfFetchSinglePrice(pos.ticker, pos.moneda||'USD', function(price, chgPct, source) {
+    if (price && price > 0) {
+      document.getElementById('pfSellPrecioVenta').value = price.toFixed(4);
+      var sym = (pos.moneda||'USD') === 'ARS' ? '$ ' : 'U$D ';
+      var chgStr = chgPct != null ? ' (' + (chgPct>=0?'+':'') + chgPct.toFixed(2) + '% hoy)' : '';
+      statusEl.textContent = '✓ ' + sym + price.toFixed(2) + chgStr + ' · via ' + source;
+      statusEl.style.color = 'var(--green)';
+      pfSellCalcPreview();
+    } else {
+      statusEl.textContent = '⚠ Sin precio disponible. Ingresalo manualmente.';
+      statusEl.style.color = 'var(--yellow)';
+    }
+  });
+}
+
+// ── CONFIRMAR VENTA ───────────────────────────────────────────
+function pfConfirmSell() {
+  var id       = document.getElementById('pfSellPosId').value;
+  var pos      = null; var posIdx = -1;
+  for (var i = 0; i < pfPositions.length; i++) { if (pfPositions[i].id === id) { pos = pfPositions[i]; posIdx = i; break; } }
+  if (!pos) return;
+
+  var qty      = parseFloat(document.getElementById('pfSellCantidad').value);
+  var pVenta   = parseFloat(document.getElementById('pfSellPrecioVenta').value);
+  var fecha    = document.getElementById('pfSellFecha').value;
+  var nota     = (document.getElementById('pfSellNota').value || '').trim();
+  var qTotal   = parseFloat(pos.cantidad) || 0;
+  var errEl    = document.getElementById('pfSellError');
+
+  errEl.style.display = 'none';
+  if (!qty || qty <= 0)            { errEl.textContent = 'La cantidad a vender debe ser mayor a 0.'; errEl.style.display = 'block'; return; }
+  if (qty > qTotal + 0.0001)       { errEl.textContent = 'No podés vender más de lo que tenés (' + pfFmt(qTotal,2) + ' acc.).'; errEl.style.display = 'block'; return; }
+  if (!pVenta || pVenta <= 0)      { errEl.textContent = 'El precio de venta debe ser mayor a 0.'; errEl.style.display = 'block'; return; }
+
+  var pCompra = parseFloat(pos.precioCompra) || 0;
+  var moneda  = pos.moneda || 'USD';
+  var costoNat   = pCompra * qty;
+  var ingresoNat = pVenta  * qty;
+  var pnlNat     = ingresoNat - costoNat;
+  var pnlPct     = costoNat > 0 ? (pnlNat / costoNat * 100) : 0;
+
+  // Crear registro de trade cerrado
+  var trade = {
+    id:           'trade_' + Date.now(),
+    ticker:       pos.ticker,
+    nombre:       pos.nombre || '',
+    cantidad:     qty,
+    precioCompra: pCompra,
+    precioVenta:  pVenta,
+    moneda:       moneda,
+    fechaCompra:  pos.fecha || '',
+    fechaVenta:   fecha || new Date().toISOString().slice(0,10),
+    nota:         nota,
+    pnlNat:       pnlNat,
+    pnlPct:       pnlPct
+  };
+
+  // Cargar trades del array de cuenta
+  pfClosedTrades = pfGetClosedTrades();
+  pfClosedTrades.unshift(trade); // más reciente primero
+
+  // Actualizar la posición abierta (venta total o parcial)
+  var qRestante = qTotal - qty;
+  if (qRestante < 0.0001) {
+    // Venta total: eliminar la posición
+    pfPositions.splice(posIdx, 1);
+  } else {
+    // Venta parcial: actualizar cantidad
+    pfPositions[posIdx] = Object.assign({}, pos, { cantidad: qRestante });
+  }
+
+  var a = pfActiveAcct();
+  if (a) { a.positions = pfPositions; a.closedTrades = pfClosedTrades; }
+  pfSave();
+  pfCloseSellModalForce();
+  pfRenderAll();
+
+  // Flash de confirmación
+  setTimeout(function(){
+    var section = document.getElementById('pfClosedSection');
+    if (section) { section.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
+  }, 300);
+}
+
+// ── RENDER TRADES CERRADOS ────────────────────────────────────
+function pfRenderClosedTrades() {
+  pfClosedTrades = pfGetClosedTrades();
+  var section  = document.getElementById('pfClosedSection');
+  var tbody    = document.getElementById('pfClosedBody');
+  var countEl  = document.getElementById('pfClosedCount');
+  var pnlBadge = document.getElementById('pfClosedPnlBadge');
+  var realCard = document.getElementById('pfRealizado');
+  var realSub  = document.getElementById('pfRealizadoSub');
+
+  if (!tbody) return;
+
+  // Calcular P&L total realizado (en pfViewCurrency)
+  var totalPnlView = 0;
+  pfClosedTrades.forEach(function(t) {
+    totalPnlView += pfToView(t.pnlNat, t.moneda || 'USD');
+  });
+
+  // Card resumen
+  if (realCard) {
+    realCard.textContent = pfClosedTrades.length ? (totalPnlView >= 0 ? '+' : '') + pfFmtDisplay(totalPnlView) : '—';
+    realCard.style.color = totalPnlView >= 0 ? 'var(--green)' : 'var(--red)';
+  }
+  if (realSub) realSub.textContent = pfClosedTrades.length + ' trade' + (pfClosedTrades.length !== 1 ? 's' : '') + ' cerrado' + (pfClosedTrades.length !== 1 ? 's' : '');
+
+  if (!pfClosedTrades.length) {
+    if (section) section.style.display = 'none';
+    return;
+  }
+
+  if (section) section.style.display = 'block';
+  if (countEl) countEl.textContent = pfClosedTrades.length;
+
+  // Badge P&L total
+  if (pnlBadge) {
+    pnlBadge.textContent = (totalPnlView >= 0 ? '+' : '') + pfFmtDisplay(totalPnlView);
+    pnlBadge.style.color = totalPnlView >= 0 ? 'var(--green)' : 'var(--red)';
+  }
+
+  tbody.innerHTML = '';
+  pfClosedTrades.forEach(function(t) {
+    var pnlView  = pfToView(t.pnlNat, t.moneda || 'USD');
+    var costView = pfToView((t.precioCompra||0) * (t.cantidad||0), t.moneda || 'USD');
+    var venView  = pfToView((t.precioVenta||0)  * (t.cantidad||0), t.moneda || 'USD');
+    var pcView   = pfToView(t.precioCompra||0, t.moneda || 'USD');
+    var pvView   = pfToView(t.precioVenta||0,  t.moneda || 'USD');
+    var pnlColor = pnlView >= 0 ? 'var(--green)' : 'var(--red)';
+    var pnlSign  = pnlView >= 0 ? '+' : '';
+    var pnlPct   = t.pnlPct || 0;
+
+    var result = pnlView > 0
+      ? '<span class="pf-trade-result win">🏆 GANANCIA</span>'
+      : pnlView < 0
+        ? '<span class="pf-trade-result loss">📉 PÉRDIDA</span>'
+        : '<span class="pf-trade-result even">— NEUTRO</span>';
+
+    var fCompra = '—', fVenta = '—';
+    try { if (t.fechaCompra) fCompra = new Date(t.fechaCompra+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'}); } catch(e){}
+    try { if (t.fechaVenta)  fVenta  = new Date(t.fechaVenta +'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'}); } catch(e){}
+
+    var monBadge = (t.moneda||'USD') === 'ARS'
+      ? '<span style="font-family:var(--mono);font-size:9px;background:rgba(255,214,0,0.1);border:1px solid var(--yellow2);color:var(--yellow);padding:1px 4px;border-radius:2px;margin-left:4px">ARS</span>'
+      : '<span style="font-family:var(--mono);font-size:9px;background:rgba(0,212,255,0.1);border:1px solid var(--accent2);color:var(--accent);padding:1px 4px;border-radius:2px;margin-left:4px">USD</span>';
+
+    var notaHtml = t.nota ? '<br><span style="font-size:10px;color:var(--text-dim);font-style:italic">' + t.nota + '</span>' : '';
+    var tr = document.createElement('tr');
+    if (pnlView > 0)       tr.style.background = 'rgba(0,230,118,0.03)';
+    else if (pnlView < 0)  tr.style.background = 'rgba(255,61,90,0.03)';
+
+    tr.innerHTML =
+      '<td><span class="tk-sym">'+(t.ticker||'?')+'</span>'+monBadge+notaHtml+'</td>'+
+      '<td>'+pfFmt(t.cantidad||0, 2)+'</td>'+
+      '<td>'+pfFmtDisplay(pcView)+'</td>'+
+      '<td>'+pfFmtDisplay(pvView)+'</td>'+
+      '<td>'+pfFmtDisplay(costView)+'</td>'+
+      '<td>'+pfFmtDisplay(venView)+'</td>'+
+      '<td style="color:'+pnlColor+';font-weight:700">'+pnlSign+pfFmtDisplay(pnlView)+'</td>'+
+      '<td style="color:'+pnlColor+';font-weight:700">'+pnlSign+pfFmt(pnlPct,2)+'%</td>'+
+      '<td style="font-size:12px">'+fCompra+'</td>'+
+      '<td style="font-size:12px">'+fVenta+'</td>'+
+      '<td>'+result+'</td>'+
+      '<td style="text-align:center"><button class="pf-action-btn del" data-tid="'+t.id+'" onclick="pfDeleteClosedTrade(this.dataset.tid)" title="Eliminar este trade">✕</button></td>';
+
+    tbody.appendChild(tr);
+  });
+}
+
+function pfDeleteClosedTrade(tid) {
+  if (!confirm('¿Eliminar este trade cerrado?')) return;
+  pfClosedTrades = pfGetClosedTrades().filter(function(t){ return t.id !== tid; });
+  var a = pfActiveAcct(); if (a) a.closedTrades = pfClosedTrades;
+  pfSave(); pfRenderAll();
+}
+
+function pfClearClosedTrades() {
+  if (!pfClosedTrades.length) return;
+  if (!confirm('⚠ ¿Eliminar TODOS los trades cerrados?\n\nEsta acción no se puede deshacer.')) return;
+  pfClosedTrades = [];
+  var a = pfActiveAcct(); if (a) a.closedTrades = [];
   pfSave(); pfRenderAll();
 }
 
