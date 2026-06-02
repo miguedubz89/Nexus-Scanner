@@ -1463,6 +1463,17 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
         </div>
       </div>
 
+      <!-- ── RENDIMIENTO HISTÓRICO ANUAL ── -->
+      <div style="margin-top:28px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:10px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-family:var(--head);font-weight:900;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--text-bright)">📊 RENDIMIENTO HISTÓRICO ANUAL</span>
+            <span style="font-family:var(--mono);font-size:11px;color:var(--text-dim);background:var(--bg3);border:1px solid var(--border);padding:2px 8px;border-radius:2px">basado en trades cerrados</span>
+          </div>
+        </div>
+        <div id="pfAnualPerfContainer"></div>
+      </div>
+
     </div><!-- /#tab-portfolio -->
 
     <!-- MODAL: Agregar / Editar posición -->
@@ -3872,6 +3883,7 @@ function pfRenderAll() {
   pfRenderDistribution();
   pfRenderTable();
   pfRenderClosedTrades();
+  pfRenderAnualPerf();
 }
 
 // ── SUMMARY CARDS ─────────────────────────────────────────
@@ -4228,7 +4240,30 @@ function pfSavePosition() {
   if (editId) {
     for(var i=0;i<pfPositions.length;i++){if(pfPositions[i].id===editId){pfPositions[i]=newPos;break;}}
   } else {
-    pfPositions.push(newPos);
+    // ── MERGE: si ya existe el mismo ticker+moneda, combinar en lugar de duplicar
+    var existing = null;
+    for (var i = 0; i < pfPositions.length; i++) {
+      if (pfPositions[i].ticker === ticker && pfPositions[i].moneda === moneda) {
+        existing = pfPositions[i];
+        break;
+      }
+    }
+    if (existing) {
+      // Precio promedio ponderado: (qty_vieja*pc_vieja + qty_nueva*pc_nueva) / (qty_vieja+qty_nueva)
+      var qVieja  = parseFloat(existing.cantidad)     || 0;
+      var pcVieja = parseFloat(existing.precioCompra) || 0;
+      var qNueva  = cantidad;
+      var pcNueva = precioCompra;
+      var qTotal  = qVieja + qNueva;
+      var pcProm  = qTotal > 0 ? ((qVieja * pcVieja) + (qNueva * pcNueva)) / qTotal : pcNueva;
+      existing.cantidad     = qTotal;
+      existing.precioCompra = parseFloat(pcProm.toFixed(6));
+      // Actualizar fecha a la más reciente y nombre si vino vacío
+      if (fecha && fecha > (existing.fecha || '')) existing.fecha = fecha;
+      if (nombre && !existing.nombre) existing.nombre = nombre;
+    } else {
+      pfPositions.push(newPos);
+    }
   }
   pfSave();
   pfCloseModalForce();
@@ -4529,6 +4564,119 @@ function pfDeleteClosedTrade(tid) {
   pfClosedTrades = pfGetClosedTrades().filter(function(t){ return t.id !== tid; });
   var a = pfActiveAcct(); if (a) a.closedTrades = pfClosedTrades;
   pfSave(); pfRenderAll();
+}
+
+// ── RENDIMIENTO HISTÓRICO ANUAL ───────────────────────────────
+function pfRenderAnualPerf() {
+  var container = document.getElementById('pfAnualPerfContainer');
+  if (!container) return;
+
+  var trades = pfGetClosedTrades();
+  if (!trades || !trades.length) {
+    container.innerHTML = '<div style="color:var(--text-dim);font-family:var(--mono);font-size:12px;padding:14px;text-align:center">Aún no hay trades cerrados. Cuando vendas una posición aparecerá el historial anual.</div>';
+    return;
+  }
+
+  // Agrupar por año
+  var byYear = {};
+  trades.forEach(function(t) {
+    var year = '—';
+    if (t.fechaVenta) {
+      try { year = t.fechaVenta.slice(0, 4); } catch(e) {}
+    }
+    if (!byYear[year]) byYear[year] = { trades: [], pnlNatUSD: 0, pnlNatARS: 0, wins: 0, losses: 0 };
+    byYear[year].trades.push(t);
+    // Acumular en moneda nativa para luego convertir
+    if ((t.moneda || 'USD') === 'ARS') {
+      byYear[year].pnlNatARS += (t.pnlNat || 0);
+    } else {
+      byYear[year].pnlNatUSD += (t.pnlNat || 0);
+    }
+    if ((t.pnlNat || 0) > 0) byYear[year].wins++;
+    else if ((t.pnlNat || 0) < 0) byYear[year].losses++;
+  });
+
+  var years = Object.keys(byYear).sort(function(a, b) { return b.localeCompare(a); });
+
+  var html = '<div style="display:flex;flex-direction:column;gap:10px">';
+
+  years.forEach(function(year) {
+    var d = byYear[year];
+    var total = d.trades.length;
+    var neutros = total - d.wins - d.losses;
+    var winRate = total > 0 ? (d.wins / total * 100) : 0;
+
+    // Convertir a pfViewCurrency
+    var pnlView = pfToView(d.pnlNatUSD, 'USD') + pfToView(d.pnlNatARS, 'ARS');
+    // P&L % promedio ponderado
+    var totalCostNat = 0;
+    d.trades.forEach(function(t){ totalCostNat += pfToView((t.precioCompra||0)*(t.cantidad||0), t.moneda||'USD'); });
+    var pnlPctProm = totalCostNat > 0 ? (pnlView / totalCostNat * 100) : 0;
+
+    var pnlColor = pnlView >= 0 ? 'var(--green)' : 'var(--red)';
+    var pnlSign  = pnlView >= 0 ? '+' : '';
+    var isCurrentYear = year === new Date().getFullYear().toString();
+
+    html += '<div style="background:var(--bg2);border:1px solid '+(pnlView>=0?'rgba(0,230,118,0.2)':'rgba(255,61,90,0.2)')+';border-radius:2px;overflow:hidden">';
+    // Header del año
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:10px 14px;background:var(--bg3);border-bottom:1px solid var(--border)">';
+    html +=   '<div style="display:flex;align-items:center;gap:10px">';
+    html +=     '<span style="font-family:var(--head);font-weight:900;font-size:16px;letter-spacing:3px;color:var(--text-bright)">' + year + '</span>';
+    if (isCurrentYear) html += '<span style="font-family:var(--mono);font-size:10px;background:rgba(0,212,255,0.1);border:1px solid var(--accent2);color:var(--accent);padding:2px 7px;border-radius:2px;letter-spacing:1px">EN CURSO</span>';
+    html +=     '<span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">' + total + ' trade' + (total!==1?'s':'') + '</span>';
+    html +=   '</div>';
+    // P&L total del año
+    html +=   '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">';
+    html +=     '<div style="text-align:right">';
+    html +=       '<div style="font-family:var(--mono);font-size:18px;font-weight:700;color:'+pnlColor+'">' + pnlSign + pfFmtDisplay(pnlView) + '</div>';
+    html +=       '<div style="font-family:var(--mono);font-size:11px;color:'+pnlColor+'">' + pnlSign + pfFmt(pnlPctProm,2) + '% sobre costo</div>';
+    html +=     '</div>';
+    html +=   '</div>';
+    html += '</div>';
+    // Stats del año
+    html += '<div style="display:flex;gap:0;border-bottom:1px solid var(--border)">';
+    // Win rate bar
+    var wpct = total > 0 ? (d.wins/total*100) : 0;
+    var lpct = total > 0 ? (d.losses/total*100) : 0;
+    html +=   '<div style="flex:1;padding:10px 14px;border-right:1px solid var(--border)">';
+    html +=     '<div style="font-family:var(--head);font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px">Win Rate</div>';
+    html +=     '<div style="font-family:var(--mono);font-size:20px;font-weight:700;color:'+(wpct>=50?'var(--green)':'var(--red)')+'">'+pfFmt(winRate,0)+'%</div>';
+    html +=     '<div style="display:flex;height:4px;border-radius:2px;overflow:hidden;margin-top:6px;background:var(--bg3)">';
+    html +=       '<div style="width:'+wpct.toFixed(1)+'%;background:var(--green)"></div>';
+    html +=       '<div style="width:'+lpct.toFixed(1)+'%;background:var(--red)"></div>';
+    html +=     '</div>';
+    html +=     '<div style="display:flex;gap:10px;margin-top:4px;font-family:var(--mono);font-size:11px">';
+    html +=       '<span style="color:var(--green)">▲ '+d.wins+' ganancias</span>';
+    html +=       '<span style="color:var(--red)">▼ '+d.losses+' pérdidas</span>';
+    if (neutros > 0) html += '<span style="color:var(--text-dim)">— '+neutros+' neutros</span>';
+    html +=     '</div>';
+    html +=   '</div>';
+    // Mejor y peor trade del año
+    var sorted = d.trades.slice().sort(function(a,b){ return (b.pnlNat||0)-(a.pnlNat||0); });
+    var mejor = sorted[0];
+    var peor  = sorted[sorted.length-1];
+    html +=   '<div style="flex:1;padding:10px 14px;border-right:1px solid var(--border)">';
+    html +=     '<div style="font-family:var(--head);font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px">Mejor Trade</div>';
+    if (mejor) {
+      var mejorView = pfToView(mejor.pnlNat||0, mejor.moneda||'USD');
+      html += '<div style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--green)">' + mejor.ticker + ' <span style="font-size:12px">+' + pfFmt(mejor.pnlPct||0,2)+'%</span></div>';
+      html += '<div style="font-family:var(--mono);font-size:11px;color:var(--green)">+' + pfFmtDisplay(mejorView) + '</div>';
+    }
+    html +=   '</div>';
+    html +=   '<div style="flex:1;padding:10px 14px">';
+    html +=     '<div style="font-family:var(--head);font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px">Peor Trade</div>';
+    if (peor && peor !== mejor) {
+      var peorView = pfToView(peor.pnlNat||0, peor.moneda||'USD');
+      html += '<div style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--red)">' + peor.ticker + ' <span style="font-size:12px">' + pfFmt(peor.pnlPct||0,2)+'%</span></div>';
+      html += '<div style="font-family:var(--mono);font-size:11px;color:var(--red)">' + pfFmtDisplay(peorView) + '</div>';
+    }
+    html +=   '</div>';
+    html += '</div>';
+    html += '</div>'; // end año card
+  });
+
+  html += '</div>';
+  container.innerHTML = html;
 }
 
 function pfClearClosedTrades() {
