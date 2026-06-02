@@ -270,9 +270,31 @@ self.addEventListener('message', e => {
       if (cloudPf) {
         window._cloudPortfolio = cloudPf;
       }
+      // Marcar que Firebase ya terminó de cargar (evita race condition en móvil)
+      window._firebaseReady = true;
 
       // Iniciar la app
       if (window.initApp) window.initApp();
+
+      // Si pfInit ya corrió antes que Firebase (pasa en móvil/conexión lenta),
+      // forzar una recarga del portafolio con los datos de la nube
+      if (window._pfInitAlreadyRan && cloudPf) {
+        window._cloudPortfolio = cloudPf;
+        if (typeof pfLoad === 'function') {
+          pfLoad();
+          if (typeof pfRenderAccountTabs === 'function') pfRenderAccountTabs();
+          if (typeof pfRenderAll === 'function') pfRenderAll();
+          // Fetch precios live para las posiciones cargadas
+          var tAll=[], mMap={};
+          if (typeof pfPositions !== 'undefined') {
+            pfPositions.forEach(function(p){var t=(p.ticker||'').toUpperCase();if(t){tAll.push(t);mMap[t]=(p.moneda||'USD');}});
+            tAll=tAll.filter(function(t,i,a){return a.indexOf(t)===i;});
+            if(tAll.length && typeof pfFetchLivePrices === 'function') {
+              pfFetchLivePrices(tAll, function(){if(typeof pfRenderAll==='function')pfRenderAll();}, mMap);
+            }
+          }
+        }
+      }
     } else {
       // No logueado → mostrar login
       document.getElementById('loginOverlay').style.display = 'flex';
@@ -5069,6 +5091,11 @@ function pfNormalizeDate(s) {
 // ── INICIALIZAR ───────────────────────────────────────────
 (function pfInit(){
   function _init(){
+    // Si Firebase todavía no terminó de cargar (mobile/conexión lenta),
+    // marcar que este init ya corrió para que Firebase lo re-ejecute después
+    if (!window._firebaseReady) {
+      window._pfInitAlreadyRan = true;
+    }
     pfLoad();
     pfRenderAccountTabs();
     // Aplicar estado del toggle
