@@ -152,13 +152,25 @@ self.addEventListener('message', e => {
   };
 
   // ── Cargar tickers de Firestore ────────────────────
+  // Incluye retry automático (hasta 2 intentos) para errores de red transitoria
   window.loadTickersCloud = async function(uid) {
-    try {
-      const snap = await getDoc(doc(db, 'users', uid));
-      if (snap.exists() && snap.data().tickers && snap.data().tickers.length) {
-        return snap.data().tickers;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const snap = await getDoc(doc(db, 'users', uid));
+        if (snap.exists() && snap.data().tickers && snap.data().tickers.length) {
+          return snap.data().tickers;
+        }
+        // Documento existe pero sin tickers (usuario nuevo) → retornar null sin retry
+        return null;
+      } catch(e) {
+        console.warn('Error cargando tickers (intento ' + (attempt+1) + '):', e);
+        if (attempt === 0) {
+          // Esperar 1.5s antes del segundo intento
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        }
       }
-    } catch(e) { console.warn('Error cargando tickers:', e); }
+    }
+    // Ambos intentos fallaron → retornar null sin tocar la nube
     return null;
   };
 
@@ -241,9 +253,15 @@ self.addEventListener('message', e => {
           try { localStorage.removeItem('dubz_ticker_cache_v2'); } catch(e) {}
         }
         window.tickerList = cloudTickers;
-      } else if (!window.tickerList || window.tickerList.length === 0) {
-        window.tickerList = DEFAULT_TICKERS.slice();
-        window.saveTickersCloud(window.tickerList);
+      } else {
+        // ⚠️ FIX: si la carga de Firestore falló o retornó vacío,
+        // usar los defaults SOLO localmente — NUNCA sobreescribir la nube.
+        // Esto evita que tickers personalizados se borren por errores de red
+        // o demoras en la carga del documento de Firestore.
+        if (!window.tickerList || window.tickerList.length === 0) {
+          window.tickerList = DEFAULT_TICKERS.slice();
+        }
+        // NO llamar saveTickersCloud acá para no sobreescribir datos del usuario
       }
       if (window.renderTickerList) window.renderTickerList();
 
