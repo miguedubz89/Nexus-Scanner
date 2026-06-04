@@ -1072,7 +1072,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
         <div class="ticker-count" id="tickerCount">0 tickers</div>
       </div>
       <textarea class="ti-area" id="tickerBox" style="display:none"></textarea>
-      <button class="btn btn-a btn-full" onclick="loadAndRefresh()">▶ CARGAR TICKERS</button>
+      <button class="btn btn-a btn-full" onclick="manualLoadAndRefresh()">▶ CARGAR TICKERS</button>
       <div id="saveStatus" style="font-family:var(--mono);font-size:12px;color:var(--text-dim);text-align:center;height:14px"></div>
       <div class="progress-wrap" id="progressWrap">
         <div class="progress-fill" id="progressFill"></div>
@@ -1944,6 +1944,191 @@ var SECTORS = {
   'OKLO':'Energía',                    // Oklo — energía nuclear avanzada
   'PBR':'Energía',                     // Petrobras — petróleo y gas Brasil
   'PBR.A':'Energía',                   // Petrobras preferred
+
+  // ── Tickers frecuentes sin sector asignado (antes caían en "Otros") ──
+  // ETFs de divisas y mercados
+  'FXY':'ETF',                          // Invesco CurrencyShares Japanese Yen
+  'EWY':'ETF',                          // iShares MSCI South Korea
+  'SH':'ETF',                           // ProShares Short S&P500 (inverso)
+  'FXE':'ETF',                          // Invesco CurrencyShares Euro
+  'FXB':'ETF',                          // Invesco CurrencyShares British Pound
+  'FXF':'ETF',                          // Invesco CurrencyShares Swiss Franc
+  'FXC':'ETF',                          // Invesco CurrencyShares Canadian Dollar
+  'UUP':'ETF',                          // Invesco DB US Dollar Index Bullish
+  'UDN':'ETF',                          // Invesco DB US Dollar Index Bearish
+  'EWZ':'ETF',                          // iShares MSCI Brazil
+  'EWJ':'ETF',                          // iShares MSCI Japan
+  'EWG':'ETF',                          // iShares MSCI Germany
+  'EWI':'ETF',                          // iShares MSCI Italy
+  'EWT':'ETF',                          // iShares MSCI Taiwan
+  'EWH':'ETF',                          // iShares MSCI Hong Kong
+  'EWA':'ETF',                          // iShares MSCI Australia
+  'EWC':'ETF',                          // iShares MSCI Canada
+  'EEM':'ETF',                          // iShares MSCI Emerging Markets
+  'VWO':'ETF',                          // Vanguard Emerging Markets
+  'MCHI':'ETF',                         // iShares MSCI China
+  'KWEB':'ETF',                         // KraneShares CSI China Internet
+  'ARGT':'ETF',                         // Global X MSCI Argentina
+  'IAU':'ETF',                          // iShares Gold Trust
+  'SLV':'ETF',                          // iShares Silver Trust
+  'PDBC':'ETF',                         // Invesco Optimum Yield Diversified Commodity
+  'DBO':'ETF',                          // Invesco DB Oil Fund
+  'USO':'ETF',                          // United States Oil Fund
+  'UNG':'ETF',                          // United States Natural Gas Fund
+  'BNO':'ETF',                          // United States Brent Oil Fund
+  'BOIL':'ETF',                         // ProShares Ultra Bloomberg Natural Gas
+  'KOLD':'ETF',                         // ProShares UltraShort Bloomberg Natural Gas
+  'SCO':'ETF',                          // ProShares UltraShort Bloomberg Crude Oil
+  'UCO':'ETF',                          // ProShares Ultra Bloomberg Crude Oil
+  'UVXY':'ETF',                         // ProShares Ultra VIX Short-Term Futures
+  'SVXY':'ETF',                         // ProShares Short VIX Short-Term Futures
+  'VIXY':'ETF',                         // ProShares VIX Short-Term Futures
+  'VXX':'ETF',                          // iPath Series B S&P 500 VIX Short-Term Futures
+  'SQQQ':'ETF',                         // ProShares UltraPro Short QQQ
+  'TQQQ':'ETF',                         // ProShares UltraPro QQQ
+  'SPXU':'ETF',                         // ProShares UltraPro Short S&P500
+  'UPRO':'ETF',                         // ProShares UltraPro S&P500
+  'TNA':'ETF',                          // Direxion Daily Small Cap Bull 3X
+  'TZA':'ETF',                          // Direxion Daily Small Cap Bear 3X
+  'LABU':'ETF',                         // Direxion Daily S&P Biotech Bull 3X
+  'LABD':'ETF',                         // Direxion Daily S&P Biotech Bear 3X
+  'FNGU':'ETF',                         // MicroSectors FANG+ Index 3X
+  'FNGD':'ETF',                         // MicroSectors FANG+ Index -3X
+  'ARKK':'ETF',                         // ARK Innovation ETF
+  'ARKG':'ETF',                         // ARK Genomic Revolution ETF
+  'ARKW':'ETF',                         // ARK Next Generation Internet ETF
+  'ARKF':'ETF',                         // ARK Fintech Innovation ETF
+  'ARKQ':'ETF',                         // ARK Autonomous Technology & Robotics ETF
+  'IWM':'ETF',                          // iShares Russell 2000
+  'DIA':'ETF',                          // SPDR Dow Jones Industrial Average
+  'MDY':'ETF',                          // SPDR S&P MidCap 400
+  'IJR':'ETF',                          // iShares Core S&P Small-Cap
+  'IJH':'ETF',                          // iShares Core S&P Mid-Cap
+  'VOO':'ETF',                          // Vanguard S&P 500
+  'VTI':'ETF',                          // Vanguard Total Stock Market
+  'VEA':'ETF',                          // Vanguard FTSE Developed Markets
+  'VT':'ETF',                           // Vanguard Total World Stock
+  'IEFA':'ETF',                         // iShares Core MSCI EAFE
+  'ACWI':'ETF',                         // iShares MSCI ACWI
+  'IVV':'ETF',                          // iShares Core S&P 500
+  'HYG':'ETF',                          // iShares iBoxx $ High Yield Corporate Bond
+  'LQD':'ETF',                          // iShares iBoxx $ Investment Grade Corporate Bond
+  'BND':'ETF',                          // Vanguard Total Bond Market
+  'AGG':'ETF',                          // iShares Core U.S. Aggregate Bond
+  'MUB':'ETF',                          // iShares National Muni Bond
+  'BNDX':'ETF',                         // Vanguard Total International Bond
+  'EMB':'ETF',                          // iShares J.P. Morgan USD Emerging Markets Bond
+  'TIPS':'ETF',                         // iShares TIPS Bond
+  'SHY':'ETF',                          // iShares 1-3 Year Treasury Bond
+  'IEF':'ETF',                          // iShares 7-10 Year Treasury Bond
+  'TMF':'ETF',                          // Direxion Daily 20+ Year Treasury Bull 3X
+  'TMV':'ETF',                          // Direxion Daily 20+ Year Treasury Bear 3X
+  'TBT':'ETF',                          // ProShares UltraShort 20+ Year Treasury
+  'PSQ':'ETF',                          // ProShares Short QQQ
+  'DOG':'ETF',                          // ProShares Short Dow30
+  'XLB':'ETF',                          // Materials Select Sector SPDR
+  'XLC':'ETF',                          // Communication Services Select Sector SPDR
+  'XLI':'ETF',                          // Industrial Select Sector SPDR
+  'XLK':'ETF',                          // Technology Select Sector SPDR
+  'XLP':'ETF',                          // Consumer Staples Select Sector SPDR
+  'XLU':'ETF',                          // Utilities Select Sector SPDR
+  'XLV':'ETF',                          // Health Care Select Sector SPDR
+  'XLY':'ETF',                          // Consumer Discretionary Select Sector SPDR
+  'XLRE':'ETF',                         // Real Estate Select Sector SPDR
+  'XLF':'ETF',                          // Financial Select Sector SPDR
+  'ICLN':'ETF',                         // iShares Global Clean Energy
+  'TAN':'ETF',                          // Invesco Solar ETF
+  'FAN':'ETF',                          // First Trust Global Wind Energy
+  'HACK':'ETF',                         // ETFMG Prime Cyber Security
+  'BUG':'ETF',                          // Global X Cybersecurity ETF
+  'BOTZ':'ETF',                         // Global X Robotics & Artificial Intelligence
+  'AIQ':'ETF',                          // Global X Artificial Intelligence & Technology
+  'ROBO':'ETF',                         // ROBO Global Robotics and Automation Index
+  'CIBR':'ETF',                         // First Trust NASDAQ Cybersecurity
+  'SKYY':'ETF',                         // First Trust Cloud Computing
+  'CLOU':'ETF',                         // Global X Cloud Computing
+  'WCLD':'ETF',                         // WisdomTree Cloud Computing
+  'FINX':'ETF',                         // Global X FinTech
+  'GBTC':'ETF',                         // Grayscale Bitcoin Trust
+  'IBIT':'ETF',                         // iShares Bitcoin Trust
+  'FBTC':'ETF',                         // Fidelity Wise Origin Bitcoin Fund
+  'BITB':'ETF',                         // Bitwise Bitcoin ETF
+  'BTCO':'ETF',                         // Invesco Galaxy Bitcoin ETF
+  'ARKB':'ETF',                         // ARK 21Shares Bitcoin ETF
+  // Salud / Farmacéuticas adicionales
+  'NVO':'Salud',                         // Novo Nordisk — GLP-1 / Ozempic
+  'LLY':'Salud',                         // Eli Lilly
+  'AZN':'Salud',                         // AstraZeneca
+  'NVS':'Salud',                         // Novartis
+  'RHHBY':'Salud',                       // Roche
+  'SNY':'Salud',                         // Sanofi
+  'TAK':'Salud',                         // Takeda Pharmaceutical
+  'HCM':'Salud',                         // HUTCHMED (China) — oncología
+  // Finanzas / Bancos adicionales
+  'PAGS':'Finanzas',                     // PagSeguro Digital — fintech Brasil
+  'SQ':'Finanzas',                       // Block (ex Square)
+  'ITUB':'Finanzas',                     // Itaú Unibanco — mayor banco Brasil
+  'BBD':'Finanzas',                      // Banco Bradesco — Brasil
+  'BDD':'Finanzas',                      // Banco Bradesco ADR (clase A)
+  'BSAC':'Finanzas',                     // Banco Santander Chile
+  'BAP':'Finanzas',                      // Credicorp — Perú
+  'IFS':'Finanzas',                      // Intercorp Financial Services — Perú
+  'BBAR':'Finanzas',                     // BBVA Argentina
+  'BFR':'Finanzas',                      // BBVA Francés — Argentina (ADR)
+  'GGAL':'Finanzas',                     // Grupo Financiero Galicia — Argentina
+  // Cripto adicional
+  'BITO':'Cripto',                       // ProShares Bitcoin Strategy ETF
+  // Energía adicional
+  'SLB':'Energía',                       // Schlumberger — servicios petroleros
+  'HAL':'Energía',                       // Halliburton
+  'BKR':'Energía',                       // Baker Hughes
+  'MPC':'Energía',                       // Marathon Petroleum
+  'PSX':'Energía',                       // Phillips 66
+  'VLO':'Energía',                       // Valero Energy
+  'OKE':'Energía',                       // ONEOK
+  'KMI':'Energía',                       // Kinder Morgan
+  'WMB':'Energía',                       // Williams Companies
+  'ET':'Energía',                        // Energy Transfer
+  'EPD':'Energía',                       // Enterprise Products Partners
+  'MLP':'Energía',                       // Macroplanning (o usar como etiqueta MLP)
+  'AR':'Energía',                        // Antero Resources — gas natural
+  'EQT':'Energía',                       // EQT Corporation — gas natural
+  'RIG':'Energía',                       // Transocean — perforación offshore
+  'NOG':'Energía',                       // Northern Oil and Gas
+  'CIVI':'Energía',                      // Civitas Resources
+  'SM':'Energía',                        // SM Energy
+  'CHRD':'Energía',                      // Chord Energy
+  // Consumo Discrecional adicional
+  'NKE':'Consumo Discrecional',          // Nike
+  'SBUX':'Consumo Discrecional',         // Starbucks
+  'MCD':'Consumo Discrecional',          // McDonald's
+  'YUM':'Consumo Discrecional',          // Yum! Brands
+  'CMG':'Consumo Discrecional',          // Chipotle
+  'DPZ':'Consumo Discrecional',          // Domino's Pizza
+  'DKNG':'Consumo Discrecional',         // DraftKings
+  'MGM':'Consumo Discrecional',          // MGM Resorts
+  'WYNN':'Consumo Discrecional',         // Wynn Resorts
+  'LVS':'Consumo Discrecional',          // Las Vegas Sands
+  'RCL':'Consumo Discrecional',          // Royal Caribbean
+  'CCL':'Consumo Discrecional',          // Carnival Corporation
+  'NCLH':'Consumo Discrecional',         // Norwegian Cruise Line
+  'MAR':'Consumo Discrecional',          // Marriott International
+  'HLT':'Consumo Discrecional',          // Hilton Worldwide
+  'H':'Consumo Discrecional',            // Hyatt Hotels
+  'IHG':'Consumo Discrecional',          // InterContinental Hotels
+  'HD':'Consumo Discrecional',           // Home Depot
+  'LOW':'Consumo Discrecional',          // Lowe's
+  'TGT':'Consumo Discrecional',          // Target
+  'COST':'Consumo Discrecional',         // Costco
+  'KR':'Consumo Básico',                 // Kroger
+  'SFM':'Consumo Básico',                // Sprouts Farmers Market
+  'ULTA':'Consumo Discrecional',         // Ulta Beauty
+  'LULU':'Consumo Discrecional',         // Lululemon
+  'PVH':'Consumo Discrecional',          // PVH Corp (Calvin Klein, Tommy Hilfiger)
+  'CPRI':'Consumo Discrecional',         // Capri Holdings (Versace, MK, Jimmy Choo)
+  'TPR':'Consumo Discrecional',          // Tapestry (Coach, Kate Spade)
+  'VFC':'Consumo Discrecional',          // VF Corporation (Timberland, Vans, Dickies)
+  'RL':'Consumo Discrecional',           // Ralph Lauren
 };
 var SEC_COLOR={
   ETF:'#00d4ff',
@@ -2122,12 +2307,35 @@ function setStatus(st, txt) {
   document.getElementById('stxt').style.color = st==='live'?'var(--green)':st==='loading'?'var(--yellow)':st==='err'?'var(--red)':'var(--text-dim)';
 }
 
-// ── CARGAR TICKERS ────────────────────────────────
+// ── CARGAR TICKERS (llamado desde el botón manual) ──────────────
+// Esta versión SÍ guarda en la nube, porque el usuario explícitamente
+// editó la lista y apretó el botón — no es un arranque automático.
+function manualLoadAndRefresh() {
+  // Sincronizar textarea → tickerList antes de guardar
+  var box = document.getElementById('tickerBox');
+  if (box) {
+    var syms = box.value.split(/[\n,\s]+/).map(function(s){ return s.trim().toUpperCase().replace(/[^A-Z0-9.]/g,''); }).filter(Boolean);
+    if (syms.length) {
+      // Deduplicar
+      window.tickerList = syms.filter(function(s,i,a){ return a.indexOf(s)===i; });
+      window.renderTickerList();
+    }
+  }
+  saveTickersFromList(); // ← guarda en nube SOLO desde click manual
+  loadAndRefresh();
+}
+
+
 function loadAndRefresh() {
   var nuevos = window.tickerList.slice();
   if (!nuevos.length) return;
   tickers = nuevos;
-  saveTickersFromList();
+  // ⚠️ NO llamar saveTickersFromList() acá: esta función se ejecuta
+  // en el arranque de la app y en ese momento window.tickerList puede
+  // contener los defaults si Firestore todavía no respondió, lo que
+  // sobreescribiría la lista personalizada del usuario en la nube.
+  // saveTickersFromList() solo debe llamarse cuando el usuario edita
+  // manualmente la lista (addTickerFromInput, removeTicker, btnCargar).
   cargarCompleto();
 }
 
