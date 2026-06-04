@@ -1945,6 +1945,14 @@ var SECTORS = {
   'PBR':'Energía',                     // Petrobras — petróleo y gas Brasil
   'PBR.A':'Energía',                   // Petrobras preferred
 
+  // ── ADRs argentinos en NYSE (Energía / Finanzas) ──────────────────
+  'PAM':'Energía',                      // Pampa Energía ADR — NYSE (eléctrica y gas AR)
+  'PAMP':'Energía',                     // alias local → NYSE PAM
+
+  // ── Electrónica / Entretenimiento ─────────────────────────────────
+  'SONY':'Comunicación',                // Sony Group — electrónica, gaming, entretenimiento
+  'SNE':'Comunicación',                 // Sony (ticker alternativo)
+
   // ── Tickers frecuentes sin sector asignado (antes caían en "Otros") ──
   // ETFs de divisas y mercados
   'FXY':'ETF',                          // Invesco CurrencyShares Japanese Yen
@@ -2798,6 +2806,82 @@ function renderSectors(){
       '</tr></thead><tbody>'+rows+'</tbody></table></div></div>';
   }).join('');
   document.getElementById('secContainer').innerHTML=html||'<div style="color:var(--text-dim);padding:30px;font-family:var(--mono);text-align:center">Cargá tickers y hacé click en ▶ CARGAR TICKERS</div>';
+
+  // ── Agregar sección MERVAL al final del tab Sectores ──────────────
+  var arData = filtered.filter(function(d){ return isArgentineTicker(d.symbol); });
+  if (arData.length) {
+    var arCol = 'var(--green)';
+    var arUp  = arData.filter(function(d){ return d.chgPct > 0; }).length;
+    var arDn  = arData.filter(function(d){ return d.chgPct < 0; }).length;
+    var arRsiVals = arData.map(function(d){ return d.rsi; }).filter(function(v){ return v != null; });
+    var arRsiAvg  = arRsiVals.length ? arRsiVals.reduce(function(a,b){ return a+b; }, 0) / arRsiVals.length : null;
+    var arChgVals = arData.map(function(d){ return d.chgPct; }).filter(function(v){ return v != null; });
+    var arChgAvg  = arChgVals.length ? arChgVals.reduce(function(a,b){ return a+b; }, 0) / arChgVals.length : null;
+    var arHeat    = arData.length ? Math.round(arUp / arData.length * 100) : 0;
+
+    // Agrupar argentinos por sub-sector dentro del Merval
+    var arGrouped = {};
+    arData.forEach(function(d) {
+      var subsec = SECTORS[d.symbol] || 'Merval';
+      if (!arGrouped[subsec]) arGrouped[subsec] = [];
+      arGrouped[subsec].push(d);
+    });
+
+    var arRows = arData.slice().sort(function(a,b){ return (b.chgPct||0)-(a.chgPct||0); }).map(function(d) {
+      var sym = d.symbol.endsWith('.BA') ? d.symbol.slice(0,-3) : d.symbol;
+      var subsec = SECTORS[d.symbol] || '';
+      return '<tr class="'+(d._flash==='up'?'flu':d._flash==='dn'?'fld':'')+'">'+
+        '<td><div class="tk-cell"><div class="sec-bar" style="background:'+arCol+'"></div>'+
+          '<span class="tk-sym">'+sym+'</span>'+
+          '<span style="font-size:9px;color:var(--yellow);border:1px solid var(--yellow2);padding:0 3px;border-radius:2px;margin-left:4px;line-height:1.4">ARS</span>'+
+        '</div></td>'+
+        '<td style="color:'+(d.chgPct>=0?'var(--green)':'var(--red)')+'">$\u00a0'+fp(d.price)+'</td>'+
+        '<td>'+chipChg(d.chgPct)+'</td>'+
+        '<td>'+rsiCell(d.rsi)+'</td>'+
+        '<td>'+adxCell(d.adx)+'</td>'+
+        '<td>'+fp(d.ema50)+'</td><td>'+fp(d.ema200)+'</td>'+
+        '<td>'+distCell(d.distEma200)+'</td>'+
+        '<td>'+(d.pe?f1(d.pe)+'x':'--')+'</td>'+
+        '<td>'+fcap(d.marketCap)+'</td>'+
+        '<td>'+fv(d.volume)+'</td></tr>';
+    }).join('');
+
+    var arBlock =
+      '<div style="margin-top:28px;border-top:1px solid rgba(0,230,118,0.2);padding-top:18px">'+
+      '<div class="sec-hdr">'+
+        '<div class="sec-title">'+
+          '<div class="sec-bar" style="background:'+arCol+';height:14px;width:3px;border-radius:2px"></div>'+
+          '<span style="color:'+arCol+'">🇦🇷</span>MERVAL — ACCIONES ARGENTINAS'+
+        '</div>'+
+        '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
+          (arChgAvg!=null?'<span style="font-family:var(--mono);font-size:12px;color:'+(arChgAvg>=0?'var(--green)':'var(--red)')+'">Día: '+(arChgAvg>=0?'+':'')+f2(arChgAvg)+'%</span>':'')+
+          (arRsiAvg!=null?'<span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">RSI: <span style="color:var(--yellow)">'+f1(arRsiAvg)+'</span></span>':'')+
+          '<div style="display:flex;align-items:center;gap:4px;font-family:var(--mono);font-size:12px">'+
+            '<span style="color:var(--green)">▲'+arUp+'</span>'+
+            '<div style="width:50px;height:5px;background:rgba(255,61,90,0.4);border-radius:2px;overflow:hidden">'+
+              '<div style="width:'+arHeat+'%;height:100%;background:var(--green);border-radius:2px"></div>'+
+            '</div>'+
+            '<span style="color:var(--red)">▼'+arDn+'</span>'+
+          '</div>'+
+          '<div class="sec-cnt">'+arData.length+' ticker'+(arData.length>1?'s':'')+'</div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="tbl-wrap"><table class="dt"><thead><tr>'+
+        '<th style="width:90px">Ticker</th>'+
+        '<th style="width:68px">Precio</th>'+
+        '<th style="width:56px">% Día</th>'+
+        '<th style="width:56px">RSI</th>'+
+        '<th style="width:56px">ADX</th>'+
+        '<th style="width:65px">EMA50</th>'+
+        '<th style="width:65px">EMA200</th>'+
+        '<th style="width:68px">EMA200%</th>'+
+        '<th style="width:44px">P/E</th>'+
+        '<th style="width:62px">Cap</th>'+
+        '<th style="width:62px">Vol</th>'+
+      '</tr></thead><tbody>'+arRows+'</tbody></table></div></div>';
+
+    document.getElementById('secContainer').innerHTML += arBlock;
+  }
 }
 
 function renderTech(){
