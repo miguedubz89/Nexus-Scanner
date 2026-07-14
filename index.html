@@ -846,38 +846,6 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 .pf-acct-tab.active{background:rgba(255,214,0,0.1);border-color:var(--yellow);color:var(--yellow)}
 .pf-acct-tab-name{max-width:140px;overflow:hidden;text-overflow:ellipsis}
 
-/* ══════════════════════════════════════
-   MAPA DE CALOR
-══════════════════════════════════════ */
-.hm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:4px}
-.hm-box{border-radius:3px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;transition:transform .12s ease,filter .12s ease;border:1px solid rgba(255,255,255,0.06);min-height:56px}
-.hm-box:hover{transform:scale(1.06);filter:brightness(1.15);z-index:2;box-shadow:0 4px 14px rgba(0,0,0,0.4)}
-.hm-box .hm-sym{font-family:var(--mono);font-weight:700;font-size:12px;color:#fff;letter-spacing:.5px}
-.hm-box .hm-chg{font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.9)}
-.hm-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
-.hm-card{background:var(--bg2);border:1px solid var(--border);border-radius:2px;padding:12px 14px}
-.hm-card-lbl{font-family:var(--mono);font-size:10px;letter-spacing:1.5px;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px}
-.hm-card-val{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--text-bright)}
-.hm-gauge-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:2px;padding:20px;display:flex;flex-direction:column;align-items:center;margin-bottom:16px}
-.hm-gauge-label{font-family:var(--mono);font-size:12px;letter-spacing:2px;color:var(--text-dim);margin-top:8px;text-transform:uppercase}
-.hm-gauge-score{font-family:var(--head);font-size:34px;font-weight:900}
-.hm-legend{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--text-dim);margin:10px 0 16px}
-.hm-legend-bar{flex:1;height:8px;border-radius:4px;background:linear-gradient(90deg,var(--red),var(--bg3) 50%,var(--green))}
-.tab-heatmap{border-color:rgba(255,140,0,0.4)!important}
-.tab-heatmap.active{background:rgba(255,140,0,0.12)!important;border-color:var(--orange)!important;color:var(--orange)!important}
-.hm-section-title{font-family:var(--head);font-weight:900;font-size:14px;letter-spacing:2px;color:var(--text-bright);margin:22px 0 10px;display:flex;align-items:center;gap:8px}
-.hm-period-bar{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:14px;letter-spacing:1px}
-.hm-period-btn{background:var(--bg2);border:1px solid var(--border);color:var(--text-dim);font-family:var(--mono);font-size:11px;letter-spacing:1px;padding:5px 12px;border-radius:2px;cursor:pointer;transition:all .15s}
-.hm-period-btn:hover{border-color:var(--accent2);color:var(--text)}
-.hm-period-btn.active{background:rgba(0,212,255,0.12);border-color:var(--accent);color:var(--accent)}
-.hm-sector-block{margin-bottom:16px}
-.hm-sector-hdr{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg3);border:1px solid var(--border);border-bottom:none;border-radius:2px 2px 0 0;font-family:var(--head);font-weight:900;font-size:11px;letter-spacing:2px}
-.hm-sector-hdr .hm-sector-chg{margin-left:auto;font-family:var(--mono);font-size:12px}
-.hm-sector-block .hm-grid{border:1px solid var(--border);border-top:none;border-radius:0 0 2px 2px;padding:6px}
-.hm-idx-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-bottom:18px}
-.hm-idx-card{background:var(--bg2);border:1px solid var(--border);border-radius:2px;overflow:hidden}
-.hm-idx-lbl{font-family:var(--mono);font-size:11px;letter-spacing:1px;color:var(--text-dim);padding:6px 10px;border-bottom:1px solid var(--border);text-transform:uppercase}
-.hm-idx-frame{width:100%;height:170px;border:none;display:block;background:var(--bg2)}
 .pf-acct-rename-btn{font-size:11px;opacity:.5;cursor:pointer;padding:0 2px;transition:opacity .15s;line-height:1;background:none;border:none;color:inherit}
 .pf-acct-rename-btn:hover{opacity:1}
 .pf-acct-add-btn{border-color:rgba(0,212,255,0.3);color:var(--accent);font-size:16px;padding:4px 11px;letter-spacing:0}
@@ -1186,7 +1154,6 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
       <div class="tab" onclick="switchTab('sectors',this)">SECTORES</div>
       <div class="tab" onclick="switchTab('technical',this)">TÉCNICO</div>
       <div class="tab" onclick="switchTab('all',this)">TODOS</div>
-      <div class="tab tab-heatmap" onclick="switchTab('heatmap',this)">🔥 MAPA CALOR</div>
     </div>
 
     <!-- SCANNER TAB -->
@@ -1310,32 +1277,6 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
       <div class="exp-actions">
         <button class="btn btn-g btn-sm" onclick="exportCSV()">⬇ CSV</button>
       </div>
-    </div>
-
-    <!-- ═══════════════════════════════════════════════════════
-         MAPA DE CALOR TAB
-    ═══════════════════════════════════════════════════════ -->
-    <div class="tab-panel" id="tab-heatmap">
-      <div class="hm-section-title">📊 ÍNDICES Y COMMODITIES</div>
-      <div id="hmIndicesGrid" class="hm-idx-grid"></div>
-
-      <div id="hmGaugeContainer"></div>
-      <div class="hm-cards" id="hmCardsContainer"></div>
-
-      <div class="hm-period-bar">
-        <span>VER VARIACIÓN:</span>
-        <button class="hm-period-btn active" data-period="day" onclick="setHmPeriod('day')">Día</button>
-        <button class="hm-period-btn" data-period="week" onclick="setHmPeriod('week')">Semana</button>
-        <button class="hm-period-btn" data-period="month" onclick="setHmPeriod('month')">Mes</button>
-        <button class="hm-period-btn" data-period="year" onclick="setHmPeriod('year')">Año</button>
-        <span id="hmPeriodStatus" style="margin-left:8px;color:var(--text-dim)"></span>
-      </div>
-
-      <div class="hm-section-title">🌎 INTERNACIONAL — por sector</div>
-      <div id="hmGridIntl"></div>
-
-      <div class="hm-section-title">🇦🇷 ARGENTINA — MERVAL</div>
-      <div id="hmGridAR"></div>
     </div>
 
   </div>
@@ -1668,6 +1609,12 @@ var SECTORS = {
   'SNE':'Comunicación',                 // Sony (ticker alternativo)
 
   // ── Tickers frecuentes sin sector asignado (antes caían en "Otros") ──
+  // Utilities / generadoras eléctricas
+  'VST':'Utilities',                    // Vistra Corp — generación eléctrica
+  'CEG':'Utilities',                    // Constellation Energy — nuclear/generación
+  // Hardware / semis
+  'SMCI':'Hardware',                    // Super Micro Computer — servidores
+  'SNDK':'Hardware',                    // SanDisk — almacenamiento/memoria
   // ETFs de divisas y mercados
   'FXY':'ETF',                          // Invesco CurrencyShares Japanese Yen
   'EWY':'ETF',                          // iShares MSCI South Korea
@@ -2287,6 +2234,7 @@ var ARG_ADR_MAP = {
   'MELI': 'MELI',  // NYSE: MELI (MercadoLibre) — no es .BA pero por las dudas
   'GLOB': 'GLOB',  // NYSE: GLOB (Globant)
   'BIOX': 'BIOX',  // NYSE: BIOX (Bioceres)
+  'TEO':  'TEO',   // NYSE: TEO  (Telecom Argentina)
 };
 
 // ── NORMALIZAR HIGH/LOW (diario y 52 semanas) ─────
@@ -2323,15 +2271,15 @@ async function fetchQuote(sym) {
     var r = await fetch(API+'/quote?symbol='+fetchSym, {signal: AbortSignal.timeout(8000)});
     if (!r.ok) {
       markTickerError(sym, 'HTTP '+r.status);
-      return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, marketCap: null, mom12m: null, mom6m: null, sector: SECTORS[sym] || (isArgentineTicker(sym) ? 'Merval' : 'Otros'), _error: true, _flash: '' };
+      return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, marketCap: null, mom12m: null, mom6m: null, sector: resolveSector(sym), _error: true, _flash: '' };
     }
     var d = await r.json();
     if (d.error) {
       markTickerError(sym, d.error);
-      return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, marketCap: null, mom12m: null, mom6m: null, sector: SECTORS[sym] || (isArgentineTicker(sym) ? 'Merval' : 'Otros'), _error: true, _flash: '' };
+      return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, marketCap: null, mom12m: null, mom6m: null, sector: resolveSector(sym), _error: true, _flash: '' };
     }
     clearTickerError(sym);
-    d.sector = SECTORS[sym] || (isArgentineTicker(sym) ? 'Merval' : 'Otros');
+    d.sector = resolveSector(sym);
     normalizeHL(d);
     var prev = prevPrices[sym];
     d._flash = prev ? (d.price > prev ? 'up' : d.price < prev ? 'dn' : '') : '';
@@ -2340,31 +2288,33 @@ async function fetchQuote(sym) {
   } catch(e) {
     markTickerError(sym, 'Timeout/Error');
     console.warn('Error fetching', sym, e.message);
-    return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, marketCap: null, mom12m: null, mom6m: null, sector: SECTORS[sym] || (isArgentineTicker(sym) ? 'Merval' : 'Otros'), _error: true, _flash: '' };
+    return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, marketCap: null, mom12m: null, mom6m: null, sector: resolveSector(sym), _error: true, _flash: '' };
   }
 }
 
 // ── SUPLEMENTO: Máx/Mín diario y de 52 semanas vía Yahoo Finance ──
-// El backend propio no siempre expone estos campos, así que se completan
-// con un fetch batch (varios símbolos por request) contra Yahoo Finance
-// usando proxies CORS públicos, igual que en el fallback del portafolio.
+// El backend propio no siempre expone estos campos. Se completan con
+// el endpoint de velas (chart) de Yahoo Finance, que trae esos datos
+// en su bloque "meta" sin requerir autenticación (a diferencia del
+// endpoint de cotización batch), a través de proxies CORS públicos
+// (igual que el fallback de precios usado en otras partes de la app).
 var HL_PROXIES = [
   function(u){ return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u); },
   function(u){ return 'https://corsproxy.io/?'+encodeURIComponent(u); },
   function(u){ return 'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u); }
 ];
 
-function fetchHLBatchOnce(yahooSymsCsv) {
-  var url = 'https://query1.finance.yahoo.com/v7/finance/quote?symbols=' + encodeURIComponent(yahooSymsCsv);
+function fetchYahooChartMeta(yahooSym) {
+  var url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(yahooSym) + '?range=5d&interval=1d';
   var idx = 0;
   function tryNext() {
-    if (idx >= HL_PROXIES.length) return Promise.resolve([]);
+    if (idx >= HL_PROXIES.length) return Promise.resolve(null);
     var proxyFn = HL_PROXIES[idx++];
     return fetch(proxyFn(url), {signal: AbortSignal.timeout(9000)})
       .then(function(r){ if(!r.ok) throw 0; return r.json(); })
       .then(function(data){
-        var res = data && data.quoteResponse && data.quoteResponse.result;
-        return Array.isArray(res) ? res : [];
+        var res = data && data.chart && data.chart.result && data.chart.result[0];
+        return (res && res.meta) ? res.meta : null;
       })
       .catch(function(){ return tryNext(); });
   }
@@ -2373,33 +2323,24 @@ function fetchHLBatchOnce(yahooSymsCsv) {
 
 async function fetchHighLow52Supplement(symbols) {
   var out = {};
-  // Mapear cada símbolo local → símbolo Yahoo, agrupando por lotes
-  var yahooMap = {}; // yahooSym(upper) -> [symOriginal,...]
-  symbols.forEach(function(sym){
-    var ys = resolveYahooSymbol(sym).toUpperCase();
-    if (!yahooMap[ys]) yahooMap[ys] = [];
-    yahooMap[ys].push(sym);
-  });
-  var yahooSyms = Object.keys(yahooMap);
-  var BATCH = 25;
-  for (var i = 0; i < yahooSyms.length; i += BATCH) {
-    var batch = yahooSyms.slice(i, i+BATCH);
-    try {
-      var results = await fetchHLBatchOnce(batch.join(','));
-      results.forEach(function(q){
-        if (!q || !q.symbol) return;
-        var origs = yahooMap[q.symbol.toUpperCase()];
-        if (!origs) return;
-        origs.forEach(function(orig){
-          out[orig] = {
-            dayHigh:  q.regularMarketDayHigh  != null ? q.regularMarketDayHigh  : null,
-            dayLow:   q.regularMarketDayLow   != null ? q.regularMarketDayLow   : null,
-            yearHigh: q.fiftyTwoWeekHigh      != null ? q.fiftyTwoWeekHigh      : null,
-            yearLow:  q.fiftyTwoWeekLow       != null ? q.fiftyTwoWeekLow       : null
-          };
-        });
-      });
-    } catch(e) { /* silencioso — se mantiene el fallback existente */ }
+  var BATCH = 8; // concurrencia moderada para no saturar los proxies gratuitos
+  for (var i = 0; i < symbols.length; i += BATCH) {
+    var batch = symbols.slice(i, i+BATCH);
+    var results = await Promise.all(batch.map(function(sym){
+      var ys = resolveYahooSymbol(sym);
+      return fetchYahooChartMeta(ys).then(function(meta){ return {sym: sym, meta: meta}; });
+    }));
+    results.forEach(function(item){
+      var meta = item.meta;
+      if (!meta) return;
+      out[item.sym] = {
+        dayHigh:  meta.regularMarketDayHigh != null ? meta.regularMarketDayHigh : null,
+        dayLow:   meta.regularMarketDayLow  != null ? meta.regularMarketDayLow  : null,
+        yearHigh: meta.fiftyTwoWeekHigh     != null ? meta.fiftyTwoWeekHigh     : null,
+        yearLow:  meta.fiftyTwoWeekLow      != null ? meta.fiftyTwoWeekLow      : null
+      };
+    });
+    applyHighLowSupplement(out); // aplicar progresivamente, lote por lote
   }
   return out;
 }
@@ -2454,7 +2395,7 @@ function resetFilters(){
 }
 
 // ── RENDER ────────────────────────────────────────
-function renderAll(){ renderSummary();renderScanner();renderMovers();renderSectors();renderTech();renderAllTab();renderHeatmap(); }
+function renderAll(){ renderSummary();renderScanner();renderMovers();renderSectors();renderTech();renderAllTab(); }
 
 function renderSummary(){
   var d=filtered;
@@ -2828,7 +2769,16 @@ var MERVAL_TICKERS = {
 function isArgentineTicker(sym) {
   if (!sym) return false;
   if (sym.endsWith('.BA')) return true;
-  return MERVAL_TICKERS[sym.toUpperCase()] === 1;
+  var symUp = sym.toUpperCase();
+  return MERVAL_TICKERS[symUp] === 1 || Object.prototype.hasOwnProperty.call(ARG_ADR_MAP, symUp);
+}
+
+// Sector final de un ticker: los argentinos SIEMPRE agrupan bajo "Merval"
+// (así no quedan separados/perdidos en secciones como "Finanzas"),
+// el resto usa su sector real, o "Otros" si no está catalogado.
+function resolveSector(sym) {
+  if (isArgentineTicker(sym)) return 'Merval';
+  return SECTORS[sym.toUpperCase()] || SECTORS[sym] || 'Otros';
 }
 
 function dispSym(sym) {
@@ -3046,321 +2996,6 @@ function renderAllTab() {
   });
 
   glContainer.innerHTML = glHeaderHtml + sectorsHtml;
-}
-
-// ═══════════════════════════════════════════════════
-// MAPA DE CALOR
-// ═══════════════════════════════════════════════════
-var hmPeriod = 'day'; // 'day' | 'week' | 'month' | 'year'
-var HM_RANGE = { day: 3, week: 6, month: 12, year: 30 };
-var HM_LABEL = { day: 'DÍA', week: 'SEMANA', month: 'MES', year: 'AÑO' };
-
-function getChgForPeriod(d, period) {
-  if (period === 'week')  return d.chgWeek  != null ? d.chgWeek  : null;
-  if (period === 'month') return d.chgMonth != null ? d.chgMonth : null;
-  if (period === 'year')  return d.chgYear  != null ? d.chgYear  : null;
-  return d.chgPct;
-}
-
-function setHmPeriod(period) {
-  hmPeriod = period;
-  document.querySelectorAll('.hm-period-btn').forEach(function(b){
-    b.classList.toggle('active', b.getAttribute('data-period') === period);
-  });
-  renderHeatmap();
-}
-
-function computeFearGreed(data) {
-  var withChg = data.filter(function(d){ return d.chgPct != null; });
-  if (!withChg.length) return null;
-
-  // 1) Momentum del día: % de tickers que suben vs bajan hoy
-  var up = withChg.filter(function(d){ return d.chgPct > 0; }).length;
-  var momentumScore = (up / withChg.length) * 100;
-
-  // 2) Amplitud (breadth): % de tickers por encima de la EMA200
-  var withEma = data.filter(function(d){ return d.distEma200 != null; });
-  var aboveEma = withEma.filter(function(d){ return d.distEma200 > 0; }).length;
-  var breadthScore = withEma.length ? (aboveEma / withEma.length) * 100 : 50;
-
-  // 3) RSI promedio, centrado en 50 (RSI 30=miedo, RSI 70=codicia) → escala 0-100
-  var rsiVals = data.map(function(d){ return d.rsi; }).filter(function(v){ return v != null; });
-  var rsiAvg = rsiVals.length ? rsiVals.reduce(function(a,b){ return a+b; },0) / rsiVals.length : 50;
-  var rsiScore = Math.max(0, Math.min(100, rsiAvg));
-
-  // 4) Máximos/mínimos de 52 semanas: cuántos están cerca de máximos vs mínimos
-  var withDist = data.filter(function(d){ return d.distFromHigh != null; });
-  var nearHigh = withDist.filter(function(d){ return d.distFromHigh > -10; }).length;
-  var nearLow  = withDist.filter(function(d){ return d.distFromHigh < -40; }).length;
-  var hlScore = withDist.length ? Math.max(0, Math.min(100, 50 + ((nearHigh - nearLow) / withDist.length) * 100)) : 50;
-
-  var score = Math.round(momentumScore*0.30 + breadthScore*0.30 + rsiScore*0.25 + hlScore*0.15);
-  score = Math.max(0, Math.min(100, score));
-
-  var label, color;
-  if (score < 25)      { label = 'MIEDO EXTREMO'; color = 'var(--red)'; }
-  else if (score < 45) { label = 'MIEDO';          color = '#ff8c69'; }
-  else if (score < 55) { label = 'NEUTRAL';        color = 'var(--yellow)'; }
-  else if (score < 75) { label = 'CODICIA';        color = '#9be564'; }
-  else                 { label = 'CODICIA EXTREMA';color = 'var(--green)'; }
-
-  return { score: score, label: label, color: color, up: up, total: withChg.length,
-           breadthScore: breadthScore, rsiAvg: rsiAvg, nearHigh: nearHigh, nearLow: nearLow };
-}
-
-function fearGreedGaugeSVG(fg) {
-  // Semicírculo de 180° recorriendo 0-100
-  var cx = 130, cy = 120, r = 100;
-  var angle = 180 - (fg.score / 100) * 180; // 180°=izq(0) → 0°=der(100)
-  var rad = angle * Math.PI / 180;
-  var nx = cx + r * 0.86 * Math.cos(rad);
-  var ny = cy - r * 0.86 * Math.sin(rad);
-
-  function arcPath(a0, a1, rr) {
-    var r0 = a0 * Math.PI / 180, r1 = a1 * Math.PI / 180;
-    var x0 = cx + rr * Math.cos(r0), y0 = cy - rr * Math.sin(r0);
-    var x1 = cx + rr * Math.cos(r1), y1 = cy - rr * Math.sin(r1);
-    return 'M '+x0+' '+y0+' A '+rr+' '+rr+' 0 0 0 '+x1+' '+y1;
-  }
-
-  var svg = '<svg viewBox="0 0 260 145" width="260" height="145">';
-  var bands = [
-    [180,144,'var(--red)'],[144,108,'#ff8c69'],[108,72,'var(--yellow)'],
-    [72,36,'#9be564'],[36,0,'var(--green)']
-  ];
-  bands.forEach(function(b){
-    svg += '<path d="'+arcPath(b[0],b[1],r)+'" stroke="'+b[2]+'" stroke-width="14" fill="none" stroke-linecap="butt" opacity="0.85"/>';
-  });
-  svg += '<line x1="'+cx+'" y1="'+cy+'" x2="'+nx+'" y2="'+ny+'" stroke="var(--text-bright)" stroke-width="3" stroke-linecap="round"/>';
-  svg += '<circle cx="'+cx+'" cy="'+cy+'" r="6" fill="var(--text-bright)"/>';
-  svg += '</svg>';
-  return svg;
-}
-
-function mixColor(c1, c2, t) {
-  t = Math.max(0, Math.min(1, t));
-  var r = Math.round(c1[0] + (c2[0]-c1[0])*t);
-  var g = Math.round(c1[1] + (c2[1]-c1[1])*t);
-  var b = Math.round(c1[2] + (c2[2]-c1[2])*t);
-  return 'rgb('+r+','+g+','+b+')';
-}
-
-function heatBoxHTML(d, period) {
-  var chg = getChgForPeriod(d, period);
-  var chgShown = chg != null ? chg : 0;
-  var range = HM_RANGE[period] || 3;
-  var clamped = Math.max(-range, Math.min(range, chgShown));
-  var t = (clamped + range) / (range * 2); // 0..1
-  var bg = t < 0.5
-    ? mixColor([255,61,90], [23,32,40], t*2)
-    : mixColor([23,32,40], [0,230,118], (t-0.5)*2);
-  var withCapAll = allData.filter(function(x){ return x.marketCap > 0; });
-  var maxCap = withCapAll.length ? Math.max.apply(null, withCapAll.map(function(x){ return x.marketCap; })) : 0;
-  var capRatio = maxCap && d.marketCap ? Math.sqrt(d.marketCap / maxCap) : 0.3;
-  var fontSize = 11 + Math.round(capRatio * 4);
-  var chgTxt = chg != null ? ((chg>=0?'+':'')+f2(chg)+'%') : '--';
-  return '<div class="hm-box" style="background:'+bg+'" title="'+d.symbol+' · '+chgTxt+'" onclick="openTVChart(\''+d.symbol+'\')">' +
-    '<span class="hm-sym" style="font-size:'+fontSize+'px">'+d.symbol+'</span>' +
-    '<span class="hm-chg">'+chgTxt+'</span>' +
-  '</div>';
-}
-
-function buildHeatmapGroupedHTML(data, period) {
-  if (!data.length) return '<div style="color:var(--text-dim);padding:20px;font-family:var(--mono);text-align:center">Sin tickers</div>';
-  var grouped = {};
-  data.forEach(function(d){
-    var sec = d.sector || 'Otros';
-    if (!grouped[sec]) grouped[sec] = [];
-    grouped[sec].push(d);
-  });
-  var order = SEC_ORDER.filter(function(s){ return grouped[s] && grouped[s].length; });
-  Object.keys(grouped).forEach(function(s){ if (order.indexOf(s) === -1) order.push(s); });
-
-  return order.map(function(sec){
-    var items = grouped[sec].slice().sort(function(a,b){ return (b.marketCap||0)-(a.marketCap||0); });
-    var col = SEC_COLOR[sec] || '#78909c';
-    var icon = SEC_ICON[sec] || '?';
-    var chgs = items.map(function(d){ return getChgForPeriod(d, period); }).filter(function(v){ return v != null; });
-    var avg = chgs.length ? chgs.reduce(function(a,b){ return a+b; },0)/chgs.length : null;
-    return '<div class="hm-sector-block">' +
-      '<div class="hm-sector-hdr">' +
-        '<span style="color:'+col+'">'+icon+'</span>' +
-        '<span style="color:'+col+'">'+sec.toUpperCase()+'</span>' +
-        '<span style="font-family:var(--mono);font-size:10px;color:var(--text-dim);font-weight:400">'+items.length+' tickers</span>' +
-        (avg!=null ? '<span class="hm-sector-chg" style="color:'+(avg>=0?'var(--green)':'var(--red)')+'">'+(avg>=0?'+':'')+f2(avg)+'%</span>' : '') +
-      '</div>' +
-      '<div class="hm-grid">' + items.map(function(d){ return heatBoxHTML(d, period); }).join('') + '</div>' +
-    '</div>';
-  }).join('');
-}
-
-function renderHeatmap() {
-  var gaugeEl = document.getElementById('hmGaugeContainer');
-  var cardsEl = document.getElementById('hmCardsContainer');
-  var intlEl  = document.getElementById('hmGridIntl');
-  var arEl    = document.getElementById('hmGridAR');
-  var statusEl= document.getElementById('hmPeriodStatus');
-  if (!gaugeEl || !cardsEl || !intlEl || !arEl) return;
-
-  var data = filtered.length ? filtered : allData;
-  if (!data.length) {
-    gaugeEl.innerHTML = '';
-    cardsEl.innerHTML = '';
-    intlEl.innerHTML = '<div style="color:var(--text-dim);padding:30px;font-family:var(--mono);text-align:center">Cargá tickers y hacé click en ▶ CARGAR TICKERS</div>';
-    arEl.innerHTML = '';
-    return;
-  }
-
-  if (statusEl) {
-    var haveWeek  = data.some(function(d){ return d.chgWeek  != null; });
-    var haveMonth = data.some(function(d){ return d.chgMonth != null; });
-    var haveYear  = data.some(function(d){ return d.chgYear  != null; });
-    if (hmPeriod !== 'day' && !haveWeek && !haveMonth && !haveYear) {
-      statusEl.textContent = '(cargando variación semanal/mensual/anual...)';
-    } else {
-      statusEl.textContent = '';
-    }
-  }
-
-  var arData  = data.filter(function(d){ return isArgentineTicker(d.symbol); });
-  var intlData= data.filter(function(d){ return !isArgentineTicker(d.symbol); });
-
-  // ── Gauge Miedo/Codicia (sobre el universo completo) ──
-  var fg = computeFearGreed(data);
-  if (fg) {
-    gaugeEl.innerHTML =
-      '<div class="hm-gauge-wrap">' +
-        fearGreedGaugeSVG(fg) +
-        '<div class="hm-gauge-score" style="color:'+fg.color+'">'+fg.score+'</div>' +
-        '<div class="hm-gauge-label" style="color:'+fg.color+'">'+fg.label+'</div>' +
-        '<div style="font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-top:6px">Índice de Miedo &amp; Codicia (propio) · basado en momentum, amplitud EMA200, RSI y cercanía a máx/mín 52s</div>' +
-      '</div>';
-  } else {
-    gaugeEl.innerHTML = '';
-  }
-
-  // ── Cards de resumen ──
-  var up = data.filter(function(d){ return d.chgPct > 0; }).length;
-  var dn = data.filter(function(d){ return d.chgPct < 0; }).length;
-  var withDist = data.filter(function(d){ return d.distFromHigh != null; });
-  var newHighs = withDist.filter(function(d){ return d.distFromHigh > -2; }).length;
-  var newLows  = withDist.filter(function(d){ return d.distFromHigh < -45; }).length;
-  var withVol  = data.filter(function(d){ return d.avgVol20 > 0 && d.volume != null; });
-  var volSpikes = withVol.filter(function(d){ return d.volume / d.avgVol20 > 2; }).length;
-  var chgVals = data.map(function(d){ return d.chgPct; }).filter(function(v){ return v != null; });
-  var chgAvg = chgVals.length ? chgVals.reduce(function(a,b){ return a+b; },0)/chgVals.length : null;
-
-  cardsEl.innerHTML =
-    '<div class="hm-card"><div class="hm-card-lbl">Avance / Retroceso</div><div class="hm-card-val"><span style="color:var(--green)">▲'+up+'</span> <span style="color:var(--text-dim)">/</span> <span style="color:var(--red)">▼'+dn+'</span></div></div>' +
-    '<div class="hm-card"><div class="hm-card-lbl">Var. Promedio (día)</div><div class="hm-card-val" style="color:'+(chgAvg>=0?'var(--green)':'var(--red)')+'">'+(chgAvg!=null?((chgAvg>=0?'+':'')+f2(chgAvg)+'%'):'--')+'</div></div>' +
-    '<div class="hm-card"><div class="hm-card-lbl">Nuevos Máx. 52s</div><div class="hm-card-val" style="color:var(--green)">'+newHighs+'</div></div>' +
-    '<div class="hm-card"><div class="hm-card-lbl">Nuevos Mín. 52s</div><div class="hm-card-val" style="color:var(--red)">'+newLows+'</div></div>' +
-    '<div class="hm-card"><div class="hm-card-lbl">Picos de Volumen &gt;2x</div><div class="hm-card-val" style="color:var(--yellow)">'+volSpikes+'</div></div>';
-
-  // ── Heatmaps agrupados por sector (Internacional) y aparte (Argentina) ──
-  intlEl.innerHTML = buildHeatmapGroupedHTML(intlData, hmPeriod);
-  arEl.innerHTML = buildHeatmapGroupedHTML(arData, hmPeriod);
-
-  renderIndicesGrid();
-}
-
-// ── ÍNDICES Y COMMODITIES (mini charts TradingView) ──
-var INDEX_SYMBOLS = [
-  {sym:'TVC:SPX',        label:'S&P 500'},
-  {sym:'TVC:DJI',        label:'Dow Jones'},
-  {sym:'NASDAQ:IXIC',    label:'Nasdaq'},
-  {sym:'BITSTAMP:BTCUSD',label:'Bitcoin'},
-  {sym:'TVC:GOLD',       label:'Oro'},
-  {sym:'TVC:USOIL',      label:'Petróleo WTI'},
-  {sym:'BCBA:IMV',       label:'Merval'}
-];
-
-function renderIndicesGrid() {
-  var el = document.getElementById('hmIndicesGrid');
-  if (!el || el.dataset.rendered === '1') return;
-  el.dataset.rendered = '1';
-  el.innerHTML = INDEX_SYMBOLS.map(function(ix){
-    var frameId = 'tv_' + ix.sym.replace(/[^a-zA-Z0-9]/g,'_');
-    var src = 'https://s.tradingview.com/widgetembed/?frameElementId=' + frameId
-      + '&symbol=' + encodeURIComponent(ix.sym)
-      + '&interval=D&hidesidetoolbar=1&hidetoptoolbar=1&symboledit=0&saveimage=0'
-      + '&toolbarbg=0d1318&studies=%5B%5D'
-      + '&theme=dark&style=1&timezone=America%2FArgentina%2FBuenos_Aires'
-      + '&studies_overrides=%7B%7D&overrides=%7B%7D&enabled_features=%5B%5D'
-      + '&disabled_features=%5B%5D&locale=es&utm_source=nexus-scanner';
-    return '<div class="hm-idx-card">' +
-      '<div class="hm-idx-lbl">'+ix.label+'</div>' +
-      '<iframe src="'+src+'" class="hm-idx-frame" loading="lazy"></iframe>' +
-    '</div>';
-  }).join('');
-}
-
-// ── Variación semanal/mensual/anual real (Yahoo Finance, best-effort) ──
-function fetchChartOnce(yahooSym) {
-  var url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(yahooSym) + '?range=1y&interval=1d';
-  var idx = 0;
-  function tryNext() {
-    if (idx >= HL_PROXIES.length) return Promise.resolve(null);
-    var proxyFn = HL_PROXIES[idx++];
-    return fetch(proxyFn(url), {signal: AbortSignal.timeout(9000)})
-      .then(function(r){ if(!r.ok) throw 0; return r.json(); })
-      .then(function(data){
-        var res = data && data.chart && data.chart.result && data.chart.result[0];
-        return res || null;
-      })
-      .catch(function(){ return tryNext(); });
-  }
-  return tryNext();
-}
-
-var _periodReturnsFetched = false;
-async function fetchPeriodReturnsSupplement(symbols) {
-  var out = {};
-  var BATCH = 8;
-  for (var i = 0; i < symbols.length; i += BATCH) {
-    var batch = symbols.slice(i, i+BATCH);
-    var results = await Promise.all(batch.map(function(sym){
-      var ys = resolveYahooSymbol(sym);
-      return fetchChartOnce(ys).then(function(res){ return {sym: sym, res: res}; });
-    }));
-    results.forEach(function(item){
-      var res = item.res;
-      if (!res || !res.indicators || !res.indicators.quote || !res.indicators.quote[0]) return;
-      var closes = (res.indicators.quote[0].close || []).filter(function(c){ return c != null; });
-      if (closes.length < 2) return;
-      var meta = res.meta || {};
-      var last = meta.regularMarketPrice != null ? meta.regularMarketPrice : closes[closes.length-1];
-      var idxWeek  = Math.max(0, closes.length - 1 - 5);
-      var idxMonth = Math.max(0, closes.length - 1 - 21);
-      var first = closes[0];
-      out[item.sym] = {
-        chgWeek:  closes[idxWeek]  ? (last - closes[idxWeek])/closes[idxWeek]*100   : null,
-        chgMonth: closes[idxMonth] ? (last - closes[idxMonth])/closes[idxMonth]*100 : null,
-        chgYear:  first            ? (last - first)/first*100                       : null
-      };
-    });
-    // Refrescar progresivamente si el usuario está mirando el heatmap
-    renderHeatmap();
-  }
-  return out;
-}
-
-function applyPeriodReturns(map) {
-  allData.forEach(function(d){
-    var s = map[d.symbol];
-    if (!s) return;
-    if (s.chgWeek  != null) d.chgWeek  = s.chgWeek;
-    if (s.chgMonth != null) d.chgMonth = s.chgMonth;
-    if (s.chgYear  != null) d.chgYear  = s.chgYear;
-  });
-  renderHeatmap();
-}
-
-function ensurePeriodReturnsLoaded() {
-  if (_periodReturnsFetched || !allData.length) return;
-  _periodReturnsFetched = true;
-  var syms = allData.map(function(d){ return d.symbol; });
-  fetchPeriodReturnsSupplement(syms).then(applyPeriodReturns);
 }
 
 function renderEarningsTab() {
@@ -3636,10 +3271,6 @@ function switchTab(id,el){
   document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active')});
   el.classList.add('active');
   document.getElementById('tab-'+id).classList.add('active');
-  if (id === 'heatmap') {
-    renderHeatmap();
-    ensurePeriodReturnsLoaded();
-  }
 }
 
 // ── TABLE SORT ────────────────────────────────────
