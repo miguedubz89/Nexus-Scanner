@@ -845,6 +845,26 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 .pf-acct-tab:hover{border-color:var(--yellow2);color:var(--yellow)}
 .pf-acct-tab.active{background:rgba(255,214,0,0.1);border-color:var(--yellow);color:var(--yellow)}
 .pf-acct-tab-name{max-width:140px;overflow:hidden;text-overflow:ellipsis}
+
+/* ══════════════════════════════════════
+   MAPA DE CALOR
+══════════════════════════════════════ */
+.hm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:4px}
+.hm-box{border-radius:3px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;transition:transform .12s ease,filter .12s ease;border:1px solid rgba(255,255,255,0.06);min-height:56px}
+.hm-box:hover{transform:scale(1.06);filter:brightness(1.15);z-index:2;box-shadow:0 4px 14px rgba(0,0,0,0.4)}
+.hm-box .hm-sym{font-family:var(--mono);font-weight:700;font-size:12px;color:#fff;letter-spacing:.5px}
+.hm-box .hm-chg{font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.9)}
+.hm-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.hm-card{background:var(--bg2);border:1px solid var(--border);border-radius:2px;padding:12px 14px}
+.hm-card-lbl{font-family:var(--mono);font-size:10px;letter-spacing:1.5px;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px}
+.hm-card-val{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--text-bright)}
+.hm-gauge-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:2px;padding:20px;display:flex;flex-direction:column;align-items:center;margin-bottom:16px}
+.hm-gauge-label{font-family:var(--mono);font-size:12px;letter-spacing:2px;color:var(--text-dim);margin-top:8px;text-transform:uppercase}
+.hm-gauge-score{font-family:var(--head);font-size:34px;font-weight:900}
+.hm-legend{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--text-dim);margin:10px 0 16px}
+.hm-legend-bar{flex:1;height:8px;border-radius:4px;background:linear-gradient(90deg,var(--red),var(--bg3) 50%,var(--green))}
+.tab-heatmap{border-color:rgba(255,140,0,0.4)!important}
+.tab-heatmap.active{background:rgba(255,140,0,0.12)!important;border-color:var(--orange)!important;color:var(--orange)!important}
 .pf-acct-rename-btn{font-size:11px;opacity:.5;cursor:pointer;padding:0 2px;transition:opacity .15s;line-height:1;background:none;border:none;color:inherit}
 .pf-acct-rename-btn:hover{opacity:1}
 .pf-acct-add-btn{border-color:rgba(0,212,255,0.3);color:var(--accent);font-size:16px;padding:4px 11px;letter-spacing:0}
@@ -1153,6 +1173,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
       <div class="tab" onclick="switchTab('sectors',this)">SECTORES</div>
       <div class="tab" onclick="switchTab('technical',this)">TÉCNICO</div>
       <div class="tab" onclick="switchTab('all',this)">TODOS</div>
+      <div class="tab tab-heatmap" onclick="switchTab('heatmap',this)">🔥 MAPA CALOR</div>
       <div class="tab tab-portfolio" onclick="switchTab('portfolio',this)">💼 PORTAFOLIO</div>
     </div>
 
@@ -1257,8 +1278,8 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
               <th style="width:58px" onclick="tsMkt('ar','adx',this)">ADX<span class="sort-icon">⇅</span></th>
               <th style="width:70px" onclick="tsMkt('ar','distEma50',this)">EMA50%<span class="sort-icon">⇅</span></th>
               <th style="width:70px" onclick="tsMkt('ar','distEma200',this)">EMA200%<span class="sort-icon">⇅</span></th>
-              <th style="width:65px" onclick="tsMkt('ar','volume',this)">Vol<span class="sort-icon">⇅</span></th>
-              <th style="width:65px" onclick="tsMkt('ar','avgVol20',this)">Vol20<span class="sort-icon">⇅</span></th>
+              <th style="width:70px" onclick="tsMkt('ar','yearHigh',this)">Máx 52s<span class="sort-icon">⇅</span></th>
+              <th style="width:70px" onclick="tsMkt('ar','yearLow',this)">Mín 52s<span class="sort-icon">⇅</span></th>
               <th style="width:68px" onclick="tsMkt('ar','marketCap',this)">Cap<span class="sort-icon">⇅</span></th>
               <th style="width:62px" onclick="tsMkt('ar','mom12m',this)">Mom12M<span class="sort-icon">⇅</span></th>
               <th style="width:108px">&#9670; CANSLIM</th>
@@ -1276,6 +1297,20 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
       <div class="exp-info" id="expInfo">0 tickers | --</div>
       <div class="exp-actions">
         <button class="btn btn-g btn-sm" onclick="exportCSV()">⬇ CSV</button>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════
+         MAPA DE CALOR TAB
+    ═══════════════════════════════════════════════════════ -->
+    <div class="tab-panel" id="tab-heatmap">
+      <div id="hmGaugeContainer"></div>
+      <div class="hm-cards" id="hmCardsContainer"></div>
+      <div class="tbl-wrap" style="padding:14px;background:var(--bg2);border:1px solid var(--border);border-radius:2px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+          <div style="font-family:var(--head);font-weight:900;font-size:13px;letter-spacing:2px;color:var(--text-bright)">🔥 HEATMAP DE ACCIONES <span style="color:var(--text-dim);font-weight:400">— tamaño según cap. de mercado, color según % del día</span></div>
+        </div>
+        <div id="hmGrid" class="hm-grid"></div>
       </div>
     </div>
 
@@ -2572,6 +2607,25 @@ var ARG_ADR_MAP = {
   'BIOX': 'BIOX',  // NYSE: BIOX (Bioceres)
 };
 
+// ── NORMALIZAR HIGH/LOW (diario y 52 semanas) ─────
+// Acepta distintos nombres de campo que pueda devolver el backend/Yahoo
+// y si no vienen, intenta derivar el máximo de 52 semanas a partir de
+// distFromHigh (% de distancia al máximo) que ya se usa en el resto de la app.
+function normalizeHL(d) {
+  d.dayHigh  = d.dayHigh  != null ? d.dayHigh  : (d.regularMarketDayHigh != null ? d.regularMarketDayHigh : (d.high != null ? d.high : null));
+  d.dayLow   = d.dayLow   != null ? d.dayLow   : (d.regularMarketDayLow  != null ? d.regularMarketDayLow  : (d.low  != null ? d.low  : null));
+  d.yearHigh = d.yearHigh != null ? d.yearHigh :
+               (d.fiftyTwoWeekHigh != null ? d.fiftyTwoWeekHigh :
+               (d.high52 != null ? d.high52 :
+               (d.week52High != null ? d.week52High :
+               ((d.distFromHigh != null && d.price != null) ? d.price / (1 + d.distFromHigh / 100) : null))));
+  d.yearLow  = d.yearLow  != null ? d.yearLow :
+               (d.fiftyTwoWeekLow != null ? d.fiftyTwoWeekLow :
+               (d.low52 != null ? d.low52 :
+               (d.week52Low != null ? d.week52Low :
+               ((d.distFromLow != null && d.price != null) ? d.price / (1 + d.distFromLow / 100) : null))));
+}
+
 async function fetchQuote(sym) {
   try {
     var fetchSym = sym;
@@ -2598,6 +2652,7 @@ async function fetchQuote(sym) {
     }
     clearTickerError(sym);
     d.sector = SECTORS[sym] || (isArgentineTicker(sym) ? 'Merval' : 'Otros');
+    normalizeHL(d);
     var prev = prevPrices[sym];
     d._flash = prev ? (d.price > prev ? 'up' : d.price < prev ? 'dn' : '') : '';
     prevPrices[sym] = d.price;
@@ -2645,7 +2700,7 @@ function resetFilters(){
 }
 
 // ── RENDER ────────────────────────────────────────
-function renderAll(){ renderSummary();renderScanner();renderMovers();renderSectors();renderTech();renderAllTab(); }
+function renderAll(){ renderSummary();renderScanner();renderMovers();renderSectors();renderTech();renderAllTab();renderHeatmap(); }
 
 function renderSummary(){
   var d=filtered;
@@ -2761,8 +2816,8 @@ function renderSectors(){
         '<td><div class="tk-cell"><div class="sec-bar" style="background:'+col+'"></div><span class="tk-sym">'+d.symbol+'</span></div></td>'+
         '<td style="color:'+(d.chgPct>=0?'var(--green)':'var(--red)')+'">'+fp(d.price)+'</td>'+
         '<td>'+chipChg(d.chgPct)+'</td>'+
-        '<td>'+rsiCell(d.rsi)+'</td>'+
-        '<td>'+adxCell(d.adx)+'</td>'+
+        '<td>'+hCell(d.dayHigh)+'</td>'+
+        '<td>'+lCell(d.dayLow)+'</td>'+
         '<td>'+fp(d.ema50)+'</td><td>'+fp(d.ema200)+'</td>'+
         '<td>'+distCell(d.distEma200)+'</td>'+
         '<td>'+(d.pe?f1(d.pe)+'x':'--')+'</td>'+
@@ -2795,8 +2850,8 @@ function renderSectors(){
       '<th style="width:75px">Ticker</th>'+
       thIcon('price','Precio','68px')+
       thIcon('chgPct','% Día','56px')+
-      thIcon('rsi','RSI','56px')+
-      thIcon('adx','ADX','56px')+
+      thIcon('dayHigh','Máx','56px')+
+      thIcon('dayLow','Mín','56px')+
       thIcon('ema50','EMA50','65px')+
       thIcon('ema200','EMA200','65px')+
       thIcon('distEma200','EMA200%','68px')+
@@ -2837,8 +2892,8 @@ function renderSectors(){
         '</div></td>'+
         '<td style="color:'+(d.chgPct>=0?'var(--green)':'var(--red)')+'">$\u00a0'+fp(d.price)+'</td>'+
         '<td>'+chipChg(d.chgPct)+'</td>'+
-        '<td>'+rsiCell(d.rsi)+'</td>'+
-        '<td>'+adxCell(d.adx)+'</td>'+
+        '<td>'+hCell(d.dayHigh)+'</td>'+
+        '<td>'+lCell(d.dayLow)+'</td>'+
         '<td>'+fp(d.ema50)+'</td><td>'+fp(d.ema200)+'</td>'+
         '<td>'+distCell(d.distEma200)+'</td>'+
         '<td>'+(d.pe?f1(d.pe)+'x':'--')+'</td>'+
@@ -2870,8 +2925,8 @@ function renderSectors(){
         '<th style="width:90px">Ticker</th>'+
         '<th style="width:68px">Precio</th>'+
         '<th style="width:56px">% Día</th>'+
-        '<th style="width:56px">RSI</th>'+
-        '<th style="width:56px">ADX</th>'+
+        '<th style="width:56px">Máx</th>'+
+        '<th style="width:56px">Mín</th>'+
         '<th style="width:65px">EMA50</th>'+
         '<th style="width:65px">EMA200</th>'+
         '<th style="width:68px">EMA200%</th>'+
@@ -3114,8 +3169,8 @@ function renderAllTab() {
       '<td>'+adxCell(d.adx)+'</td>' +
       '<td>'+distCell(d.distEma50)+'</td>' +
       '<td>'+distCell(d.distEma200)+'</td>' +
-      '<td>'+fv(d.volume)+'</td>' +
-      '<td>'+fv(d.avgVol20)+'</td>' +
+      '<td>'+hCell(d.yearHigh)+'</td>' +
+      '<td>'+lCell(d.yearLow)+'</td>' +
       '<td>'+fcap(d.marketCap)+'</td>' +
       '<td>'+momCell(d.mom12m != null ? d.mom12m : d.mom6m)+'</td>' +
       '<td>'+canslimCell(d)+'</td>' +
@@ -3187,8 +3242,8 @@ function renderAllTab() {
         '<td>'+adxCell(d.adx)+'</td>' +
         '<td>'+distCell(d.distEma50)+'</td>' +
         '<td>'+distCell(d.distEma200)+'</td>' +
-        '<td>'+fv(d.volume)+'</td>' +
-        '<td>'+fv(d.avgVol20)+'</td>' +
+        '<td>'+hCell(d.yearHigh)+'</td>' +
+        '<td>'+lCell(d.yearLow)+'</td>' +
         '<td>'+fcap(d.marketCap)+'</td>' +
         '<td>'+momCell(d.mom12m != null ? d.mom12m : d.mom6m)+'</td>' +
         '<td>'+canslimCell(d)+'</td>' +
@@ -3215,8 +3270,8 @@ function renderAllTab() {
             '<th style="width:56px" onclick="tsMkt(\'gl\',\'adx\',this)">ADX<span class="sort-icon">⇅</span></th>' +
             '<th style="width:68px" onclick="tsMkt(\'gl\',\'distEma50\',this)">EMA50%<span class="sort-icon">⇅</span></th>' +
             '<th style="width:68px" onclick="tsMkt(\'gl\',\'distEma200\',this)">EMA200%<span class="sort-icon">⇅</span></th>' +
-            '<th style="width:62px" onclick="tsMkt(\'gl\',\'volume\',this)">Vol<span class="sort-icon">⇅</span></th>' +
-            '<th style="width:62px" onclick="tsMkt(\'gl\',\'avgVol20\',this)">Vol20<span class="sort-icon">⇅</span></th>' +
+            '<th style="width:66px" onclick="tsMkt(\'gl\',\'yearHigh\',this)">Máx 52s<span class="sort-icon">⇅</span></th>' +
+            '<th style="width:66px" onclick="tsMkt(\'gl\',\'yearLow\',this)">Mín 52s<span class="sort-icon">⇅</span></th>' +
             '<th style="width:62px" onclick="tsMkt(\'gl\',\'marketCap\',this)">Cap<span class="sort-icon">⇅</span></th>' +
             '<th style="width:60px" onclick="tsMkt(\'gl\',\'mom12m\',this)">Mom12M<span class="sort-icon">⇅</span></th>' +
             '<th style="width:108px">&#9670; CANSLIM</th>' +
@@ -3237,6 +3292,156 @@ function renderAllTab() {
   });
 
   glContainer.innerHTML = glHeaderHtml + sectorsHtml;
+}
+
+// ═══════════════════════════════════════════════════
+// MAPA DE CALOR
+// ═══════════════════════════════════════════════════
+function computeFearGreed(data) {
+  var withChg = data.filter(function(d){ return d.chgPct != null; });
+  if (!withChg.length) return null;
+
+  // 1) Momentum del día: % de tickers que suben vs bajan hoy
+  var up = withChg.filter(function(d){ return d.chgPct > 0; }).length;
+  var momentumScore = (up / withChg.length) * 100;
+
+  // 2) Amplitud (breadth): % de tickers por encima de la EMA200
+  var withEma = data.filter(function(d){ return d.distEma200 != null; });
+  var aboveEma = withEma.filter(function(d){ return d.distEma200 > 0; }).length;
+  var breadthScore = withEma.length ? (aboveEma / withEma.length) * 100 : 50;
+
+  // 3) RSI promedio, centrado en 50 (RSI 30=miedo, RSI 70=codicia) → escala 0-100
+  var rsiVals = data.map(function(d){ return d.rsi; }).filter(function(v){ return v != null; });
+  var rsiAvg = rsiVals.length ? rsiVals.reduce(function(a,b){ return a+b; },0) / rsiVals.length : 50;
+  var rsiScore = Math.max(0, Math.min(100, rsiAvg));
+
+  // 4) Máximos/mínimos de 52 semanas: cuántos están cerca de máximos vs mínimos
+  var withDist = data.filter(function(d){ return d.distFromHigh != null; });
+  var nearHigh = withDist.filter(function(d){ return d.distFromHigh > -10; }).length;
+  var nearLow  = withDist.filter(function(d){ return d.distFromHigh < -40; }).length;
+  var hlScore = withDist.length ? Math.max(0, Math.min(100, 50 + ((nearHigh - nearLow) / withDist.length) * 100)) : 50;
+
+  var score = Math.round(momentumScore*0.30 + breadthScore*0.30 + rsiScore*0.25 + hlScore*0.15);
+  score = Math.max(0, Math.min(100, score));
+
+  var label, color;
+  if (score < 25)      { label = 'MIEDO EXTREMO'; color = 'var(--red)'; }
+  else if (score < 45) { label = 'MIEDO';          color = '#ff8c69'; }
+  else if (score < 55) { label = 'NEUTRAL';        color = 'var(--yellow)'; }
+  else if (score < 75) { label = 'CODICIA';        color = '#9be564'; }
+  else                 { label = 'CODICIA EXTREMA';color = 'var(--green)'; }
+
+  return { score: score, label: label, color: color, up: up, total: withChg.length,
+           breadthScore: breadthScore, rsiAvg: rsiAvg, nearHigh: nearHigh, nearLow: nearLow };
+}
+
+function fearGreedGaugeSVG(fg) {
+  // Semicírculo de 180° recorriendo 0-100
+  var cx = 130, cy = 120, r = 100;
+  var angle = 180 - (fg.score / 100) * 180; // 180°=izq(0) → 0°=der(100)
+  var rad = angle * Math.PI / 180;
+  var nx = cx + r * 0.86 * Math.cos(rad);
+  var ny = cy - r * 0.86 * Math.sin(rad);
+
+  function arcPath(a0, a1, rr) {
+    var r0 = a0 * Math.PI / 180, r1 = a1 * Math.PI / 180;
+    var x0 = cx + rr * Math.cos(r0), y0 = cy - rr * Math.sin(r0);
+    var x1 = cx + rr * Math.cos(r1), y1 = cy - rr * Math.sin(r1);
+    return 'M '+x0+' '+y0+' A '+rr+' '+rr+' 0 0 0 '+x1+' '+y1;
+  }
+
+  var svg = '<svg viewBox="0 0 260 145" width="260" height="145">';
+  // Bandas de color (miedo extremo → codicia extrema)
+  var bands = [
+    [180,144,'var(--red)'],[144,108,'#ff8c69'],[108,72,'var(--yellow)'],
+    [72,36,'#9be564'],[36,0,'var(--green)']
+  ];
+  bands.forEach(function(b){
+    svg += '<path d="'+arcPath(b[0],b[1],r)+'" stroke="'+b[2]+'" stroke-width="14" fill="none" stroke-linecap="butt" opacity="0.85"/>';
+  });
+  // Aguja
+  svg += '<line x1="'+cx+'" y1="'+cy+'" x2="'+nx+'" y2="'+ny+'" stroke="var(--text-bright)" stroke-width="3" stroke-linecap="round"/>';
+  svg += '<circle cx="'+cx+'" cy="'+cy+'" r="6" fill="var(--text-bright)"/>';
+  svg += '</svg>';
+  return svg;
+}
+
+function renderHeatmap() {
+  var gaugeEl = document.getElementById('hmGaugeContainer');
+  var cardsEl = document.getElementById('hmCardsContainer');
+  var gridEl  = document.getElementById('hmGrid');
+  if (!gaugeEl || !cardsEl || !gridEl) return;
+
+  var data = filtered.length ? filtered : allData;
+  if (!data.length) {
+    gaugeEl.innerHTML = '';
+    cardsEl.innerHTML = '';
+    gridEl.innerHTML = '<div style="color:var(--text-dim);padding:30px;font-family:var(--mono);text-align:center;grid-column:1/-1">Cargá tickers y hacé click en ▶ CARGAR TICKERS</div>';
+    return;
+  }
+
+  // ── Gauge Miedo/Codicia ──
+  var fg = computeFearGreed(data);
+  if (fg) {
+    gaugeEl.innerHTML =
+      '<div class="hm-gauge-wrap">' +
+        fearGreedGaugeSVG(fg) +
+        '<div class="hm-gauge-score" style="color:'+fg.color+'">'+fg.score+'</div>' +
+        '<div class="hm-gauge-label" style="color:'+fg.color+'">'+fg.label+'</div>' +
+        '<div style="font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-top:6px">Índice de Miedo &amp; Codicia (propio) · basado en momentum, amplitud EMA200, RSI y cercanía a máx/mín 52s</div>' +
+      '</div>';
+  } else {
+    gaugeEl.innerHTML = '';
+  }
+
+  // ── Cards de resumen ──
+  var up = data.filter(function(d){ return d.chgPct > 0; }).length;
+  var dn = data.filter(function(d){ return d.chgPct < 0; }).length;
+  var withDist = data.filter(function(d){ return d.distFromHigh != null; });
+  var newHighs = withDist.filter(function(d){ return d.distFromHigh > -2; }).length;
+  var newLows  = withDist.filter(function(d){ return d.distFromHigh < -45; }).length;
+  var withVol  = data.filter(function(d){ return d.avgVol20 > 0 && d.volume != null; });
+  var volSpikes = withVol.filter(function(d){ return d.volume / d.avgVol20 > 2; }).length;
+  var chgVals = data.map(function(d){ return d.chgPct; }).filter(function(v){ return v != null; });
+  var chgAvg = chgVals.length ? chgVals.reduce(function(a,b){ return a+b; },0)/chgVals.length : null;
+
+  cardsEl.innerHTML =
+    '<div class="hm-card"><div class="hm-card-lbl">Avance / Retroceso</div><div class="hm-card-val"><span style="color:var(--green)">▲'+up+'</span> <span style="color:var(--text-dim)">/</span> <span style="color:var(--red)">▼'+dn+'</span></div></div>' +
+    '<div class="hm-card"><div class="hm-card-lbl">Var. Promedio</div><div class="hm-card-val" style="color:'+(chgAvg>=0?'var(--green)':'var(--red)')+'">'+(chgAvg!=null?((chgAvg>=0?'+':'')+f2(chgAvg)+'%'):'--')+'</div></div>' +
+    '<div class="hm-card"><div class="hm-card-lbl">Nuevos Máx. 52s</div><div class="hm-card-val" style="color:var(--green)">'+newHighs+'</div></div>' +
+    '<div class="hm-card"><div class="hm-card-lbl">Nuevos Mín. 52s</div><div class="hm-card-val" style="color:var(--red)">'+newLows+'</div></div>' +
+    '<div class="hm-card"><div class="hm-card-lbl">Picos de Volumen &gt;2x</div><div class="hm-card-val" style="color:var(--yellow)">'+volSpikes+'</div></div>';
+
+  // ── Grid heatmap (color por %día, tamaño por market cap) ──
+  var withCap = data.filter(function(d){ return d.marketCap > 0; });
+  var maxCap = withCap.length ? Math.max.apply(null, withCap.map(function(d){ return d.marketCap; })) : 0;
+
+  var sorted = data.slice().sort(function(a,b){
+    return (b.marketCap||0) - (a.marketCap||0);
+  });
+
+  gridEl.innerHTML = sorted.map(function(d){
+    var chg = d.chgPct != null ? d.chgPct : 0;
+    var clamped = Math.max(-3, Math.min(3, chg));
+    var t = (clamped + 3) / 6; // 0..1
+    var bg = t < 0.5
+      ? mixColor([255,61,90], [23,32,40], t*2)      // rojo → bg oscuro
+      : mixColor([23,32,40], [0,230,118], (t-0.5)*2); // bg oscuro → verde
+    var capRatio = maxCap && d.marketCap ? Math.sqrt(d.marketCap / maxCap) : 0.3;
+    var fontSize = 11 + Math.round(capRatio * 4);
+    return '<div class="hm-box" style="background:'+bg+'" title="'+d.symbol+' · '+(chg>=0?'+':'')+f2(chg)+'%" onclick="openTVChart(\''+d.symbol+'\')">' +
+      '<span class="hm-sym" style="font-size:'+fontSize+'px">'+d.symbol+'</span>' +
+      '<span class="hm-chg">'+(chg>=0?'+':'')+f2(chg)+'%</span>' +
+    '</div>';
+  }).join('');
+}
+
+function mixColor(c1, c2, t) {
+  t = Math.max(0, Math.min(1, t));
+  var r = Math.round(c1[0] + (c2[0]-c1[0])*t);
+  var g = Math.round(c1[1] + (c2[1]-c1[1])*t);
+  var b = Math.round(c1[2] + (c2[2]-c1[2])*t);
+  return 'rgb('+r+','+g+','+b+')';
 }
 
 function renderEarningsTab() {
@@ -3376,6 +3581,15 @@ function fcap(c){
   if(c>=1e9)return '$'+(c/1e9).toFixed(0)+'B';
   if(c>=1e6)return '$'+(c/1e6).toFixed(0)+'M';
   return '$'+c.toFixed(0);
+}
+// ── HIGH / LOW CELLS ──────────────────────────────
+function hCell(v){
+  if(v==null)return '<span style="color:var(--text-dim)">--</span>';
+  return '<span style="color:var(--green)">'+fp(v)+'</span>';
+}
+function lCell(v){
+  if(v==null)return '<span style="color:var(--text-dim)">--</span>';
+  return '<span style="color:var(--red)">'+fp(v)+'</span>';
 }
 
 // ── TAPE ──────────────────────────────────────────
