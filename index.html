@@ -865,6 +865,19 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 .hm-legend-bar{flex:1;height:8px;border-radius:4px;background:linear-gradient(90deg,var(--red),var(--bg3) 50%,var(--green))}
 .tab-heatmap{border-color:rgba(255,140,0,0.4)!important}
 .tab-heatmap.active{background:rgba(255,140,0,0.12)!important;border-color:var(--orange)!important;color:var(--orange)!important}
+.hm-section-title{font-family:var(--head);font-weight:900;font-size:14px;letter-spacing:2px;color:var(--text-bright);margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+.hm-period-bar{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:14px;letter-spacing:1px}
+.hm-period-btn{background:var(--bg2);border:1px solid var(--border);color:var(--text-dim);font-family:var(--mono);font-size:11px;letter-spacing:1px;padding:5px 12px;border-radius:2px;cursor:pointer;transition:all .15s}
+.hm-period-btn:hover{border-color:var(--accent2);color:var(--text)}
+.hm-period-btn.active{background:rgba(0,212,255,0.12);border-color:var(--accent);color:var(--accent)}
+.hm-sector-block{margin-bottom:16px}
+.hm-sector-hdr{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg3);border:1px solid var(--border);border-bottom:none;border-radius:2px 2px 0 0;font-family:var(--head);font-weight:900;font-size:11px;letter-spacing:2px}
+.hm-sector-hdr .hm-sector-chg{margin-left:auto;font-family:var(--mono);font-size:12px}
+.hm-sector-block .hm-grid{border:1px solid var(--border);border-top:none;border-radius:0 0 2px 2px;padding:6px}
+.hm-idx-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-bottom:18px}
+.hm-idx-card{background:var(--bg2);border:1px solid var(--border);border-radius:2px;overflow:hidden}
+.hm-idx-lbl{font-family:var(--mono);font-size:11px;letter-spacing:1px;color:var(--text-dim);padding:6px 10px;border-bottom:1px solid var(--border);text-transform:uppercase}
+.hm-idx-frame{width:100%;height:170px;border:none;display:block;background:var(--bg2)}
 .pf-acct-rename-btn{font-size:11px;opacity:.5;cursor:pointer;padding:0 2px;transition:opacity .15s;line-height:1;background:none;border:none;color:inherit}
 .pf-acct-rename-btn:hover{opacity:1}
 .pf-acct-add-btn{border-color:rgba(0,212,255,0.3);color:var(--accent);font-size:16px;padding:4px 11px;letter-spacing:0}
@@ -1174,7 +1187,6 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
       <div class="tab" onclick="switchTab('technical',this)">TÉCNICO</div>
       <div class="tab" onclick="switchTab('all',this)">TODOS</div>
       <div class="tab tab-heatmap" onclick="switchTab('heatmap',this)">🔥 MAPA CALOR</div>
-      <div class="tab tab-portfolio" onclick="switchTab('portfolio',this)">💼 PORTAFOLIO</div>
     </div>
 
     <!-- SCANNER TAB -->
@@ -1199,13 +1211,13 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
         <div>
           <div class="mv-lbl">🟢 MAYORES SUBIDAS GLOBAL</div>
           <div class="tbl-wrap"><table class="dt"><thead><tr>
-            <th style="width:80px">Ticker</th><th>Precio</th><th>% Día</th><th>RSI</th><th>Volumen</th>
+            <th style="width:80px">Ticker</th><th>Precio</th><th>% Día</th><th title="RSI (Indice de Fuerza Relativa) 0-100: mide la velocidad de los cambios de precio. Menos de 30 = sobrevendido (posible rebote). Mas de 70 = sobrecomprado (posible correccion).">RSI</th><th>Volumen</th>
           </tr></thead><tbody id="bGain"></tbody></table></div>
         </div>
         <div>
           <div class="mv-lbl">🔴 MAYORES CAÍDAS GLOBAL</div>
           <div class="tbl-wrap"><table class="dt"><thead><tr>
-            <th style="width:80px">Ticker</th><th>Precio</th><th>% Día</th><th>RSI</th><th>Volumen</th>
+            <th style="width:80px">Ticker</th><th>Precio</th><th>% Día</th><th title="RSI (Indice de Fuerza Relativa) 0-100: mide la velocidad de los cambios de precio. Menos de 30 = sobrevendido (posible rebote). Mas de 70 = sobrecomprado (posible correccion).">RSI</th><th>Volumen</th>
           </tr></thead><tbody id="bLoss"></tbody></table></div>
         </div>
       </div>
@@ -1217,13 +1229,13 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           <div>
             <div class="mv-lbl" style="color:var(--green)">🟢 MAYORES SUBIDAS MERVAL</div>
             <div class="tbl-wrap"><table class="dt"><thead><tr>
-              <th style="width:80px">Ticker</th><th>Precio</th><th>% Día</th><th>RSI</th><th>Volumen</th>
+              <th style="width:80px">Ticker</th><th>Precio</th><th>% Día</th><th title="RSI (Indice de Fuerza Relativa) 0-100: mide la velocidad de los cambios de precio. Menos de 30 = sobrevendido (posible rebote). Mas de 70 = sobrecomprado (posible correccion).">RSI</th><th>Volumen</th>
             </tr></thead><tbody id="bGainAR"></tbody></table></div>
           </div>
           <div>
             <div class="mv-lbl" style="color:var(--red)">🔴 MAYORES CAÍDAS MERVAL</div>
             <div class="tbl-wrap"><table class="dt"><thead><tr>
-              <th style="width:80px">Ticker</th><th>Precio</th><th>% Día</th><th>RSI</th><th>Volumen</th>
+              <th style="width:80px">Ticker</th><th>Precio</th><th>% Día</th><th title="RSI (Indice de Fuerza Relativa) 0-100: mide la velocidad de los cambios de precio. Menos de 30 = sobrevendido (posible rebote). Mas de 70 = sobrecomprado (posible correccion).">RSI</th><th>Volumen</th>
             </tr></thead><tbody id="bLossAR"></tbody></table></div>
           </div>
         </div>
@@ -1240,12 +1252,12 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           <th style="width:75px" data-field="symbol" onclick="ts('symbol',this)">Ticker<span class="sort-icon">⇅</span></th>
           <th style="width:68px" data-field="price" onclick="ts('price',this)">Precio<span class="sort-icon">⇅</span></th>
           <th style="width:56px" data-field="chgPct" onclick="ts('chgPct',this)">% Día<span class="sort-icon">⇅</span></th>
-          <th style="width:56px" data-field="rsi" onclick="ts('rsi',this)">RSI<span class="sort-icon">⇅</span></th>
-          <th style="width:56px" data-field="adx" onclick="ts('adx',this)">ADX<span class="sort-icon">⇅</span></th>
+          <th style="width:56px" data-field="rsi" onclick="ts('rsi',this)" title="RSI (Indice de Fuerza Relativa) 0-100: mide la velocidad de los cambios de precio. Menos de 30 = sobrevendido (posible rebote). Mas de 70 = sobrecomprado (posible correccion).">RSI<span class="sort-icon">⇅</span></th>
+          <th style="width:56px" data-field="adx" onclick="ts('adx',this)" title="ADX (Indice Direccional Promedio) 0-100: mide la fuerza de la tendencia, no la direccion. Menos de 20 = sin tendencia, 20-25 debil, 25-50 fuerte, mas de 50 muy fuerte.">ADX<span class="sort-icon">⇅</span></th>
           <th style="width:68px" data-field="distEma200" onclick="ts('distEma200',this)">EMA200%<span class="sort-icon">⇅</span></th>
           <th style="width:65px" data-field="volume" onclick="ts('volume',this)">Vol<span class="sort-icon">⇅</span></th>
           <th style="width:65px" data-field="avgVol20" onclick="ts('avgVol20',this)">Vol20<span class="sort-icon">⇅</span></th>
-          <th style="width:108px">Squeeze Mom</th>
+          <th style="width:108px" title="TTM Squeeze Momentum: detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom</th>
           <th style="width:44px" data-field="beta" onclick="ts('beta',this)">Beta<span class="sort-icon">⇅</span></th>
           <th style="width:54px">Spark</th>
         </tr></thead>
@@ -1274,8 +1286,8 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
               <th style="width:100px" onclick="tsMkt('ar','symbol',this)">Ticker<span class="sort-icon">⇅</span></th>
               <th style="width:90px" onclick="tsMkt('ar','price',this)">Precio (ARS)<span class="sort-icon">⇅</span></th>
               <th style="width:58px" onclick="tsMkt('ar','chgPct',this)">% Día<span class="sort-icon">⇅</span></th>
-              <th style="width:58px" onclick="tsMkt('ar','rsi',this)">RSI<span class="sort-icon">⇅</span></th>
-              <th style="width:58px" onclick="tsMkt('ar','adx',this)">ADX<span class="sort-icon">⇅</span></th>
+              <th style="width:58px" onclick="tsMkt('ar','rsi',this)" title="RSI (Indice de Fuerza Relativa) 0-100: mide la velocidad de los cambios de precio. Menos de 30 = sobrevendido (posible rebote). Mas de 70 = sobrecomprado (posible correccion).">RSI<span class="sort-icon">⇅</span></th>
+              <th style="width:58px" onclick="tsMkt('ar','adx',this)" title="ADX (Indice Direccional Promedio) 0-100: mide la fuerza de la tendencia, no la direccion. Menos de 20 = sin tendencia, 20-25 debil, 25-50 fuerte, mas de 50 muy fuerte.">ADX<span class="sort-icon">⇅</span></th>
               <th style="width:70px" onclick="tsMkt('ar','distEma50',this)">EMA50%<span class="sort-icon">⇅</span></th>
               <th style="width:70px" onclick="tsMkt('ar','distEma200',this)">EMA200%<span class="sort-icon">⇅</span></th>
               <th style="width:70px" onclick="tsMkt('ar','yearHigh',this)">Máx 52s<span class="sort-icon">⇅</span></th>
@@ -1304,363 +1316,30 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
          MAPA DE CALOR TAB
     ═══════════════════════════════════════════════════════ -->
     <div class="tab-panel" id="tab-heatmap">
+      <div class="hm-section-title">📊 ÍNDICES Y COMMODITIES</div>
+      <div id="hmIndicesGrid" class="hm-idx-grid"></div>
+
       <div id="hmGaugeContainer"></div>
       <div class="hm-cards" id="hmCardsContainer"></div>
-      <div class="tbl-wrap" style="padding:14px;background:var(--bg2);border:1px solid var(--border);border-radius:2px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
-          <div style="font-family:var(--head);font-weight:900;font-size:13px;letter-spacing:2px;color:var(--text-bright)">🔥 HEATMAP DE ACCIONES <span style="color:var(--text-dim);font-weight:400">— tamaño según cap. de mercado, color según % del día</span></div>
-        </div>
-        <div id="hmGrid" class="hm-grid"></div>
-      </div>
-    </div>
 
-    <!-- ═══════════════════════════════════════════════════════
-         PORTAFOLIO TAB
-    ═══════════════════════════════════════════════════════ -->
-    <div class="tab-panel" id="tab-portfolio">
-
-      <!-- ACCOUNT TABS -->
-      <div class="pf-account-bar" id="pfAccountBar">
-        <div class="pf-account-tabs" id="pfAccountTabs"></div>
-        <button class="btn btn-r btn-sm pf-acct-del-btn" onclick="pfDeleteAccount(pfActiveAcctId)" title="Eliminar cuenta activa" style="font-size:11px;padding:3px 9px">🗑 Cuenta</button>
+      <div class="hm-period-bar">
+        <span>VER VARIACIÓN:</span>
+        <button class="hm-period-btn active" data-period="day" onclick="setHmPeriod('day')">Día</button>
+        <button class="hm-period-btn" data-period="week" onclick="setHmPeriod('week')">Semana</button>
+        <button class="hm-period-btn" data-period="month" onclick="setHmPeriod('month')">Mes</button>
+        <button class="hm-period-btn" data-period="year" onclick="setHmPeriod('year')">Año</button>
+        <span id="hmPeriodStatus" style="margin-left:8px;color:var(--text-dim)"></span>
       </div>
 
-      <!-- TOP TOOLBAR -->
-      <div class="pf-toolbar">
-        <div class="pf-toolbar-left">
-          <!-- Toggle USD / ARS -->
-          <div class="pf-view-tabs">
-            <button class="pf-view-btn active" id="pfBtnUSD" onclick="pfSetView('USD')">USD</button>
-            <button class="pf-view-btn" id="pfBtnARS" onclick="pfSetView('ARS')">ARS</button>
-          </div>
-          <div class="pf-mep-wrap">
-            <span style="color:var(--text-dim);font-family:var(--mono);font-size:11px;letter-spacing:1px">MEP:</span>
-            <input type="number" id="pfMepRate" class="pf-mep-input" value="1200" min="1" onchange="pfRefreshAll()" title="Tipo de cambio dólar MEP">
-            <button id="pfMepAutoBtn" class="btn btn-a btn-sm" onclick="pfFetchMepAuto()" title="Obtener MEP automático" style="font-size:11px;padding:3px 8px">⟳ AUTO</button>
-          </div>
-        </div>
-        <div class="pf-toolbar-right">
-          <input type="text" id="pfSearch" class="pf-search-input" placeholder="🔎 Buscar ticker..." oninput="pfApplyFilters()">
-          <select class="sel" id="pfSortSelect" onchange="pfApplyFilters()" style="font-size:12px;padding:5px 8px">
-            <option value="ticker">Ordenar: Ticker</option>
-            <option value="rendPct_desc">Mayor Rend. %</option>
-            <option value="rendPct_asc">Menor Rend. %</option>
-            <option value="valor_desc">Mayor Valor</option>
-            <option value="fecha_desc">Más reciente</option>
-            <option value="fecha_asc">Más antiguo</option>
-          </select>
-          <button class="btn btn-g btn-sm" onclick="pfExportCSV()">⬇ CSV</button>
-          <button class="btn btn-y btn-sm" onclick="pfOpenImportModal()" style="font-size:11px">📥 IMPORTAR</button>
-          <button class="btn btn-a btn-sm" id="pfRefreshBtn" onclick="pfRefreshAllPrices()" title="Actualizar todos los precios en tiempo real" style="font-size:11px">⟳ PRECIOS</button>
-          <button class="btn btn-a btn-sm" onclick="pfOpenAddModal()">＋ AGREGAR</button>
-          <button class="btn btn-r btn-sm" onclick="pfClearAll()" title="Eliminar todo el portafolio" style="font-size:11px">🗑 BORRAR TODO</button>
-        </div>
-      </div>
+      <div class="hm-section-title">🌎 INTERNACIONAL — por sector</div>
+      <div id="hmGridIntl"></div>
 
-      <!-- SUMMARY CARDS -->
-      <div class="pf-summary-grid">
-        <div class="pf-sum-card">
-          <div class="pf-sum-icon">💰</div>
-          <div class="pf-sum-body">
-            <div class="pf-sum-lbl">Valor Total</div>
-            <div class="pf-sum-val" id="pfValTotal">—</div>
-            <div class="pf-sum-sub" id="pfValTotalSub">0 posiciones</div>
-          </div>
-        </div>
-        <div class="pf-sum-card">
-          <div class="pf-sum-icon">📈</div>
-          <div class="pf-sum-body">
-            <div class="pf-sum-lbl">Ganancia / Pérdida <span style="font-size:9px;opacity:.6;letter-spacing:1px">HISTÓRICA</span></div>
-            <div class="pf-sum-val" id="pfGanancia">—</div>
-            <div class="pf-sum-sub" id="pfGananciaSub">—</div>
-          </div>
-        </div>
-        <div class="pf-sum-card">
-          <div class="pf-sum-icon">📊</div>
-          <div class="pf-sum-body">
-            <div class="pf-sum-lbl">Rendimiento <span style="font-size:9px;opacity:.6;letter-spacing:1px">HISTÓRICO</span></div>
-            <div class="pf-sum-val" id="pfRendTotal">—</div>
-            <div class="pf-sum-sub" id="pfRendTotalSub">vs costo total</div>
-          </div>
-        </div>
-        <!-- CARD DIARIA -->
-        <div class="pf-sum-card pf-today-card">
-          <div class="pf-sum-icon">⚡</div>
-          <div class="pf-sum-body">
-            <div class="pf-sum-lbl">Resultado <span style="font-size:9px;opacity:.6;letter-spacing:1px">HOY</span></div>
-            <div class="pf-sum-val" id="pfGananciaHoy">—</div>
-            <div class="pf-sum-sub" id="pfGananciaHoySub">variación del día</div>
-          </div>
-        </div>
-        <!-- LIQUIDEZ DUAL ARS + USD -->
-        <div class="pf-sum-card pf-liquidity-card">
-          <div class="pf-sum-icon">💵</div>
-          <div class="pf-sum-body">
-            <div class="pf-sum-lbl">Liquidez</div>
-            <div class="pf-sum-val" id="pfLiquidezDisplay">—</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
-              <div>
-                <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:1px;margin-bottom:3px">PESOS $</div>
-                <input type="number" id="pfLiquidezARS" class="pf-mep-input" placeholder="0" min="0" onchange="pfUpdateLiquidez()" style="width:100%" title="Liquidez en pesos argentinos">
-              </div>
-              <div>
-                <div style="font-family:var(--mono);font-size:9px;color:var(--accent);letter-spacing:1px;margin-bottom:3px">DÓLARES U$D</div>
-                <input type="number" id="pfLiquidezUSD" class="pf-mep-input" placeholder="0" min="0" onchange="pfUpdateLiquidez()" style="width:100%;border-color:var(--accent2)" title="Liquidez en dólares">
-              </div>
-            </div>
-          </div>
-        </div>
-        <!-- REALIZADO -->
-        <div class="pf-sum-card realized">
-          <div class="pf-sum-icon">🏁</div>
-          <div class="pf-sum-body">
-            <div class="pf-sum-lbl">Realizado <span style="font-size:9px;opacity:.6;letter-spacing:1px">TRADES CERRADOS</span></div>
-            <div class="pf-sum-val" id="pfRealizado">—</div>
-            <div class="pf-sum-sub" id="pfRealizadoSub">0 trades cerrados</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- DISTRIBUTION BAR -->
-      <div class="pf-dist-section">
-        <div class="pf-dist-header">
-          <span class="pf-dist-title">◆ DISTRIBUCIÓN</span>
-          <span style="font-family:var(--mono);font-size:11px;color:var(--text-dim)" id="pfDistCount">0 instrumentos</span>
-        </div>
-        <div class="pf-dist-bar" id="pfDistBar"></div>
-        <div class="pf-dist-legend" id="pfDistLegend"></div>
-      </div>
-
-      <!-- PORTFOLIO TABLE -->
-      <div class="pf-table-header">
-        <span class="pf-section-title">◆ POSICIONES</span>
-        <div style="display:flex;gap:8px;align-items:center">
-          <span class="pf-currency-badge" id="pfCurrencyBadge">USD</span>
-        </div>
-      </div>
-      <div class="tbl-wrap" style="overflow-x:auto">
-        <table class="dt" id="pfTable">
-          <thead>
-            <tr>
-              <th style="width:36px;text-align:center">⭐</th>
-              <th style="width:110px" onclick="pfSortByCol('ticker',this)">Ticker<span class="sort-icon">⇅</span></th>
-              <th onclick="pfSortByCol('cantidad',this)">Cant.<span class="sort-icon">⇅</span></th>
-              <th onclick="pfSortByCol('precioCompra',this)">P.Compra<span class="sort-icon">⇅</span></th>
-              <th onclick="pfSortByCol('precioActual',this)">P.Actual<span class="sort-icon">⇅</span></th>
-              <th onclick="pfSortByCol('costTotal',this)">Costo Total<span class="sort-icon">⇅</span></th>
-              <th onclick="pfSortByCol('valActual',this)">Val.Actual<span class="sort-icon">⇅</span></th>
-              <th onclick="pfSortByCol('rendUsd',this)">Rend ($)<span class="sort-icon">⇅</span></th>
-              <th onclick="pfSortByCol('rendPct',this)">Rend (%)<span class="sort-icon">⇅</span></th>
-              <th onclick="pfSortByCol('fecha',this)">Fecha<span class="sort-icon">⇅</span></th>
-              <th style="width:90px;text-align:center">Indicador</th>
-              <th style="width:110px;text-align:center">Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="pfBody"></tbody>
-        </table>
-      </div>
-      <div id="pfEmpty" style="display:none;text-align:center;padding:60px 20px;font-family:var(--mono);color:var(--text-dim)">
-        <div style="font-size:48px;margin-bottom:12px">💼</div>
-        <div style="font-size:14px;letter-spacing:2px">SIN POSICIONES REGISTRADAS</div>
-        <div style="font-size:12px;margin-top:6px">Hacé clic en <strong style="color:var(--accent)">＋ AGREGAR</strong> para cargar tu primera inversión</div>
-      </div>
-
-      <!-- ── TRADES CERRADOS ── -->
-      <div class="pf-closed-section" id="pfClosedSection" style="display:none">
-        <div class="pf-closed-header">
-          <span class="pf-closed-title">🏁 TRADES CERRADOS <span class="sec-cnt" id="pfClosedCount">0</span></span>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <span style="font-family:var(--mono);font-size:11px;color:var(--text-dim)">P&L realizado:</span>
-            <span id="pfClosedPnlBadge" style="font-family:var(--mono);font-size:13px;font-weight:700">—</span>
-            <button class="btn btn-sm" style="border-color:rgba(255,61,90,0.4);color:var(--red);font-size:11px;padding:3px 8px" onclick="pfClearClosedTrades()" title="Eliminar todos los trades cerrados">🗑 Limpiar</button>
-          </div>
-        </div>
-        <div class="tbl-wrap" style="overflow-x:auto">
-          <table class="dt" id="pfClosedTable">
-            <thead>
-              <tr>
-                <th style="width:110px">Ticker</th>
-                <th>Cant.</th>
-                <th>P.Compra</th>
-                <th>P.Venta</th>
-                <th>Costo Total</th>
-                <th>Valor Venta</th>
-                <th>P&L ($)</th>
-                <th>P&L (%)</th>
-                <th>F.Compra</th>
-                <th>F.Venta</th>
-                <th style="width:90px;text-align:center">Resultado</th>
-                <th style="width:50px;text-align:center">✕</th>
-              </tr>
-            </thead>
-            <tbody id="pfClosedBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- ── RENDIMIENTO HISTÓRICO ANUAL ── -->
-      <div style="margin-top:28px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:10px">
-          <div style="display:flex;align-items:center;gap:10px">
-            <span style="font-family:var(--head);font-weight:900;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--text-bright)">📊 RENDIMIENTO HISTÓRICO ANUAL</span>
-            <span style="font-family:var(--mono);font-size:11px;color:var(--text-dim);background:var(--bg3);border:1px solid var(--border);padding:2px 8px;border-radius:2px">basado en trades cerrados</span>
-          </div>
-        </div>
-        <div id="pfAnualPerfContainer"></div>
-      </div>
-
-    </div><!-- /#tab-portfolio -->
-
-    <!-- MODAL: Agregar / Editar posición -->
-    <div class="pf-modal-overlay" id="pfModalOverlay">
-      <div class="pf-modal" onclick="event.stopPropagation()">
-        <div class="pf-modal-header">
-          <div class="pf-modal-title" id="pfModalTitle">＋ AGREGAR POSICIÓN</div>
-          <button class="tv-close" onclick="pfCloseModalForce()">✕</button>
-        </div>
-        <div class="pf-modal-body">
-          <input type="hidden" id="pfEditId">
-          <div class="pf-form-grid">
-            <div class="pf-field">
-              <label>Ticker *</label>
-              <input type="text" id="pfFTicker" class="pf-input" placeholder="Ej: AAPL, HPQ, MO" maxlength="12" style="text-transform:uppercase">
-            </div>
-            <div class="pf-field">
-              <label>Nombre / Descripción</label>
-              <input type="text" id="pfFNombre" class="pf-input" placeholder="Ej: Hewlett Packard">
-            </div>
-            <div class="pf-field">
-              <label>Cantidad *</label>
-              <input type="number" id="pfFCantidad" class="pf-input" placeholder="162" min="0" step="any">
-            </div>
-            <!-- Moneda de la posición -->
-            <div class="pf-field">
-              <label>Moneda de los precios *</label>
-              <div style="display:flex;gap:6px">
-                <button class="pf-cur-sel-btn active" id="pfCurBtnARS" onclick="pfSelectCurrency('ARS')">$ ARS</button>
-                <button class="pf-cur-sel-btn" id="pfCurBtnUSD" onclick="pfSelectCurrency('USD')">U$D USD</button>
-              </div>
-              <input type="hidden" id="pfFMoneda" value="ARS">
-            </div>
-            <div class="pf-field">
-              <label>Precio de Compra <span id="pfFPCLabel" style="color:var(--yellow)">(ARS)</span> *</label>
-              <input type="number" id="pfFPrecioCompra" class="pf-input" placeholder="27.708,89" min="0" step="any">
-            </div>
-            <div class="pf-field">
-              <label>Precio Actual <span id="pfFPALabel" style="color:var(--yellow)">(ARS)</span></label>
-              <div style="display:flex;gap:6px">
-                <input type="number" id="pfFPrecioActual" class="pf-input" placeholder="Auto" min="0" step="any" style="flex:1">
-                <button class="btn btn-a btn-sm" onclick="pfFetchPrice()" title="Obtener precio en tiempo real">⟳ LIVE</button>
-              </div>
-            </div>
-            <div class="pf-field">
-              <label>Fecha de Compra</label>
-              <input type="date" id="pfFFecha" class="pf-input">
-            </div>
-          </div>
-          <div id="pfFormError" style="display:none;background:rgba(255,61,90,0.1);border:1px solid var(--red2);color:var(--red);font-family:var(--mono);font-size:12px;padding:8px 12px;border-radius:2px;margin-top:8px"></div>
-          <div id="pfFetchStatus" style="display:none;font-family:var(--mono);font-size:11px;color:var(--accent);margin-top:6px;letter-spacing:1px"></div>
-        </div>
-        <div class="pf-modal-footer">
-          <button class="btn btn-r btn-sm" onclick="pfCloseModalForce()">Cancelar</button>
-          <button class="btn btn-g btn-sm" onclick="pfSavePosition()">💾 GUARDAR</button>
-        </div>
-      </div>
+      <div class="hm-section-title">🇦🇷 ARGENTINA — MERVAL</div>
+      <div id="hmGridAR"></div>
     </div>
 
   </div>
 </div>
-
-
-<!-- MODAL: Vender posición -->
-<div class="pf-modal-overlay" id="pfSellModalOverlay">
-  <div class="pf-modal" style="max-width:500px" onclick="event.stopPropagation()">
-    <div class="pf-modal-header">
-      <div class="pf-modal-title" style="color:var(--yellow)">💰 REGISTRAR VENTA</div>
-      <button class="tv-close" onclick="pfCloseSellModalForce()">✕</button>
-    </div>
-    <div class="pf-modal-body">
-      <input type="hidden" id="pfSellPosId">
-      <div id="pfSellInfo" style="background:rgba(255,214,0,0.06);border:1px solid rgba(255,214,0,0.25);border-radius:2px;padding:12px;margin-bottom:12px;font-family:var(--mono);font-size:12px;color:var(--text-dim);display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-        <div><div style="font-size:10px;letter-spacing:1px;margin-bottom:3px">TICKER</div><div id="pfSellTicker" style="color:var(--text-bright);font-weight:700;font-size:15px;letter-spacing:2px">—</div></div>
-        <div><div style="font-size:10px;letter-spacing:1px;margin-bottom:3px">TENENCIA</div><div id="pfSellTenencia" style="color:var(--text-bright)">—</div></div>
-        <div><div style="font-size:10px;letter-spacing:1px;margin-bottom:3px">P.COMPRA</div><div id="pfSellPCompra" style="color:var(--text-bright)">—</div></div>
-      </div>
-      <div class="pf-form-grid">
-        <div class="pf-field"><label>Cantidad a vender *</label><input type="number" id="pfSellCantidad" class="pf-input" placeholder="Ej: 100" min="0" step="any" oninput="pfSellCalcPreview()"></div>
-        <div class="pf-field"><label>Precio de Venta * <span id="pfSellMonedaLabel" style="color:var(--yellow)">(ARS)</span></label><div style="display:flex;gap:6px"><input type="number" id="pfSellPrecioVenta" class="pf-input" placeholder="Precio" min="0" step="any" style="flex:1" oninput="pfSellCalcPreview()"><button class="btn btn-a btn-sm" onclick="pfSellFetchLive()">⟳ LIVE</button></div></div>
-        <div class="pf-field"><label>Fecha de Venta</label><input type="date" id="pfSellFecha" class="pf-input"></div>
-        <div class="pf-field"><label>Nota / Motivo</label><input type="text" id="pfSellNota" class="pf-input" placeholder="Ej: Take profit, stop loss..."></div>
-      </div>
-      <div id="pfSellPreview" style="display:none;margin-top:12px;background:var(--bg3);border:1px solid var(--border2);border-radius:2px;padding:12px;font-family:var(--mono);font-size:12px">
-        <div style="font-size:10px;letter-spacing:2px;color:var(--text-dim);margin-bottom:10px;font-family:var(--head);font-weight:700">PREVIEW P&amp;L</div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
-          <div><div style="font-size:10px;color:var(--text-dim);letter-spacing:1px;margin-bottom:2px">COSTO</div><div id="pfSellPreviewCosto" style="color:var(--text-bright)">—</div></div>
-          <div><div style="font-size:10px;color:var(--text-dim);letter-spacing:1px;margin-bottom:2px">INGRESO</div><div id="pfSellPreviewIngreso" style="color:var(--text-bright)">—</div></div>
-          <div><div style="font-size:10px;color:var(--text-dim);letter-spacing:1px;margin-bottom:2px">P&amp;L</div><div id="pfSellPreviewPnl" style="font-weight:700;font-size:14px">—</div></div>
-        </div>
-        <div id="pfSellPartialNote" style="display:none;margin-top:8px;font-size:10px;color:var(--yellow);letter-spacing:.5px">⚡ Venta parcial — la posición se actualizará con la cantidad restante</div>
-      </div>
-      <div id="pfSellError" style="display:none;background:rgba(255,61,90,0.1);border:1px solid var(--red2);color:var(--red);font-family:var(--mono);font-size:12px;padding:8px 12px;border-radius:2px;margin-top:8px"></div>
-      <div id="pfSellLiveStatus" style="display:none;font-family:var(--mono);font-size:11px;color:var(--accent);margin-top:6px;letter-spacing:1px"></div>
-    </div>
-    <div class="pf-modal-footer">
-      <button class="btn btn-r btn-sm" onclick="pfCloseSellModalForce()">Cancelar</button>
-      <button class="btn btn-sm" style="background:rgba(255,214,0,0.15);border-color:var(--yellow);color:var(--yellow);font-weight:700" onclick="pfConfirmSell()">💰 CONFIRMAR VENTA</button>
-    </div>
-  </div>
-</div>
-<!-- TRADINGVIEW MODAL -->
-<div class="tv-modal-overlay" id="tvModalOverlay" onclick="closeTVModal(event)">
-  <div class="tv-modal">
-    <div class="tv-modal-header">
-      <div class="tv-modal-title">
-        <span>📈</span>
-        <span class="tv-modal-sym" id="tvModalSym">--</span>
-        <span style="color:var(--text-dim);font-weight:300;font-size:14px">— TradingView</span>
-      </div>
-      <div class="tv-modal-actions">
-        <a id="tvOpenLink" href="#" target="_blank" class="btn btn-a btn-sm" style="text-decoration:none">↗ ABRIR EN TV</a>
-        <button class="tv-close" onclick="document.getElementById('tvModalOverlay').classList.remove('open')">✕</button>
-      </div>
-    </div>
-    <div class="tv-modal-body" id="tvModalBody"></div>
-  </div>
-</div>
-
-    <!-- MODAL: Importar CSV broker -->
-    <div class="pf-modal-overlay" id="pfImportOverlay">
-      <div class="pf-modal" style="max-width:560px" onclick="event.stopPropagation()">
-        <div class="pf-modal-header">
-          <div class="pf-modal-title">📥 IMPORTAR DESDE CSV</div>
-          <button class="tv-close" onclick="pfCloseImportForce()">✕</button>
-        </div>
-        <div class="pf-modal-body" style="gap:12px">
-          <div style="background:rgba(0,212,255,0.06);border:1px solid var(--border2);border-radius:2px;padding:12px;font-family:var(--mono);font-size:11px;color:var(--text-dim);line-height:1.7">
-            <b style="color:var(--accent)">Formatos compatibles:</b><br>
-            ✓ <b style="color:var(--text)">Balanz</b> — CSV exportado desde la plataforma<br>
-            ✓ <b style="color:var(--text)">Bull Market</b> — CSV de cartera/posiciones<br>
-            ✓ <b style="color:var(--text)">IOL (InvertirOnLine)</b> — CSV de posiciones<br>
-            ✓ <b style="color:var(--text)">Genérico</b> — columnas: ticker, cantidad, precio_compra, precio_actual, fecha<br>
-            <br>
-            <b style="color:var(--yellow)">⚠ Los precios en ARS se convierten a USD usando el MEP configurado.</b>
-          </div>
-          <div class="pf-field">
-            <label>Archivo CSV</label>
-            <input type="file" id="pfImportFileInput" accept=".csv,.txt" class="pf-input" style="padding:6px">
-          </div>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-family:var(--mono);font-size:12px;color:var(--text-dim)">
-            <input type="checkbox" id="pfImportMerge" style="accent-color:var(--accent)">
-            Agregar todo sin verificar duplicados
-          </label>
-          <div id="pfImportResult" style="font-family:var(--mono);font-size:12px;min-height:16px"></div>
-        </div>
-        <div class="pf-modal-footer">
-          <button class="btn btn-r btn-sm" onclick="pfCloseImportForce()">Cancelar</button>
-          <button class="btn btn-g btn-sm" onclick="pfImportCSV()">📥 IMPORTAR</button>
-        </div>
-      </div>
-    </div>
 
 </div><!-- /#appRoot -->
 
@@ -2539,6 +2218,9 @@ async function cargarCompleto() {
   // Cargar fechas de earnings en background
   var symsParaEarnings = allData.map(function(d){return d.symbol;}).filter(function(s){return SECTORS[s]!=='ETF';});
   fetchEarnings(symsParaEarnings).then(function(){ renderAllTab(); renderEarningsTab(); });
+  // Completar Máx/Mín diario y 52 semanas en background (Yahoo Finance, best-effort)
+  var symsParaHL = allData.map(function(d){ return d.symbol; });
+  fetchHighLow52Supplement(symsParaHL).then(applyHighLowSupplement);
 }
 
 // ── AUTO-REFRESH ──────────────────────────────────
@@ -2626,20 +2308,18 @@ function normalizeHL(d) {
                ((d.distFromLow != null && d.price != null) ? d.price / (1 + d.distFromLow / 100) : null))));
 }
 
+// Resuelve el símbolo real a usar contra Yahoo Finance
+function resolveYahooSymbol(sym) {
+  var symUp = sym.toUpperCase();
+  if (YF_SYMBOL_MAP[symUp]) return YF_SYMBOL_MAP[symUp];
+  if (!sym.endsWith('.BA') && ARG_ADR_MAP[symUp]) return ARG_ADR_MAP[symUp];
+  if (!sym.endsWith('.BA') && MERVAL_TICKERS[symUp] === 1) return sym + '.BA';
+  return sym;
+}
+
 async function fetchQuote(sym) {
   try {
-    var fetchSym = sym;
-    var symUp = sym.toUpperCase();
-    // Primero revisar si tiene un mapeo especial forzado
-    if (YF_SYMBOL_MAP[symUp]) {
-      fetchSym = YF_SYMBOL_MAP[symUp];
-    // Si es una acción argentina con ADR y se cargó SIN .BA → usar ADR en USD
-    } else if (!sym.endsWith('.BA') && ARG_ADR_MAP[symUp]) {
-      fetchSym = ARG_ADR_MAP[symUp];
-    // Si es argentina sin ADR conocido → agregar .BA para cotización en pesos
-    } else if (!sym.endsWith('.BA') && MERVAL_TICKERS[symUp] === 1) {
-      fetchSym = sym + '.BA';
-    }
+    var fetchSym = resolveYahooSymbol(sym);
     var r = await fetch(API+'/quote?symbol='+fetchSym, {signal: AbortSignal.timeout(8000)});
     if (!r.ok) {
       markTickerError(sym, 'HTTP '+r.status);
@@ -2662,6 +2342,80 @@ async function fetchQuote(sym) {
     console.warn('Error fetching', sym, e.message);
     return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, marketCap: null, mom12m: null, mom6m: null, sector: SECTORS[sym] || (isArgentineTicker(sym) ? 'Merval' : 'Otros'), _error: true, _flash: '' };
   }
+}
+
+// ── SUPLEMENTO: Máx/Mín diario y de 52 semanas vía Yahoo Finance ──
+// El backend propio no siempre expone estos campos, así que se completan
+// con un fetch batch (varios símbolos por request) contra Yahoo Finance
+// usando proxies CORS públicos, igual que en el fallback del portafolio.
+var HL_PROXIES = [
+  function(u){ return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u); },
+  function(u){ return 'https://corsproxy.io/?'+encodeURIComponent(u); },
+  function(u){ return 'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u); }
+];
+
+function fetchHLBatchOnce(yahooSymsCsv) {
+  var url = 'https://query1.finance.yahoo.com/v7/finance/quote?symbols=' + encodeURIComponent(yahooSymsCsv);
+  var idx = 0;
+  function tryNext() {
+    if (idx >= HL_PROXIES.length) return Promise.resolve([]);
+    var proxyFn = HL_PROXIES[idx++];
+    return fetch(proxyFn(url), {signal: AbortSignal.timeout(9000)})
+      .then(function(r){ if(!r.ok) throw 0; return r.json(); })
+      .then(function(data){
+        var res = data && data.quoteResponse && data.quoteResponse.result;
+        return Array.isArray(res) ? res : [];
+      })
+      .catch(function(){ return tryNext(); });
+  }
+  return tryNext();
+}
+
+async function fetchHighLow52Supplement(symbols) {
+  var out = {};
+  // Mapear cada símbolo local → símbolo Yahoo, agrupando por lotes
+  var yahooMap = {}; // yahooSym(upper) -> [symOriginal,...]
+  symbols.forEach(function(sym){
+    var ys = resolveYahooSymbol(sym).toUpperCase();
+    if (!yahooMap[ys]) yahooMap[ys] = [];
+    yahooMap[ys].push(sym);
+  });
+  var yahooSyms = Object.keys(yahooMap);
+  var BATCH = 25;
+  for (var i = 0; i < yahooSyms.length; i += BATCH) {
+    var batch = yahooSyms.slice(i, i+BATCH);
+    try {
+      var results = await fetchHLBatchOnce(batch.join(','));
+      results.forEach(function(q){
+        if (!q || !q.symbol) return;
+        var origs = yahooMap[q.symbol.toUpperCase()];
+        if (!origs) return;
+        origs.forEach(function(orig){
+          out[orig] = {
+            dayHigh:  q.regularMarketDayHigh  != null ? q.regularMarketDayHigh  : null,
+            dayLow:   q.regularMarketDayLow   != null ? q.regularMarketDayLow   : null,
+            yearHigh: q.fiftyTwoWeekHigh      != null ? q.fiftyTwoWeekHigh      : null,
+            yearLow:  q.fiftyTwoWeekLow       != null ? q.fiftyTwoWeekLow       : null
+          };
+        });
+      });
+    } catch(e) { /* silencioso — se mantiene el fallback existente */ }
+  }
+  return out;
+}
+
+function applyHighLowSupplement(map) {
+  var changed = false;
+  allData.forEach(function(d){
+    var s = map[d.symbol];
+    if (!s) return;
+    if (s.dayHigh  != null) d.dayHigh  = s.dayHigh;
+    if (s.dayLow   != null) d.dayLow   = s.dayLow;
+    if (s.yearHigh != null) d.yearHigh = s.yearHigh;
+    if (s.yearLow  != null) d.yearLow  = s.yearLow;
+    changed = true;
+  });
+  if (changed) { applyFilters(); }
 }
 
 // ── FILTERS ───────────────────────────────────────
@@ -3017,9 +2771,9 @@ function renderTech(){
       '<div class="tbl-wrap" style="border-radius:0 0 2px 2px"><table class="dt" style="min-width:720px">' +
         '<thead><tr>' +
           '<th style="width:75px">Ticker</th><th style="width:68px">Precio</th><th style="width:56px">% Día</th>' +
-          '<th style="width:56px">RSI</th><th style="width:56px">ADX</th><th style="width:68px">EMA200%</th>' +
+          '<th style="width:56px" title="RSI (Indice de Fuerza Relativa) 0-100: mide la velocidad de los cambios de precio. Menos de 30 = sobrevendido (posible rebote). Mas de 70 = sobrecomprado (posible correccion).">RSI</th><th style="width:56px" title="ADX (Indice Direccional Promedio) 0-100: mide la fuerza de la tendencia, no la direccion. Menos de 20 = sin tendencia, 20-25 debil, 25-50 fuerte, mas de 50 muy fuerte.">ADX</th><th style="width:68px">EMA200%</th>' +
           '<th style="width:65px">Vol</th><th style="width:65px">Vol20</th>' +
-          '<th style="width:108px">Squeeze Mom</th><th style="width:44px">Beta</th>' +
+          '<th style="width:108px" title="TTM Squeeze Momentum: detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom</th><th style="width:44px">Beta</th>' +
           '<th style="width:54px">Spark</th>' +
         '</tr></thead>' +
         '<tbody>' + secData.map(makeRow).join('') + '</tbody>' +
@@ -3266,8 +3020,8 @@ function renderAllTab() {
             '<th style="width:75px" onclick="tsMkt(\'gl\',\'symbol\',this)">Ticker<span class="sort-icon">⇅</span></th>' +
             '<th style="width:68px" onclick="tsMkt(\'gl\',\'price\',this)">Precio<span class="sort-icon">⇅</span></th>' +
             '<th style="width:56px" onclick="tsMkt(\'gl\',\'chgPct\',this)">% Día<span class="sort-icon">⇅</span></th>' +
-            '<th style="width:56px" onclick="tsMkt(\'gl\',\'rsi\',this)">RSI<span class="sort-icon">⇅</span></th>' +
-            '<th style="width:56px" onclick="tsMkt(\'gl\',\'adx\',this)">ADX<span class="sort-icon">⇅</span></th>' +
+            '<th style="width:56px" onclick="tsMkt(\'gl\',\'rsi\',this)" title="RSI (Indice de Fuerza Relativa) 0-100: mide la velocidad de los cambios de precio. Menos de 30 = sobrevendido (posible rebote). Mas de 70 = sobrecomprado (posible correccion).">RSI<span class="sort-icon">⇅</span></th>' +
+            '<th style="width:56px" onclick="tsMkt(\'gl\',\'adx\',this)" title="ADX (Indice Direccional Promedio) 0-100: mide la fuerza de la tendencia, no la direccion. Menos de 20 = sin tendencia, 20-25 debil, 25-50 fuerte, mas de 50 muy fuerte.">ADX<span class="sort-icon">⇅</span></th>' +
             '<th style="width:68px" onclick="tsMkt(\'gl\',\'distEma50\',this)">EMA50%<span class="sort-icon">⇅</span></th>' +
             '<th style="width:68px" onclick="tsMkt(\'gl\',\'distEma200\',this)">EMA200%<span class="sort-icon">⇅</span></th>' +
             '<th style="width:66px" onclick="tsMkt(\'gl\',\'yearHigh\',this)">Máx 52s<span class="sort-icon">⇅</span></th>' +
@@ -3297,6 +3051,25 @@ function renderAllTab() {
 // ═══════════════════════════════════════════════════
 // MAPA DE CALOR
 // ═══════════════════════════════════════════════════
+var hmPeriod = 'day'; // 'day' | 'week' | 'month' | 'year'
+var HM_RANGE = { day: 3, week: 6, month: 12, year: 30 };
+var HM_LABEL = { day: 'DÍA', week: 'SEMANA', month: 'MES', year: 'AÑO' };
+
+function getChgForPeriod(d, period) {
+  if (period === 'week')  return d.chgWeek  != null ? d.chgWeek  : null;
+  if (period === 'month') return d.chgMonth != null ? d.chgMonth : null;
+  if (period === 'year')  return d.chgYear  != null ? d.chgYear  : null;
+  return d.chgPct;
+}
+
+function setHmPeriod(period) {
+  hmPeriod = period;
+  document.querySelectorAll('.hm-period-btn').forEach(function(b){
+    b.classList.toggle('active', b.getAttribute('data-period') === period);
+  });
+  renderHeatmap();
+}
+
 function computeFearGreed(data) {
   var withChg = data.filter(function(d){ return d.chgPct != null; });
   if (!withChg.length) return null;
@@ -3351,7 +3124,6 @@ function fearGreedGaugeSVG(fg) {
   }
 
   var svg = '<svg viewBox="0 0 260 145" width="260" height="145">';
-  // Bandas de color (miedo extremo → codicia extrema)
   var bands = [
     [180,144,'var(--red)'],[144,108,'#ff8c69'],[108,72,'var(--yellow)'],
     [72,36,'#9be564'],[36,0,'var(--green)']
@@ -3359,28 +3131,101 @@ function fearGreedGaugeSVG(fg) {
   bands.forEach(function(b){
     svg += '<path d="'+arcPath(b[0],b[1],r)+'" stroke="'+b[2]+'" stroke-width="14" fill="none" stroke-linecap="butt" opacity="0.85"/>';
   });
-  // Aguja
   svg += '<line x1="'+cx+'" y1="'+cy+'" x2="'+nx+'" y2="'+ny+'" stroke="var(--text-bright)" stroke-width="3" stroke-linecap="round"/>';
   svg += '<circle cx="'+cx+'" cy="'+cy+'" r="6" fill="var(--text-bright)"/>';
   svg += '</svg>';
   return svg;
 }
 
+function mixColor(c1, c2, t) {
+  t = Math.max(0, Math.min(1, t));
+  var r = Math.round(c1[0] + (c2[0]-c1[0])*t);
+  var g = Math.round(c1[1] + (c2[1]-c1[1])*t);
+  var b = Math.round(c1[2] + (c2[2]-c1[2])*t);
+  return 'rgb('+r+','+g+','+b+')';
+}
+
+function heatBoxHTML(d, period) {
+  var chg = getChgForPeriod(d, period);
+  var chgShown = chg != null ? chg : 0;
+  var range = HM_RANGE[period] || 3;
+  var clamped = Math.max(-range, Math.min(range, chgShown));
+  var t = (clamped + range) / (range * 2); // 0..1
+  var bg = t < 0.5
+    ? mixColor([255,61,90], [23,32,40], t*2)
+    : mixColor([23,32,40], [0,230,118], (t-0.5)*2);
+  var withCapAll = allData.filter(function(x){ return x.marketCap > 0; });
+  var maxCap = withCapAll.length ? Math.max.apply(null, withCapAll.map(function(x){ return x.marketCap; })) : 0;
+  var capRatio = maxCap && d.marketCap ? Math.sqrt(d.marketCap / maxCap) : 0.3;
+  var fontSize = 11 + Math.round(capRatio * 4);
+  var chgTxt = chg != null ? ((chg>=0?'+':'')+f2(chg)+'%') : '--';
+  return '<div class="hm-box" style="background:'+bg+'" title="'+d.symbol+' · '+chgTxt+'" onclick="openTVChart(\''+d.symbol+'\')">' +
+    '<span class="hm-sym" style="font-size:'+fontSize+'px">'+d.symbol+'</span>' +
+    '<span class="hm-chg">'+chgTxt+'</span>' +
+  '</div>';
+}
+
+function buildHeatmapGroupedHTML(data, period) {
+  if (!data.length) return '<div style="color:var(--text-dim);padding:20px;font-family:var(--mono);text-align:center">Sin tickers</div>';
+  var grouped = {};
+  data.forEach(function(d){
+    var sec = d.sector || 'Otros';
+    if (!grouped[sec]) grouped[sec] = [];
+    grouped[sec].push(d);
+  });
+  var order = SEC_ORDER.filter(function(s){ return grouped[s] && grouped[s].length; });
+  Object.keys(grouped).forEach(function(s){ if (order.indexOf(s) === -1) order.push(s); });
+
+  return order.map(function(sec){
+    var items = grouped[sec].slice().sort(function(a,b){ return (b.marketCap||0)-(a.marketCap||0); });
+    var col = SEC_COLOR[sec] || '#78909c';
+    var icon = SEC_ICON[sec] || '?';
+    var chgs = items.map(function(d){ return getChgForPeriod(d, period); }).filter(function(v){ return v != null; });
+    var avg = chgs.length ? chgs.reduce(function(a,b){ return a+b; },0)/chgs.length : null;
+    return '<div class="hm-sector-block">' +
+      '<div class="hm-sector-hdr">' +
+        '<span style="color:'+col+'">'+icon+'</span>' +
+        '<span style="color:'+col+'">'+sec.toUpperCase()+'</span>' +
+        '<span style="font-family:var(--mono);font-size:10px;color:var(--text-dim);font-weight:400">'+items.length+' tickers</span>' +
+        (avg!=null ? '<span class="hm-sector-chg" style="color:'+(avg>=0?'var(--green)':'var(--red)')+'">'+(avg>=0?'+':'')+f2(avg)+'%</span>' : '') +
+      '</div>' +
+      '<div class="hm-grid">' + items.map(function(d){ return heatBoxHTML(d, period); }).join('') + '</div>' +
+    '</div>';
+  }).join('');
+}
+
 function renderHeatmap() {
   var gaugeEl = document.getElementById('hmGaugeContainer');
   var cardsEl = document.getElementById('hmCardsContainer');
-  var gridEl  = document.getElementById('hmGrid');
-  if (!gaugeEl || !cardsEl || !gridEl) return;
+  var intlEl  = document.getElementById('hmGridIntl');
+  var arEl    = document.getElementById('hmGridAR');
+  var statusEl= document.getElementById('hmPeriodStatus');
+  if (!gaugeEl || !cardsEl || !intlEl || !arEl) return;
 
   var data = filtered.length ? filtered : allData;
   if (!data.length) {
     gaugeEl.innerHTML = '';
     cardsEl.innerHTML = '';
-    gridEl.innerHTML = '<div style="color:var(--text-dim);padding:30px;font-family:var(--mono);text-align:center;grid-column:1/-1">Cargá tickers y hacé click en ▶ CARGAR TICKERS</div>';
+    intlEl.innerHTML = '<div style="color:var(--text-dim);padding:30px;font-family:var(--mono);text-align:center">Cargá tickers y hacé click en ▶ CARGAR TICKERS</div>';
+    arEl.innerHTML = '';
     return;
   }
 
-  // ── Gauge Miedo/Codicia ──
+  if (statusEl) {
+    var haveWeek  = data.some(function(d){ return d.chgWeek  != null; });
+    var haveMonth = data.some(function(d){ return d.chgMonth != null; });
+    var haveYear  = data.some(function(d){ return d.chgYear  != null; });
+    if (hmPeriod !== 'day' && !haveWeek && !haveMonth && !haveYear) {
+      statusEl.textContent = '(cargando variación semanal/mensual/anual...)';
+    } else {
+      statusEl.textContent = '';
+    }
+  }
+
+  var arData  = data.filter(function(d){ return isArgentineTicker(d.symbol); });
+  var intlData= data.filter(function(d){ return !isArgentineTicker(d.symbol); });
+
+  // ── Gauge Miedo/Codicia (sobre el universo completo) ──
   var fg = computeFearGreed(data);
   if (fg) {
     gaugeEl.innerHTML =
@@ -3407,41 +3252,115 @@ function renderHeatmap() {
 
   cardsEl.innerHTML =
     '<div class="hm-card"><div class="hm-card-lbl">Avance / Retroceso</div><div class="hm-card-val"><span style="color:var(--green)">▲'+up+'</span> <span style="color:var(--text-dim)">/</span> <span style="color:var(--red)">▼'+dn+'</span></div></div>' +
-    '<div class="hm-card"><div class="hm-card-lbl">Var. Promedio</div><div class="hm-card-val" style="color:'+(chgAvg>=0?'var(--green)':'var(--red)')+'">'+(chgAvg!=null?((chgAvg>=0?'+':'')+f2(chgAvg)+'%'):'--')+'</div></div>' +
+    '<div class="hm-card"><div class="hm-card-lbl">Var. Promedio (día)</div><div class="hm-card-val" style="color:'+(chgAvg>=0?'var(--green)':'var(--red)')+'">'+(chgAvg!=null?((chgAvg>=0?'+':'')+f2(chgAvg)+'%'):'--')+'</div></div>' +
     '<div class="hm-card"><div class="hm-card-lbl">Nuevos Máx. 52s</div><div class="hm-card-val" style="color:var(--green)">'+newHighs+'</div></div>' +
     '<div class="hm-card"><div class="hm-card-lbl">Nuevos Mín. 52s</div><div class="hm-card-val" style="color:var(--red)">'+newLows+'</div></div>' +
     '<div class="hm-card"><div class="hm-card-lbl">Picos de Volumen &gt;2x</div><div class="hm-card-val" style="color:var(--yellow)">'+volSpikes+'</div></div>';
 
-  // ── Grid heatmap (color por %día, tamaño por market cap) ──
-  var withCap = data.filter(function(d){ return d.marketCap > 0; });
-  var maxCap = withCap.length ? Math.max.apply(null, withCap.map(function(d){ return d.marketCap; })) : 0;
+  // ── Heatmaps agrupados por sector (Internacional) y aparte (Argentina) ──
+  intlEl.innerHTML = buildHeatmapGroupedHTML(intlData, hmPeriod);
+  arEl.innerHTML = buildHeatmapGroupedHTML(arData, hmPeriod);
 
-  var sorted = data.slice().sort(function(a,b){
-    return (b.marketCap||0) - (a.marketCap||0);
-  });
+  renderIndicesGrid();
+}
 
-  gridEl.innerHTML = sorted.map(function(d){
-    var chg = d.chgPct != null ? d.chgPct : 0;
-    var clamped = Math.max(-3, Math.min(3, chg));
-    var t = (clamped + 3) / 6; // 0..1
-    var bg = t < 0.5
-      ? mixColor([255,61,90], [23,32,40], t*2)      // rojo → bg oscuro
-      : mixColor([23,32,40], [0,230,118], (t-0.5)*2); // bg oscuro → verde
-    var capRatio = maxCap && d.marketCap ? Math.sqrt(d.marketCap / maxCap) : 0.3;
-    var fontSize = 11 + Math.round(capRatio * 4);
-    return '<div class="hm-box" style="background:'+bg+'" title="'+d.symbol+' · '+(chg>=0?'+':'')+f2(chg)+'%" onclick="openTVChart(\''+d.symbol+'\')">' +
-      '<span class="hm-sym" style="font-size:'+fontSize+'px">'+d.symbol+'</span>' +
-      '<span class="hm-chg">'+(chg>=0?'+':'')+f2(chg)+'%</span>' +
+// ── ÍNDICES Y COMMODITIES (mini charts TradingView) ──
+var INDEX_SYMBOLS = [
+  {sym:'TVC:SPX',        label:'S&P 500'},
+  {sym:'TVC:DJI',        label:'Dow Jones'},
+  {sym:'NASDAQ:IXIC',    label:'Nasdaq'},
+  {sym:'BITSTAMP:BTCUSD',label:'Bitcoin'},
+  {sym:'TVC:GOLD',       label:'Oro'},
+  {sym:'TVC:USOIL',      label:'Petróleo WTI'},
+  {sym:'BCBA:IMV',       label:'Merval'}
+];
+
+function renderIndicesGrid() {
+  var el = document.getElementById('hmIndicesGrid');
+  if (!el || el.dataset.rendered === '1') return;
+  el.dataset.rendered = '1';
+  el.innerHTML = INDEX_SYMBOLS.map(function(ix){
+    var frameId = 'tv_' + ix.sym.replace(/[^a-zA-Z0-9]/g,'_');
+    var src = 'https://s.tradingview.com/widgetembed/?frameElementId=' + frameId
+      + '&symbol=' + encodeURIComponent(ix.sym)
+      + '&interval=D&hidesidetoolbar=1&hidetoptoolbar=1&symboledit=0&saveimage=0'
+      + '&toolbarbg=0d1318&studies=%5B%5D'
+      + '&theme=dark&style=1&timezone=America%2FArgentina%2FBuenos_Aires'
+      + '&studies_overrides=%7B%7D&overrides=%7B%7D&enabled_features=%5B%5D'
+      + '&disabled_features=%5B%5D&locale=es&utm_source=nexus-scanner';
+    return '<div class="hm-idx-card">' +
+      '<div class="hm-idx-lbl">'+ix.label+'</div>' +
+      '<iframe src="'+src+'" class="hm-idx-frame" loading="lazy"></iframe>' +
     '</div>';
   }).join('');
 }
 
-function mixColor(c1, c2, t) {
-  t = Math.max(0, Math.min(1, t));
-  var r = Math.round(c1[0] + (c2[0]-c1[0])*t);
-  var g = Math.round(c1[1] + (c2[1]-c1[1])*t);
-  var b = Math.round(c1[2] + (c2[2]-c1[2])*t);
-  return 'rgb('+r+','+g+','+b+')';
+// ── Variación semanal/mensual/anual real (Yahoo Finance, best-effort) ──
+function fetchChartOnce(yahooSym) {
+  var url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(yahooSym) + '?range=1y&interval=1d';
+  var idx = 0;
+  function tryNext() {
+    if (idx >= HL_PROXIES.length) return Promise.resolve(null);
+    var proxyFn = HL_PROXIES[idx++];
+    return fetch(proxyFn(url), {signal: AbortSignal.timeout(9000)})
+      .then(function(r){ if(!r.ok) throw 0; return r.json(); })
+      .then(function(data){
+        var res = data && data.chart && data.chart.result && data.chart.result[0];
+        return res || null;
+      })
+      .catch(function(){ return tryNext(); });
+  }
+  return tryNext();
+}
+
+var _periodReturnsFetched = false;
+async function fetchPeriodReturnsSupplement(symbols) {
+  var out = {};
+  var BATCH = 8;
+  for (var i = 0; i < symbols.length; i += BATCH) {
+    var batch = symbols.slice(i, i+BATCH);
+    var results = await Promise.all(batch.map(function(sym){
+      var ys = resolveYahooSymbol(sym);
+      return fetchChartOnce(ys).then(function(res){ return {sym: sym, res: res}; });
+    }));
+    results.forEach(function(item){
+      var res = item.res;
+      if (!res || !res.indicators || !res.indicators.quote || !res.indicators.quote[0]) return;
+      var closes = (res.indicators.quote[0].close || []).filter(function(c){ return c != null; });
+      if (closes.length < 2) return;
+      var meta = res.meta || {};
+      var last = meta.regularMarketPrice != null ? meta.regularMarketPrice : closes[closes.length-1];
+      var idxWeek  = Math.max(0, closes.length - 1 - 5);
+      var idxMonth = Math.max(0, closes.length - 1 - 21);
+      var first = closes[0];
+      out[item.sym] = {
+        chgWeek:  closes[idxWeek]  ? (last - closes[idxWeek])/closes[idxWeek]*100   : null,
+        chgMonth: closes[idxMonth] ? (last - closes[idxMonth])/closes[idxMonth]*100 : null,
+        chgYear:  first            ? (last - first)/first*100                       : null
+      };
+    });
+    // Refrescar progresivamente si el usuario está mirando el heatmap
+    renderHeatmap();
+  }
+  return out;
+}
+
+function applyPeriodReturns(map) {
+  allData.forEach(function(d){
+    var s = map[d.symbol];
+    if (!s) return;
+    if (s.chgWeek  != null) d.chgWeek  = s.chgWeek;
+    if (s.chgMonth != null) d.chgMonth = s.chgMonth;
+    if (s.chgYear  != null) d.chgYear  = s.chgYear;
+  });
+  renderHeatmap();
+}
+
+function ensurePeriodReturnsLoaded() {
+  if (_periodReturnsFetched || !allData.length) return;
+  _periodReturnsFetched = true;
+  var syms = allData.map(function(d){ return d.symbol; });
+  fetchPeriodReturnsSupplement(syms).then(applyPeriodReturns);
 }
 
 function renderEarningsTab() {
@@ -3717,6 +3636,10 @@ function switchTab(id,el){
   document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active')});
   el.classList.add('active');
   document.getElementById('tab-'+id).classList.add('active');
+  if (id === 'heatmap') {
+    renderHeatmap();
+    ensurePeriodReturnsLoaded();
+  }
 }
 
 // ── TABLE SORT ────────────────────────────────────
@@ -5743,46 +5666,12 @@ function pfNormalizeDate(s) {
 }
 
 // ── INICIALIZAR ───────────────────────────────────────────
-(function pfInit(){
-  function _init(){
-    // Si Firebase todavía no terminó de cargar (mobile/conexión lenta),
-    // marcar que este init ya corrió para que Firebase lo re-ejecute después
-    if (!window._firebaseReady) {
-      window._pfInitAlreadyRan = true;
-    }
-    pfLoad();
-    pfRenderAccountTabs();
-    // Aplicar estado del toggle
-    var bu=document.getElementById('pfBtnUSD'), ba=document.getElementById('pfBtnARS');
-    if(bu)bu.classList.toggle('active',pfViewCurrency==='USD');
-    if(ba)ba.classList.toggle('active',pfViewCurrency==='ARS');
-    pfRenderAll();
-    // Fetch precios live para todas las posiciones (USD y ARS)
-    var tAll=[], mMap={};
-    pfPositions.forEach(function(p){var t=(p.ticker||'').toUpperCase();if(t){tAll.push(t);mMap[t]=(p.moneda||'USD');}});
-    tAll=tAll.filter(function(t,i,a){return a.indexOf(t)===i;});
-    if(tAll.length)pfFetchLivePrices(tAll, function(){pfRenderAll();}, mMap);
-    pfFetchMepAuto();
-    // Auto-refresh cada 60s con lock para evitar solapamiento de fetches
-    var _autoRefreshBusy = false;
-    setInterval(function(){
-      var el=document.getElementById('tab-portfolio');
-      if(el&&el.classList.contains('active')&&!_autoRefreshBusy){
-        _autoRefreshBusy=true;
-        var t2=[], m2={};
-        pfPositions.forEach(function(p){var t=(p.ticker||'').toUpperCase();if(t){t2.push(t);m2[t]=(p.moneda||'USD');}});
-        t2=t2.filter(function(t,i,a){return a.indexOf(t)===i;});
-        if(t2.length){
-          pfFetchLivePrices(t2, function(){pfRenderAll();_autoRefreshBusy=false;}, m2);
-        } else { _autoRefreshBusy=false; }
-      }
-    },60000);
-    setInterval(function(){pfFetchMepAuto();},300000);
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',_init);
-  else _init();
-})();
+// Sección Portafolio eliminada de la UI — se desactiva el auto-init
+// para no intentar tocar elementos del DOM que ya no existen.
+// (Las funciones pf* quedan definidas pero inactivas por si se quiere
+// reactivar el portafolio más adelante.)
 
 </script>
+
 </body>
 </html>
