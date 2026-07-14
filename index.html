@@ -2301,52 +2301,41 @@ async function fetchQuote(sym) {
 // el endpoint de velas (chart) de Yahoo Finance, que trae esos datos
 // en su bloque "meta" sin requerir autenticación (a diferencia del
 // endpoint de cotización batch), a través de proxies CORS públicos.
-// Si esto falla sistemáticamente es porque los proxies gratuitos están
-// bloqueados/caídos — abrí la consola del navegador (F12) para ver el
-// detalle exacto de qué proxy/símbolo falla y por qué.
+// Los proxies se corren EN PARALELO (no en cascada) y gana el más rápido,
+// para no perder tiempo esperando a que fallen los lentos/caídos.
 var HL_PROXIES = [
   { name:'allorigins', build:function(u){ return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u); } },
   { name:'corsproxy.io', build:function(u){ return 'https://corsproxy.io/?url='+encodeURIComponent(u); } },
   { name:'codetabs', build:function(u){ return 'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u); } },
   { name:'cors.lol', build:function(u){ return 'https://api.cors.lol/?url='+encodeURIComponent(u); } },
-  { name:'thingproxy', build:function(u){ return 'https://thingproxy.freeboard.io/fetch/'+u; } },
-  { name:'directo (sin proxy)', build:function(u){ return u; } }
+  { name:'thingproxy', build:function(u){ return 'https://thingproxy.freeboard.io/fetch/'+u; } }
 ];
 
 var hlStats = { ok: 0, fail: 0, total: 0 };
 
 function fetchYahooChartMeta(yahooSym) {
   var url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(yahooSym) + '?range=5d&interval=1d';
-  var idx = 0;
-  function tryNext() {
-    if (idx >= HL_PROXIES.length) {
-      console.warn('[Máx/Mín] Todos los proxies fallaron para', yahooSym);
-      return Promise.resolve(null);
-    }
-    var proxy = HL_PROXIES[idx++];
-    return fetch(proxy.build(url), {signal: AbortSignal.timeout(9000)})
+  var attempts = HL_PROXIES.map(function(proxy){
+    return fetch(proxy.build(url), {signal: AbortSignal.timeout(6000)})
       .then(function(r){
-        if(!r.ok) { console.warn('[Máx/Mín] '+proxy.name+' → HTTP '+r.status+' ('+yahooSym+')'); throw 0; }
+        if(!r.ok) throw new Error(proxy.name+' → HTTP '+r.status);
         return r.json();
       })
       .then(function(data){
         var res = data && data.chart && data.chart.result && data.chart.result[0];
-        if (!res || !res.meta) { console.warn('[Máx/Mín] '+proxy.name+' → respuesta sin datos ('+yahooSym+')'); throw 0; }
+        if (!res || !res.meta) throw new Error(proxy.name+' → respuesta sin datos');
         return res.meta;
-      })
-      .catch(function(e){
-        if (e && e.name === 'TimeoutError') console.warn('[Máx/Mín] '+proxy.name+' → timeout ('+yahooSym+')');
-        return tryNext();
       });
-  }
-  return tryNext();
+  });
+  return Promise.any(attempts).catch(function(errs){
+    console.warn('[Máx/Mín] Todos los proxies fallaron para', yahooSym, errs && errs.errors ? errs.errors.map(function(e){return e.message;}) : errs);
+    return null;
+  });
 }
 
-async function fetchHighLow52Supplement(symbols) {
+async function fetchHighLow52SupplementBatch(symbols, concurrency) {
   var out = {};
-  hlStats = { ok: 0, fail: 0, total: symbols.length };
-  updateHLStatus('cargando…');
-  var BATCH = 8; // concurrencia moderada para no saturar los proxies gratuitos
+  var BATCH = concurrency || 20;
   for (var i = 0; i < symbols.length; i += BATCH) {
     var batch = symbols.slice(i, i+BATCH);
     var results = await Promise.all(batch.map(function(sym){
@@ -2367,10 +2356,31 @@ async function fetchHighLow52Supplement(symbols) {
     applyHighLowSupplement(out); // aplicar progresivamente, lote por lote
     updateHLStatus('cargando… ('+hlStats.ok+'/'+hlStats.total+' ok)');
   }
+  return out;
+}
+
+async function fetchHighLow52Supplement(symbols) {
+  hlStats = { ok: 0, fail: 0, total: symbols.length };
+  updateHLStatus('cargando…');
+  var pending = symbols.slice();
+  var out = {};
+  // Pasada principal + 2 reintentos automáticos SOLO de los símbolos que fallaron,
+  // con leve pausa entre pasadas para darle respiro a los proxies.
+  for (var attempt = 0; attempt < 3 && pending.length; attempt++) {
+    if (attempt > 0) {
+      updateHLStatus('reintentando '+pending.length+' que fallaron… ('+hlStats.ok+'/'+hlStats.total+' ok)');
+      await new Promise(function(r){ setTimeout(r, 1500); });
+      hlStats.fail -= pending.length; // se vuelven a contar en esta pasada
+    }
+    var before = hlStats.ok;
+    var res = await fetchHighLow52SupplementBatch(pending, 20);
+    Object.assign(out, res);
+    pending = pending.filter(function(sym){ return !out[sym]; });
+  }
   if (hlStats.ok === 0) {
     console.error('[Máx/Mín] Fallo total: ningún proxy pudo traer datos de Yahoo Finance. Revisá los warnings de arriba para ver la causa exacta (bloqueo, timeout, HTTP error).');
     updateHLStatus('⚠ no se pudo obtener (ver consola F12) — <a href="#" onclick="retryHLSupplement();return false;" style="color:var(--accent)">reintentar</a>');
-  } else if (hlStats.fail > 0) {
+  } else if (pending.length > 0) {
     updateHLStatus(hlStats.ok+'/'+hlStats.total+' completado — <a href="#" onclick="retryHLSupplement();return false;" style="color:var(--accent)">reintentar el resto</a>');
   } else {
     updateHLStatus('');
@@ -2386,7 +2396,8 @@ function updateHLStatus(txt) {
 }
 
 function retryHLSupplement() {
-  var syms = allData.map(function(d){ return d.symbol; });
+  var syms = allData.filter(function(d){ return d.dayHigh == null; }).map(function(d){ return d.symbol; });
+  if (!syms.length) syms = allData.map(function(d){ return d.symbol; });
   fetchHighLow52Supplement(syms);
 }
 
