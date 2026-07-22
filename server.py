@@ -4,14 +4,39 @@ NEXUS SCANNER — Servidor Proxy Local
 Instalación (una sola vez):
     pip install yfinance flask flask-cors pandas numpy
 
+    Para el sistema de pagos VIP (Mercado Pago) además:
+    pip install mercadopago firebase-admin
+
 Uso:
     python server.py
 
 Luego abrí market-scanner.html en tu browser.
 El servidor corre en http://localhost:5000
+
+─── VIP / MERCADO PAGO — SETUP ────────────────────────────────────────────
+1. Descargá tu credencial de Firebase Admin:
+   Firebase Console → Configuración del proyecto → Cuentas de servicio →
+   "Generar nueva clave privada" → guardá el JSON como serviceAccountKey.json
+   en esta misma carpeta (NO lo subas a git, agregalo a .gitignore).
+
+2. Conseguí tu Access Token de PRODUCCIÓN en Mercado Pago:
+   https://www.mercadopago.com.ar/developers/panel → Tus integraciones →
+   tu app → Credenciales de producción.
+
+3. Para que el webhook funcione, este server.py tiene que estar corriendo
+   en una URL pública (no localhost). Opciones gratis/baratas: Render,
+   Railway, Fly.io, PythonAnywhere. Una vez deployado, seteá las variables
+   de entorno (o editá las constantes de abajo directamente):
+     MP_ACCESS_TOKEN   → tu access token de producción
+     PUBLIC_BASE_URL   → la URL pública de este server (ej: https://dubz-api.onrender.com)
+     FRONTEND_URL      → la URL donde vive tu index.html
+   Y actualizá window.MP_CREATE_PREFERENCE_URL en index.html para que
+   apunte a esa misma URL pública + /api/mp/crear-preferencia.
+─────────────────────────────────────────────────────────────────────────
 """
 
 import os
+import time
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import yfinance as yf
@@ -19,8 +44,42 @@ import pandas as pd
 import numpy as np
 import traceback
 
+try:
+    import mercadopago
+except ImportError:
+    mercadopago = None
+
+try:
+    import firebase_admin
+    from firebase_admin import credentials, firestore
+except ImportError:
+    firebase_admin = None
+
 app = Flask(__name__)
 CORS(app)  # Permite que el HTML local llame al servidor
+
+# ─── CONFIG: MERCADO PAGO + FIREBASE (sistema VIP) ─────────────────────────
+MP_ACCESS_TOKEN    = os.environ.get('MP_ACCESS_TOKEN', 'PEGA_ACA_TU_ACCESS_TOKEN_DE_PRODUCCION')
+MP_VIP_PRICE_ARS   = float(os.environ.get('MP_VIP_PRICE_ARS', '5000'))  # EDITAR: precio de la membresía VIP
+PUBLIC_BASE_URL    = os.environ.get('PUBLIC_BASE_URL', 'http://localhost:5000')  # EDITAR al deployar
+FRONTEND_URL       = os.environ.get('FRONTEND_URL', PUBLIC_BASE_URL)             # EDITAR: URL de tu index.html
+FIREBASE_CRED_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'serviceAccountKey.json')
+
+mp_sdk = None
+if mercadopago and MP_ACCESS_TOKEN and 'PEGA_ACA' not in MP_ACCESS_TOKEN:
+    mp_sdk = mercadopago.SDK(MP_ACCESS_TOKEN)
+
+db_admin = None
+if firebase_admin and os.path.exists(FIREBASE_CRED_PATH):
+    try:
+        cred = credentials.Certificate(FIREBASE_CRED_PATH)
+        firebase_admin.initialize_app(cred)
+        db_admin = firestore.client()
+        print("  [VIP] Firebase Admin conectado.")
+    except Exception as e:
+        print(f"  [VIP] No se pudo inicializar Firebase Admin: {e}")
+else:
+    print("  [VIP] serviceAccountKey.json no encontrado — endpoints de pago desactivados por ahora.")
 
 # ─── INDICADORES TÉCNICOS ─────────────────────────────────────────────────────
 
@@ -452,7 +511,95 @@ def get_precio():
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'ok', 'message': 'NEXUS SCANNER proxy running'})
+    return jsonify({
+        'status': 'ok',
+        'message': 'NEXUS SCANNER proxy running',
+        'mp_configured': bool(mp_sdk),
+        'firebase_admin_configured': bool(db_admin),
+    })
+
+
+# ─── VIP: MERCADO PAGO ──────────────────────────────────────────────────
+
+@app.route('/api/mp/crear-preferencia', methods=['POST'])
+def mp_crear_preferencia():
+    """Crea una preferencia de pago para el usuario y devuelve el link de
+    checkout (init_point). El front-end (index.html) redirige ahí."""
+    if not mp_sdk:
+        return jsonify({'error': 'Mercado Pago no está configurado en el servidor (falta MP_ACCESS_TOKEN).'}), 503
+    data = request.get_json(silent=True) or {}
+    uid   = data.get('uid')
+    email = data.get('email', '')
+    if not uid:
+        return jsonify({'error': 'Falta uid'}), 400
+    try:
+        preference_data = {
+            "items": [{
+                "title": "DUBZ Monitor — Membresía VIP",
+                "quantity": 1,
+                "unit_price": MP_VIP_PRICE_ARS,
+                "currency_id": "ARS",
+            }],
+            "payer": {"email": email} if email else {},
+            # external_reference = uid del usuario → así el webhook sabe a quién activarle el VIP
+            "external_reference": uid,
+            "back_urls": {
+                "success": FRONTEND_URL,
+                "failure": FRONTEND_URL,
+                "pending": FRONTEND_URL,
+            },
+            "auto_return": "approved",
+            "notification_url": f"{PUBLIC_BASE_URL}/api/mp/webhook",
+        }
+        result = mp_sdk.preference().create(preference_data)
+        pref = result.get("response", {})
+        if result.get("status") not in (200, 201):
+            return jsonify({'error': pref}), 502
+        return jsonify({'init_point': pref.get('init_point'), 'preference_id': pref.get('id')})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/mp/webhook', methods=['POST', 'GET'])
+def mp_webhook():
+    """Mercado Pago pega acá cuando cambia el estado de un pago.
+    Puede llegar como query params (?type=payment&data.id=123) o JSON body.
+    Confirma el pago contra la API de MP (nunca confiar en el body solo) y,
+    si está aprobado, marca plan:'vip' en Firestore para ese uid."""
+    if not mp_sdk or not db_admin:
+        return jsonify({'error': 'servidor no configurado'}), 503
+    try:
+        payment_id = request.args.get('data.id') or request.args.get('id')
+        topic      = request.args.get('type') or request.args.get('topic')
+        body = request.get_json(silent=True) or {}
+        if not payment_id and body:
+            payment_id = (body.get('data') or {}).get('id')
+            topic      = body.get('type') or topic
+
+        if topic != 'payment' or not payment_id:
+            return jsonify({'status': 'ignored'}), 200
+
+        # Confirmar el pago consultando directamente la API de MP
+        payment_info = mp_sdk.payment().get(payment_id)
+        payment = payment_info.get('response', {})
+        status  = payment.get('status')
+        uid     = payment.get('external_reference')
+
+        if status == 'approved' and uid:
+            db_admin.collection('users').document(uid).set({
+                'plan': 'vip',
+                'planActivatedAt': firestore.SERVER_TIMESTAMP,
+                'planSource': 'mercadopago',
+                'mpPaymentId': payment_id,
+            }, merge=True)
+            print(f"  [VIP] Activado plan VIP para uid={uid} (payment_id={payment_id})")
+
+        return jsonify({'status': 'ok'}), 200
+    except Exception as e:
+        traceback.print_exc()
+        # Devolvemos 200 igual para que Mercado Pago no reintente en loop
+        return jsonify({'status': 'error', 'detail': str(e)}), 200
 
 
 @app.route('/')
