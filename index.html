@@ -121,7 +121,7 @@ self.addEventListener('message', e => {
            signInWithEmailAndPassword, sendPasswordResetEmail,
            sendEmailVerification
          } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-  import { getFirestore, doc, getDoc, setDoc
+  import { getFirestore, doc, getDoc, setDoc, onSnapshot
          } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
   const firebaseConfig = {
@@ -139,6 +139,37 @@ self.addEventListener('message', e => {
   const db   = getFirestore(app);
 
   const DEFAULT_TICKERS = ['SPY','QQQ','XLE','AAPL','NVDA','META','MSFT','GOOG','TSLA','AMZN','CVX','XOM','VIST','JPM','WMT','JNJ','GLD','TLT','AMD','NFLX'];
+
+  // ═══════════════════════════════════════════════════════════════════
+  // PLANES: FREE vs VIP
+  // ═══════════════════════════════════════════════════════════════════
+  window.FREE_TICKER_LIMIT = 30;          // Límite de tickers para usuarios free
+  window.userPlan = 'free';               // Se actualiza en tiempo real vía onSnapshot
+
+  // Emails con acceso al panel admin (activar VIP a mano). EDITAR con tu email real.
+  window.ADMIN_EMAILS = ['angel89-cma@hotmail.com'];
+
+  let _unsubPlan = null;
+
+  // Escucha en tiempo real el doc del usuario: en cuanto el webhook de
+  // Mercado Pago (o el admin) marca plan:'vip' en Firestore, la app se
+  // desbloquea sola, sin recargar la página.
+  function watchUserPlan(uid) {
+    if (_unsubPlan) { _unsubPlan(); _unsubPlan = null; }
+    _unsubPlan = onSnapshot(doc(db, 'users', uid), (snap) => {
+      const data = snap.data() || {};
+      const wasVip = window.userPlan === 'vip';
+      window.userPlan = data.plan === 'vip' ? 'vip' : 'free';
+      window.userPlanExpiry = data.planExpiry || null;
+      if (window.renderPlanBadge) window.renderPlanBadge();
+      if (!wasVip && window.userPlan === 'vip' && window._planModalOpen) {
+        // El pago se confirmó mientras el modal estaba abierto
+        var st = document.getElementById('planPayStatus');
+        if (st) { st.textContent = '✓ ¡Listo! Ya sos usuario VIP.'; st.style.color = 'var(--green)'; }
+      }
+    }, (err) => console.warn('watchUserPlan error:', err));
+  }
+  window._watchUserPlan = watchUserPlan;
 
   // ── Guardar tickers en Firestore ───────────────────
   window.saveTickersCloud = async function(list) {
@@ -242,6 +273,8 @@ self.addEventListener('message', e => {
         document.getElementById('userAvatar').style.display = 'inline-block';
       }
       document.getElementById('userBadge').style.display = 'flex';
+      window._currentUserEmail = user.email || '';
+      watchUserPlan(user.uid);
 
       // Cargar tickers personalizados
       const cloudTickers = await window.loadTickersCloud(user.uid);
@@ -297,6 +330,8 @@ self.addEventListener('message', e => {
       }
     } else {
       // No logueado → mostrar login
+      if (_unsubPlan) { _unsubPlan(); _unsubPlan = null; }
+      window.userPlan = 'free';
       document.getElementById('loginOverlay').style.display = 'flex';
       document.getElementById('appRoot').style.display = 'none';
       document.getElementById('userBadge').style.display = 'none';
@@ -332,6 +367,19 @@ self.addEventListener('message', e => {
     try {
       const provider = new OAuthProvider('microsoft.com');
       provider.setCustomParameters({ prompt: 'select_account' });
+      await signInWithPopup(auth, provider);
+    } catch(e) {
+      setAuthError(getAuthMsg(e.code));
+    } finally { setAuthLoading(false); }
+  };
+
+  // ── Apple ──────────────────────────────────────────
+  window.loginApple = async function() {
+    setAuthError(''); setAuthLoading(true);
+    try {
+      const provider = new OAuthProvider('apple.com');
+      provider.addScope('email');
+      provider.addScope('name');
       await signInWithPopup(auth, provider);
     } catch(e) {
       setAuthError(getAuthMsg(e.code));
@@ -471,6 +519,98 @@ self.addEventListener('message', e => {
     };
     return msgs[code] || ('Error: ' + code);
   }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // MODAL DE PLANES: FREE / VIP
+  // ═══════════════════════════════════════════════════════════════════
+
+  // EDITAR: URL de tu backend (server.py) que crea la preferencia de pago.
+  // Debe recibir { uid, email } y devolver { init_point }.
+  window.MP_CREATE_PREFERENCE_URL = 'http://localhost:5000/api/mp/crear-preferencia';
+
+  window.renderPlanBadge = function() {
+    const chip = document.getElementById('planChip');
+    if (!chip) return;
+    if (window.userPlan === 'vip') {
+      chip.textContent = '★ VIP';
+      chip.classList.add('vip');
+    } else {
+      chip.textContent = 'FREE';
+      chip.classList.remove('vip');
+    }
+    const adminBox = document.getElementById('planAdminBox');
+    if (adminBox) {
+      adminBox.style.display = (window.ADMIN_EMAILS || []).includes(window._currentUserEmail) ? 'block' : 'none';
+    }
+  };
+
+  window.openPlanModal = function(reason) {
+    const sub = document.getElementById('planModalSubtitle');
+    if (sub) {
+      sub.textContent = reason === 'limit'
+        ? 'Llegaste al límite de ' + window.FREE_TICKER_LIMIT + ' tickers del plan Free. Pasate a VIP para tickers ilimitados.'
+        : 'Desbloqueá todas las funcionalidades del scanner.';
+    }
+    document.getElementById('planPayStatus').textContent = '';
+    document.getElementById('planModalOverlay').classList.add('open');
+    window._planModalOpen = true;
+  };
+  window.closePlanModal = function() {
+    document.getElementById('planModalOverlay').classList.remove('open');
+    window._planModalOpen = false;
+  };
+
+  // ── Pagar con Mercado Pago ─────────────────────────
+  // Crea una preferencia en tu backend (server.py) con external_reference = uid,
+  // así el webhook de MP sabe a qué usuario activarle el VIP en Firestore.
+  window.payWithMercadoPago = async function() {
+    const user = auth.currentUser;
+    if (!user) return;
+    const btn = document.getElementById('mpPayBtn');
+    const status = document.getElementById('planPayStatus');
+    btn.disabled = true;
+    status.style.color = 'var(--text-dim)';
+    status.textContent = 'Generando link de pago...';
+    try {
+      const res = await fetch(window.MP_CREATE_PREFERENCE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: user.uid, email: user.email })
+      });
+      if (!res.ok) throw new Error('server ' + res.status);
+      const data = await res.json();
+      if (!data.init_point) throw new Error('sin init_point');
+      status.style.color = 'var(--accent)';
+      status.textContent = 'Redirigiendo a Mercado Pago...';
+      window.open(data.init_point, '_blank');
+      status.textContent = 'Completá el pago en la pestaña nueva. El VIP se activa solo cuando se confirme.';
+    } catch(e) {
+      console.warn('MP error:', e);
+      status.style.color = 'var(--red)';
+      status.textContent = '⚠ No se pudo conectar con el servidor de pagos. Verificá que server.py esté corriendo, o usá la transferencia por CBU/Alias.';
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  // ── Panel admin: activar VIP a mano por UID ────────
+  // Nota: esto escribe directo en Firestore desde el cliente. Restringí esta
+  // operación con reglas de seguridad de Firestore (solo tu UID puede escribir
+  // el campo "plan" de otros usuarios) — no depender solo de ocultar el botón.
+  window.adminActivateVip = async function() {
+    if (!(window.ADMIN_EMAILS || []).includes(window._currentUserEmail)) return;
+    const uid = document.getElementById('adminTargetUid').value.trim();
+    const st = document.getElementById('adminActivateStatus');
+    if (!uid) { st.textContent = 'Ingresá un UID.'; st.style.color = 'var(--red)'; return; }
+    try {
+      await setDoc(doc(db, 'users', uid), { plan: 'vip', planActivatedAt: Date.now(), planSource: 'admin_manual' }, { merge: true });
+      st.textContent = '✓ VIP activado para ' + uid;
+      st.style.color = 'var(--green)';
+    } catch(e) {
+      st.textContent = '⚠ Error: ' + e.message;
+      st.style.color = 'var(--red)';
+    }
+  };
 </script>
 
 <style>
@@ -533,6 +673,8 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 }
 .auth-btn:disabled{cursor:not-allowed}
 .btn-google{border-color:#4285f4;color:#4285f4}.btn-google:hover{background:rgba(66,133,244,0.12)}
+.btn-microsoft{border-color:#5a6470;color:#c8d8e8}.btn-microsoft:hover{background:rgba(255,255,255,0.06)}
+.btn-apple{border-color:#5a6470;color:#c8d8e8}.btn-apple:hover{background:rgba(255,255,255,0.06)}
 .btn-microsoft{border-color:#00a4ef;color:#00a4ef}.btn-microsoft:hover{background:rgba(0,164,239,0.12)}
 .btn-facebook{border-color:#1877f2;color:#1877f2}.btn-facebook:hover{background:rgba(24,119,242,0.12)}
 .auth-divider{
@@ -712,6 +854,31 @@ table.dt tr:hover td{background:rgba(0,212,255,0.04)}
 .tv-modal-actions{display:flex;gap:8px;align-items:center}
 .tv-modal-body{flex:1;overflow:hidden}
 .tv-modal-body iframe{width:100%;height:100%;border:none;display:block}
+
+/* ── Planes FREE / VIP ─────────────────────────────── */
+.plan-chip{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;padding:3px 8px;border-radius:10px;cursor:pointer;margin-left:6px;border:1px solid var(--border2);color:var(--text-dim);transition:all .15s;user-select:none}
+.plan-chip.vip{color:#0a0f14;background:linear-gradient(135deg,#ffd600,#ff9d00);border-color:#ffb300}
+.plan-chip:hover{opacity:.85}
+.plan-modal{background:var(--bg2);border:1px solid var(--border2);border-radius:6px;width:92vw;max-width:520px;max-height:88vh;overflow-y:auto;padding:26px}
+.plan-modal h2{font-family:var(--head);font-size:20px;letter-spacing:2px;color:var(--text-bright);margin:0 0 4px}
+.plan-modal .plan-sub{font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:18px;letter-spacing:.5px}
+.plan-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+.plan-card{border:1px solid var(--border2);border-radius:4px;padding:14px}
+.plan-card.vip{border-color:#ffb300;background:rgba(255,183,0,0.06)}
+.plan-card h3{font-family:var(--mono);font-size:12px;letter-spacing:1.5px;margin:0 0 8px;color:var(--text-bright)}
+.plan-card.vip h3{color:#ffd600}
+.plan-card ul{margin:0;padding-left:16px;font-size:12px;color:var(--text-dim);line-height:1.8}
+.plan-pay-opt{border:1px solid var(--border2);border-radius:4px;padding:14px;margin-bottom:12px}
+.plan-pay-opt h4{margin:0 0 8px;font-family:var(--mono);font-size:11px;letter-spacing:1px;color:var(--text-bright)}
+.plan-pay-btn{width:100%;background:#00b1ea;border:none;color:#fff;font-family:var(--mono);font-weight:700;font-size:12px;letter-spacing:1px;padding:11px;border-radius:3px;cursor:pointer;transition:opacity .15s}
+.plan-pay-btn:hover{opacity:.88}
+.plan-pay-btn:disabled{opacity:.5;cursor:not-allowed}
+.plan-transfer-data{font-family:var(--mono);font-size:11px;color:var(--text);background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:10px;margin:8px 0;line-height:1.9}
+.plan-transfer-data b{color:var(--accent)}
+.plan-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--text-dim);font-size:20px;cursor:pointer}
+.plan-admin{border-top:1px dashed var(--border2);margin-top:18px;padding-top:14px}
+.plan-admin input{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:12px;padding:8px;border-radius:3px;margin-bottom:8px}
+#planPayStatus{font-family:var(--mono);font-size:11px;margin-top:8px;min-height:14px}
 .tv-close{background:none;border:1px solid var(--border2);color:var(--text-dim);font-size:18px;cursor:pointer;padding:4px 10px;border-radius:2px;transition:all .15s;font-family:var(--mono);line-height:1}
 .tv-close:hover{border-color:var(--red);color:var(--red)}
 .tv-btn{display:inline-flex;align-items:center;gap:4px;background:rgba(0,212,255,0.08);border:1px solid var(--accent2);color:var(--accent);font-family:var(--mono);font-size:12px;padding:3px 8px;border-radius:2px;cursor:pointer;transition:all .15s;white-space:nowrap}
@@ -986,6 +1153,14 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
         <svg width="16" height="16" viewBox="0 0 24 24"><path fill="#4285f4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34a853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#fbbc05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#ea4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
         Continuar con Google
       </button>
+      <button class="auth-btn btn-microsoft" onclick="loginMicrosoft()">
+        <svg width="15" height="15" viewBox="0 0 23 23"><rect x="1" y="1" width="10" height="10" fill="#f25022"/><rect x="12" y="1" width="10" height="10" fill="#7fba00"/><rect x="1" y="12" width="10" height="10" fill="#00a4ef"/><rect x="12" y="12" width="10" height="10" fill="#ffb900"/></svg>
+        Continuar con Hotmail / Microsoft
+      </button>
+      <button class="auth-btn btn-apple" onclick="loginApple()">
+        <svg width="15" height="15" viewBox="0 0 384 512" fill="#fff"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141 8 184.8 8 273.5c0 26.2 4.8 53.3 14.4 81.2 12.8 37.6 59 129.3 107.2 127.8 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-84.1 102.6-121.8-65.2-30.7-65.7-90-65.7-91.9zM254.8 89.5c26.9-32 24.5-61.2 23.7-71.7-23.8 1.4-51.3 16.4-67 34.8-17.3 19.6-27.5 44-25.3 71 26-2 49.7-14.7 68.6-34.1z"/></svg>
+        Continuar con Apple
+      </button>
     </div>
 
     <div class="auth-divider">o con email</div>
@@ -1025,6 +1200,61 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 </div>
 
 <!-- ══════════════════════════════════════════════════
+     MODAL: PLANES / HACERME VIP
+══════════════════════════════════════════════════ -->
+<div class="tv-modal-overlay" id="planModalOverlay" onclick="if(event.target===this) closePlanModal()">
+  <div class="plan-modal" style="position:relative">
+    <button class="plan-close" onclick="closePlanModal()">✕</button>
+    <h2>⭐ DUBZ VIP</h2>
+    <div class="plan-sub" id="planModalSubtitle">Desbloqueá todas las funcionalidades del scanner.</div>
+
+    <div class="plan-grid">
+      <div class="plan-card">
+        <h3>FREE</h3>
+        <ul>
+          <li>Hasta 30 tickers</li>
+          <li>Scanner y portafolio</li>
+          <li>Sync en la nube</li>
+        </ul>
+      </div>
+      <div class="plan-card vip">
+        <h3>★ VIP</h3>
+        <ul>
+          <li>Tickers ilimitados</li>
+          <li>Todas las funcionalidades</li>
+          <li>Soporte prioritario</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="plan-pay-opt">
+      <h4>💳 PAGAR CON MERCADO PAGO</h4>
+      <button class="plan-pay-btn" id="mpPayBtn" onclick="payWithMercadoPago()">Pagar y activar VIP</button>
+      <div id="planPayStatus"></div>
+    </div>
+
+    <div class="plan-pay-opt">
+      <h4>🏦 TRANSFERENCIA (CBU / ALIAS)</h4>
+      <div class="plan-transfer-data">
+        Alias: <b id="cbuAlias">DUBZ.VIP.MP</b><br>
+        CBU: <b id="cbuNumero">0000003100000000000000</b><br>
+        Titular: <b id="cbuTitular">Tu Nombre</b>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);line-height:1.6">
+        Después de transferir, mandá el comprobante por WhatsApp/email para activarte el VIP manualmente en unas horas.
+      </div>
+    </div>
+
+    <div class="plan-admin" id="planAdminBox" style="display:none">
+      <h4 style="font-family:var(--mono);font-size:11px;letter-spacing:1px;color:var(--yellow);margin:0 0 8px">⚙ PANEL ADMIN</h4>
+      <input type="text" id="adminTargetUid" placeholder="UID del usuario a activar (Firestore → users)">
+      <button class="plan-pay-btn" style="background:var(--yellow);color:#1a1200" onclick="adminActivateVip()">Activar VIP para este UID</button>
+      <div id="adminActivateStatus" style="font-family:var(--mono);font-size:11px;margin-top:6px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
      APP ROOT
 ══════════════════════════════════════════════════ -->
 <div id="appRoot" style="display:none">
@@ -1041,6 +1271,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
     <div class="user-badge" id="userBadge">
       <img class="user-avatar" id="userAvatar" src="" alt="">
       <span class="user-name" id="userLabel">Usuario</span>
+      <span class="plan-chip" id="planChip" onclick="window.openPlanModal && window.openPlanModal('badge')">FREE</span>
       <button class="btn-logout" onclick="doLogout()">SALIR</button>
     </div>
     <button class="btn btn-a btn-sm" onclick="doRefresh()">↺ REFRESH</button>
@@ -1990,7 +2221,12 @@ function manualLoadAndRefresh() {
     var syms = box.value.split(/[\n,\s]+/).map(function(s){ return s.trim().toUpperCase().replace(/[^A-Z0-9.]/g,''); }).filter(Boolean);
     if (syms.length) {
       // Deduplicar
-      window.tickerList = syms.filter(function(s,i,a){ return a.indexOf(s)===i; });
+      var deduped = syms.filter(function(s,i,a){ return a.indexOf(s)===i; });
+      if (window.userPlan !== 'vip' && deduped.length > window.FREE_TICKER_LIMIT) {
+        deduped = deduped.slice(0, window.FREE_TICKER_LIMIT);
+        if (window.openPlanModal) window.openPlanModal('limit');
+      }
+      window.tickerList = deduped;
       window.renderTickerList();
     }
   }
@@ -3435,6 +3671,11 @@ function addTickerFromInput() {
     inp.style.borderColor = 'var(--yellow)';
     setTimeout(function(){ inp.style.borderColor = ''; }, 1000);
     inp.value = '';
+    return;
+  }
+  if (window.userPlan !== 'vip' && window.tickerList.length >= window.FREE_TICKER_LIMIT) {
+    inp.value = '';
+    if (window.openPlanModal) window.openPlanModal('limit');
     return;
   }
   window.tickerList.push(sym);
