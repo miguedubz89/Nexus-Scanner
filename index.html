@@ -117,7 +117,8 @@ self.addEventListener('message', e => {
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
   import { getAuth, onAuthStateChanged, signOut,
            GoogleAuthProvider, OAuthProvider, FacebookAuthProvider,
-           signInWithPopup, createUserWithEmailAndPassword,
+           signInWithPopup, signInWithRedirect, getRedirectResult,
+           createUserWithEmailAndPassword,
            signInWithEmailAndPassword, sendPasswordResetEmail,
            sendEmailVerification
          } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
@@ -317,14 +318,39 @@ self.addEventListener('message', e => {
   }
 
   // ── Google ─────────────────────────────────────────
+  // En mobile, signInWithPopup falla silenciosamente en muchos Chrome
+  // (bloqueo de cookies de terceros / storage partitioning): el popup
+  // se cierra pero el resultado nunca vuelve a la página. Por eso en
+  // mobile usamos signInWithRedirect, que navega directamente a Google
+  // y vuelve a esta misma página con el resultado (ver getRedirectResult abajo).
+  const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
   window.loginGoogle = async function() {
     setAuthError(''); setAuthLoading(true);
     try {
-      await signInWithPopup(auth, new GoogleAuthProvider());
+      if (isMobileDevice) {
+        await signInWithRedirect(auth, new GoogleAuthProvider());
+        // La página se redirige a Google acá; el resultado se procesa
+        // al volver, más abajo con getRedirectResult().
+      } else {
+        await signInWithPopup(auth, new GoogleAuthProvider());
+        setAuthLoading(false);
+      }
     } catch(e) {
       setAuthError(getAuthMsg(e.code));
-    } finally { setAuthLoading(false); }
+      setAuthLoading(false);
+    }
   };
+
+  // Procesar el resultado cuando volvemos de Google (flujo redirect, mobile)
+  setAuthLoading(true);
+  getRedirectResult(auth)
+    .catch((e) => {
+      setAuthError(getAuthMsg(e.code));
+    })
+    .finally(() => {
+      setAuthLoading(false);
+    });
 
   // ── Microsoft / Hotmail ────────────────────────────
   window.loginMicrosoft = async function() {
