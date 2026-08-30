@@ -1252,8 +1252,8 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           <th style="width:68px" data-field="distEma200" onclick="ts('distEma200',this)">EMA200%<span class="sort-icon">⇅</span></th>
           <th style="width:65px" data-field="volume" onclick="ts('volume',this)">Vol<span class="sort-icon">⇅</span></th>
           <th style="width:65px" data-field="avgVol20" onclick="ts('avgVol20',this)">Vol20<span class="sort-icon">⇅</span></th>
-          <th style="width:108px" title="TTM Squeeze Momentum (grafico DIARIO): detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom (D)</th>
-          <th style="width:108px" title="TTM Squeeze Momentum (grafico 1 HORA): mismo indicador que la columna anterior pero calculado sobre velas horarias, para lectura de corto plazo. Punto amarillo = squeeze ON. Punto celeste = squeeze OFF. Punto gris = sin squeeze.">Squeeze Mom (1h)</th>
+          <th style="width:76px" title="TTM Squeeze Momentum (grafico DIARIO): detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom (D)</th>
+          <th style="width:76px" title="TTM Squeeze Momentum (grafico 1 HORA): mismo indicador que la columna anterior pero calculado sobre velas horarias, para lectura de corto plazo. Punto amarillo = squeeze ON. Punto celeste = squeeze OFF. Punto gris = sin squeeze.">Squeeze Mom (1h)</th>
           <th style="width:44px" data-field="beta" onclick="ts('beta',this)">Beta<span class="sort-icon">⇅</span></th>
         </tr></thead>
         <tbody id="techBody"></tbody>
@@ -2196,10 +2196,13 @@ async function cargarCompleto() {
   fetchEarnings(symsParaEarnings).then(function(){ renderAllTab(); renderEarningsTab(); });
   // Completar Máx/Mín diario y 52 semanas en background (Yahoo Finance, best-effort)
   var symsParaHL = allData.map(function(d){ return d.symbol; });
-  fetchHighLow52Supplement(symsParaHL).then(applyHighLowSupplement);
-  // Completar Squeeze Momentum de 1 hora en background (Yahoo Finance, best-effort)
-  var symsParaSqz1h = allData.map(function(d){ return d.symbol; });
-  fetchSqueeze1hSupplement(symsParaSqz1h);
+  fetchHighLow52Supplement(symsParaHL).then(function(res){
+    applyHighLowSupplement(res);
+    // Recién cuando termina Máx/Mín arranca el Squeeze 1h, para no pelear
+    // por los mismos proxies CORS gratuitos y que ambos vayan más rápido.
+    var symsParaSqz1h = allData.map(function(d){ return d.symbol; });
+    fetchSqueeze1hSupplement(symsParaSqz1h);
+  });
 }
 
 // ── AUTO-REFRESH ──────────────────────────────────
@@ -2499,29 +2502,55 @@ function computeSqueezeState(high, low, close, len, multBB, multKC){
 var sqz1hCache = {};
 var sqz1hStats = { ok: 0, fail: 0, total: 0 };
 
+// Caché en localStorage: evita re-pedir todo a los proxies en cada carga.
+// Un valor de hace menos de SQZ1H_TTL_MS se considera vigente (el squeeze
+// horario no cambia tan rápido como para necesitar refrescarlo todo el rato).
+var SQZ1H_CACHE_KEY = 'dubz_sqz1h_cache_v1';
+var SQZ1H_TTL_MS = 20 * 60 * 1000; // 20 minutos
+
+function loadSqz1hCacheFromStorage() {
+  try {
+    var raw = localStorage.getItem(SQZ1H_CACHE_KEY);
+    return raw ? (JSON.parse(raw) || {}) : {};
+  } catch (e) { return {}; }
+}
+function saveSqz1hCacheToStorage() {
+  try { localStorage.setItem(SQZ1H_CACHE_KEY, JSON.stringify(sqz1hCache)); } catch (e) {}
+}
+
 function fetchYahooChart1h(yahooSym) {
-  var url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(yahooSym) + '?range=2mo&interval=60m';
-  var attempts = HL_PROXIES.map(function(proxy){
-    return fetch(proxy.build(url), {signal: AbortSignal.timeout(8000)})
-      .then(function(r){
-        if(!r.ok) throw new Error(proxy.name+' → HTTP '+r.status);
-        return r.json();
-      })
-      .then(function(data){
-        var res = data && data.chart && data.chart.result && data.chart.result[0];
-        var q = res && res.indicators && res.indicators.quote && res.indicators.quote[0];
-        if (!res || !q || !q.close || !q.close.length) throw new Error(proxy.name+' → respuesta sin velas 1h');
-        return { high: q.high, low: q.low, close: q.close };
-      });
-  });
-  return Promise.any(attempts).catch(function(errs){
-    console.warn('[Squeeze 1h] Todos los proxies fallaron para', yahooSym, errs && errs.errors ? errs.errors.map(function(e){return e.message;}) : errs);
-    return null;
-  });
+  // range=1mo (no 2mo) → payload bastante más liviano, de sobra para los
+  // ~40 datos que necesita el cálculo del squeeze.
+  var url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(yahooSym) + '?range=1mo&interval=60m';
+  function tryProxies(proxies) {
+    var attempts = proxies.map(function(proxy){
+      return fetch(proxy.build(url), {signal: AbortSignal.timeout(6000)})
+        .then(function(r){
+          if(!r.ok) throw new Error(proxy.name+' → HTTP '+r.status);
+          return r.json();
+        })
+        .then(function(data){
+          var res = data && data.chart && data.chart.result && data.chart.result[0];
+          var q = res && res.indicators && res.indicators.quote && res.indicators.quote[0];
+          if (!res || !q || !q.close || !q.close.length) throw new Error(proxy.name+' → respuesta sin velas 1h');
+          return { high: q.high, low: q.low, close: q.close };
+        });
+    });
+    return Promise.any(attempts);
+  }
+  // 1er intento: solo 2 proxies en paralelo (los más rápidos). Si ambos
+  // fallan, recién ahí se prueba con el resto — así no se abren 5 conexiones
+  // por ticker todo el tiempo, que era lo que saturaba los proxies gratuitos.
+  return tryProxies(HL_PROXIES.slice(0, 2))
+    .catch(function(){ return tryProxies(HL_PROXIES.slice(2)); })
+    .catch(function(errs){
+      console.warn('[Squeeze 1h] Todos los proxies fallaron para', yahooSym, errs && errs.errors ? errs.errors.map(function(e){return e.message;}) : errs);
+      return null;
+    });
 }
 
 async function fetchSqueeze1hBatch(symbols, concurrency) {
-  var BATCH = concurrency || 15;
+  var BATCH = concurrency || 6;
   for (var i = 0; i < symbols.length; i += BATCH) {
     var batch = symbols.slice(i, i+BATCH);
     var results = await Promise.all(batch.map(function(sym){
@@ -2533,15 +2562,32 @@ async function fetchSqueeze1hBatch(symbols, concurrency) {
       var st = computeSqueezeState(item.candles.high, item.candles.low, item.candles.close);
       if (!st) { sqz1hStats.fail++; return; }
       sqz1hStats.ok++;
+      st.ts = Date.now();
       sqz1hCache[item.sym] = st;
     });
     applySqueeze1hSupplement(sqz1hCache);
+    saveSqz1hCacheToStorage();
   }
 }
 
 async function fetchSqueeze1hSupplement(symbols) {
-  sqz1hStats = { ok: 0, fail: 0, total: symbols.length };
-  await fetchSqueeze1hBatch(symbols, 15);
+  // Primero se aplica lo que ya esté en caché (vigente) — sin red, al instante.
+  var stored = loadSqz1hCacheFromStorage();
+  var now = Date.now();
+  var toFetch = [];
+  symbols.forEach(function(sym){
+    var c = stored[sym];
+    if (c && c.ts && (now - c.ts) < SQZ1H_TTL_MS) {
+      sqz1hCache[sym] = c;
+    } else {
+      toFetch.push(sym);
+    }
+  });
+  if (Object.keys(sqz1hCache).length) applySqueeze1hSupplement(sqz1hCache);
+
+  sqz1hStats = { ok: 0, fail: 0, total: toFetch.length };
+  if (!toFetch.length) return sqz1hCache;
+  await fetchSqueeze1hBatch(toFetch, 6);
   return sqz1hCache;
 }
 
@@ -2937,8 +2983,8 @@ function renderTech(){
           '<th style="width:75px">Ticker</th><th style="width:68px">Precio</th><th style="width:56px">% Día</th>' +
           '<th style="width:56px" title="RSI (Indice de Fuerza Relativa) 0-100: mide la velocidad de los cambios de precio. Menos de 30 = sobrevendido (posible rebote). Mas de 70 = sobrecomprado (posible correccion).">RSI</th><th style="width:56px" title="ADX (Indice Direccional Promedio) 0-100: mide la fuerza de la tendencia, no la direccion. Menos de 20 = sin tendencia, 20-25 debil, 25-50 fuerte, mas de 50 muy fuerte.">ADX</th><th style="width:68px">EMA200%</th>' +
           '<th style="width:65px">Vol</th><th style="width:65px">Vol20</th>' +
-          '<th style="width:108px" title="TTM Squeeze Momentum (grafico DIARIO): detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom (D)</th>' +
-          '<th style="width:108px" title="TTM Squeeze Momentum (grafico 1 HORA): mismo indicador pero calculado sobre velas horarias, para lectura de corto plazo.">Squeeze Mom (1h)</th>' +
+          '<th style="width:76px" title="TTM Squeeze Momentum (grafico DIARIO): detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom (D)</th>' +
+          '<th style="width:76px" title="TTM Squeeze Momentum (grafico 1 HORA): mismo indicador pero calculado sobre velas horarias, para lectura de corto plazo.">Squeeze Mom (1h)</th>' +
           '<th style="width:44px">Beta</th>' +
         '</tr></thead>' +
         '<tbody>' + secData.map(makeRow).join('') + '</tbody>' +
@@ -3696,12 +3742,12 @@ function squeezeCell(d, tf) {
   var sign    = mom >= 0 ? '+' : '';
 
   // Recuadro fijo: borde siempre visible, relleno de derecha a izquierda
-  return '<div style="display:flex;align-items:center;gap:5px;justify-content:flex-end">' +
-    '<span style="font-family:var(--mono);font-size:11px;color:'+barColor+';min-width:40px;text-align:right">'+sign+f2(mom)+'</span>' +
-    '<div style="width:40px;height:10px;background:var(--bg3);border:1px solid '+(mom>=0?'rgba(0,230,118,0.35)':'rgba(255,61,90,0.35)')+';border-radius:2px;overflow:hidden;flex-shrink:0;direction:rtl" title="Momentum: '+sign+f2(mom)+'">' +
+  return '<div style="display:flex;align-items:center;gap:3px;justify-content:flex-end">' +
+    '<span style="font-family:var(--mono);font-size:10px;color:'+barColor+';min-width:30px;text-align:right">'+sign+f2(mom)+'</span>' +
+    '<div style="width:22px;height:9px;background:var(--bg3);border:1px solid '+(mom>=0?'rgba(0,230,118,0.35)':'rgba(255,61,90,0.35)')+';border-radius:2px;overflow:hidden;flex-shrink:0;direction:rtl" title="Momentum: '+sign+f2(mom)+'">' +
       '<div style="height:100%;width:'+fillPct+'%;background:'+barColor+';border-radius:1px;transition:width .3s"></div>' +
     '</div>' +
-    '<div title="'+dotTitle+'" style="width:9px;height:9px;border-radius:50%;background:'+dotColor+';box-shadow:0 0 5px '+dotColor+';flex-shrink:0"></div>' +
+    '<div title="'+dotTitle+'" style="width:8px;height:8px;border-radius:50%;background:'+dotColor+';box-shadow:0 0 4px '+dotColor+';flex-shrink:0"></div>' +
   '</div>';
 }
 
