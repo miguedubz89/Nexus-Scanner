@@ -1185,10 +1185,9 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
     <!-- SCANNER TAB -->
     <div class="tab-panel active" id="tab-scanner">
       <div class="sum-grid">
-        <div class="sum-card"><div class="sum-lbl">Tickers</div><div class="sum-val" id="sTotal">0</div><div class="sum-sub">cargados</div></div>
+        <div class="sum-card"><div class="sum-lbl">Sectores</div><div class="sum-val"><span style="color:var(--green)" id="sSecUp">0</span><span style="color:var(--text-dim)">/</span><span style="color:var(--red)" id="sSecDn">0</span></div><div class="sum-sub" id="sSecTotal">suben / bajan</div></div>
         <div class="sum-card"><div class="sum-lbl">Alcistas</div><div class="sum-val" style="color:var(--green)" id="sUp">0</div><div class="sum-sub">chg &gt; 0</div></div>
         <div class="sum-card"><div class="sum-lbl">Bajistas</div><div class="sum-val" style="color:var(--red)" id="sDn">0</div><div class="sum-sub">chg &lt; 0</div></div>
-        <div class="sum-card"><div class="sum-lbl">RSI Prom</div><div class="sum-val" id="sRsi">--</div><div class="sum-sub">media</div></div>
         <div class="sum-card"><div class="sum-lbl">Sobre EMA200</div><div class="sum-val" style="color:var(--green)" id="sAbove">0</div><div class="sum-sub">tickers</div></div>
         <div class="sum-card"><div class="sum-lbl">Bajo EMA200</div><div class="sum-val" style="color:var(--red)" id="sBelow">0</div><div class="sum-sub">tickers</div></div>
       </div>
@@ -1253,9 +1252,9 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           <th style="width:68px" data-field="distEma200" onclick="ts('distEma200',this)">EMA200%<span class="sort-icon">⇅</span></th>
           <th style="width:65px" data-field="volume" onclick="ts('volume',this)">Vol<span class="sort-icon">⇅</span></th>
           <th style="width:65px" data-field="avgVol20" onclick="ts('avgVol20',this)">Vol20<span class="sort-icon">⇅</span></th>
-          <th style="width:108px" title="TTM Squeeze Momentum: detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom</th>
+          <th style="width:108px" title="TTM Squeeze Momentum (grafico DIARIO): detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom (D)</th>
+          <th style="width:108px" title="TTM Squeeze Momentum (grafico 1 HORA): mismo indicador que la columna anterior pero calculado sobre velas horarias, para lectura de corto plazo. Punto amarillo = squeeze ON. Punto celeste = squeeze OFF. Punto gris = sin squeeze.">Squeeze Mom (1h)</th>
           <th style="width:44px" data-field="beta" onclick="ts('beta',this)">Beta<span class="sort-icon">⇅</span></th>
-          <th style="width:54px">Spark</th>
         </tr></thead>
         <tbody id="techBody"></tbody>
       </table></div>
@@ -2198,6 +2197,9 @@ async function cargarCompleto() {
   // Completar Máx/Mín diario y 52 semanas en background (Yahoo Finance, best-effort)
   var symsParaHL = allData.map(function(d){ return d.symbol; });
   fetchHighLow52Supplement(symsParaHL).then(applyHighLowSupplement);
+  // Completar Squeeze Momentum de 1 hora en background (Yahoo Finance, best-effort)
+  var symsParaSqz1h = allData.map(function(d){ return d.symbol; });
+  fetchSqueeze1hSupplement(symsParaSqz1h);
 }
 
 // ── AUTO-REFRESH ──────────────────────────────────
@@ -2441,6 +2443,128 @@ function applyHighLowSupplement(map) {
   if (changed) { applyFilters(); }
 }
 
+// ── SQUEEZE MOMENTUM 1H (TTM Squeeze calculado en el cliente) ──
+// La columna "Squeeze Mom (D)" usa el valor DIARIO que ya manda server.py.
+// No existe backend para 1h, así que acá se pide la vela horaria a Yahoo
+// Finance (mismos proxies CORS que el suplemento de Máx/Mín) y se calcula
+// el mismo indicador (LazyBear TTM Squeeze) de forma aproximada en JS.
+var SQZ_LEN = 20, SQZ_MULT_BB = 2, SQZ_MULT_KC = 1.5;
+
+function sqzSMA(arr, len, end){ var s=0; for(var i=end-len+1;i<=end;i++){ if(arr[i]==null) return null; s+=arr[i]; } return s/len; }
+function sqzStDev(arr, len, end, mean){ var s=0; for(var i=end-len+1;i<=end;i++){ if(arr[i]==null) return null; s+=(arr[i]-mean)*(arr[i]-mean); } return Math.sqrt(s/len); }
+function sqzHighest(arr, len, end){ var m=-Infinity; for(var i=end-len+1;i<=end;i++){ if(arr[i]==null) return null; if(arr[i]>m) m=arr[i]; } return m; }
+function sqzLowest(arr, len, end){ var m=Infinity; for(var i=end-len+1;i<=end;i++){ if(arr[i]==null) return null; if(arr[i]<m) m=arr[i]; } return m; }
+function sqzTR(high, low, close, i){ if(i<=0) return high[i]-low[i]; var pc=close[i-1]; return Math.max(high[i]-low[i], Math.abs(high[i]-pc), Math.abs(low[i]-pc)); }
+function sqzATR(high, low, close, len, end){ var s=0; for(var i=end-len+1;i<=end;i++){ if(i<0||high[i]==null) return null; s+=sqzTR(high,low,close,i); } return s/len; }
+function sqzDelta(high, low, close, len, end){
+  var hh=sqzHighest(high,len,end), ll=sqzLowest(low,len,end), basis=sqzSMA(close,len,end);
+  if(hh==null||ll==null||basis==null) return null;
+  return close[end] - ((hh+ll)/2 + basis)/2;
+}
+function sqzLinreg(vals){
+  var n=vals.length, sx=0, sy=0, sxy=0, sx2=0;
+  for(var i=0;i<n;i++){ sx+=i; sy+=vals[i]; sxy+=i*vals[i]; sx2+=i*i; }
+  var den = n*sx2 - sx*sx;
+  if(!den) return vals[n-1];
+  var slope=(n*sxy-sx*sy)/den, inter=(sy-slope*sx)/n;
+  return inter + slope*(n-1);
+}
+function computeSqueezeState(high, low, close, len, multBB, multKC){
+  len=len||SQZ_LEN; multBB=multBB||SQZ_MULT_BB; multKC=multKC||SQZ_MULT_KC;
+  var n = close ? close.length : 0;
+  if (n < len*2 + 2) return null;
+  var end = n-1;
+  var basis = sqzSMA(close, len, end);
+  var dev   = basis!=null ? sqzStDev(close, len, end, basis) : null;
+  var rng   = sqzATR(high, low, close, len, end);
+  if (basis==null || dev==null || rng==null) return null;
+  var upperBB=basis+multBB*dev, lowerBB=basis-multBB*dev;
+  var upperKC=basis+multKC*rng, lowerKC=basis-multKC*rng;
+  var sqzOn  = lowerBB>lowerKC && upperBB<upperKC;
+  var sqzOff = lowerBB<lowerKC && upperBB>upperKC;
+
+  // Momentum: regresión lineal de los últimos 'len' deltas, y de la ventana
+  // anterior (desplazada 1 vela) para saber si el momentum sube o baja.
+  var deltas = [];
+  for (var i = end-len; i <= end; i++){
+    var d = sqzDelta(high, low, close, len, i);
+    if (d==null) return null;
+    deltas.push(d);
+  }
+  var mom     = sqzLinreg(deltas.slice(1));
+  var momPrev = sqzLinreg(deltas.slice(0, len));
+  return { sqzOn: sqzOn, sqzOff: sqzOff, sqzMom: mom, sqzMomPrev: momPrev };
+}
+
+var sqz1hCache = {};
+var sqz1hStats = { ok: 0, fail: 0, total: 0 };
+
+function fetchYahooChart1h(yahooSym) {
+  var url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(yahooSym) + '?range=2mo&interval=60m';
+  var attempts = HL_PROXIES.map(function(proxy){
+    return fetch(proxy.build(url), {signal: AbortSignal.timeout(8000)})
+      .then(function(r){
+        if(!r.ok) throw new Error(proxy.name+' → HTTP '+r.status);
+        return r.json();
+      })
+      .then(function(data){
+        var res = data && data.chart && data.chart.result && data.chart.result[0];
+        var q = res && res.indicators && res.indicators.quote && res.indicators.quote[0];
+        if (!res || !q || !q.close || !q.close.length) throw new Error(proxy.name+' → respuesta sin velas 1h');
+        return { high: q.high, low: q.low, close: q.close };
+      });
+  });
+  return Promise.any(attempts).catch(function(errs){
+    console.warn('[Squeeze 1h] Todos los proxies fallaron para', yahooSym, errs && errs.errors ? errs.errors.map(function(e){return e.message;}) : errs);
+    return null;
+  });
+}
+
+async function fetchSqueeze1hBatch(symbols, concurrency) {
+  var BATCH = concurrency || 15;
+  for (var i = 0; i < symbols.length; i += BATCH) {
+    var batch = symbols.slice(i, i+BATCH);
+    var results = await Promise.all(batch.map(function(sym){
+      var ys = resolveYahooSymbol(sym);
+      return fetchYahooChart1h(ys).then(function(candles){ return {sym: sym, candles: candles}; });
+    }));
+    results.forEach(function(item){
+      if (!item.candles) { sqz1hStats.fail++; return; }
+      var st = computeSqueezeState(item.candles.high, item.candles.low, item.candles.close);
+      if (!st) { sqz1hStats.fail++; return; }
+      sqz1hStats.ok++;
+      sqz1hCache[item.sym] = st;
+    });
+    applySqueeze1hSupplement(sqz1hCache);
+  }
+}
+
+async function fetchSqueeze1hSupplement(symbols) {
+  sqz1hStats = { ok: 0, fail: 0, total: symbols.length };
+  await fetchSqueeze1hBatch(symbols, 15);
+  return sqz1hCache;
+}
+
+function retrySqueeze1hSupplement() {
+  var syms = allData.filter(function(d){ return d.sqzMom1h == null; }).map(function(d){ return d.symbol; });
+  if (!syms.length) syms = allData.map(function(d){ return d.symbol; });
+  fetchSqueeze1hSupplement(syms);
+}
+
+function applySqueeze1hSupplement(map) {
+  var changed = false;
+  allData.forEach(function(d){
+    var s = map[d.symbol];
+    if (!s) return;
+    d.sqzOn1h      = s.sqzOn;
+    d.sqzOff1h     = s.sqzOff;
+    d.sqzMom1h     = s.sqzMom;
+    d.sqzMomPrev1h = s.sqzMomPrev;
+    changed = true;
+  });
+  if (changed) { applyFilters(); }
+}
+
 // ── FILTERS ───────────────────────────────────────
 function applyFilters() {
   var sec = document.getElementById('fSector').value;
@@ -2481,13 +2605,30 @@ function renderAll(){ renderSummary();renderScanner();renderMovers();renderSecto
 
 function renderSummary(){
   var d=filtered;
-  document.getElementById('sTotal').textContent=d.length;
   document.getElementById('sUp').textContent=d.filter(function(x){return x.chgPct>0}).length;
   document.getElementById('sDn').textContent=d.filter(function(x){return x.chgPct<0}).length;
-  var rsis=d.map(function(x){return x.rsi}).filter(function(x){return x!=null});
-  document.getElementById('sRsi').textContent=rsis.length?f1(rsis.reduce(function(a,b){return a+b},0)/rsis.length):'--';
   document.getElementById('sAbove').textContent=d.filter(function(x){return x.distEma200!=null&&x.distEma200>0}).length;
   document.getElementById('sBelow').textContent=d.filter(function(x){return x.distEma200!=null&&x.distEma200<0}).length;
+  // ── Sectores que suben / bajan en el día ──
+  // Un sector "sube" si el cambio % promedio de sus tickers es > 0, "baja" si es < 0.
+  var bySector = {};
+  d.forEach(function(x){
+    if (x.chgPct == null) return;
+    var s = x.sector || 'Otros';
+    if (!bySector[s]) bySector[s] = [];
+    bySector[s].push(x.chgPct);
+  });
+  var secUp = 0, secDn = 0, secTotal = 0;
+  Object.keys(bySector).forEach(function(s){
+    var vals = bySector[s];
+    var avg = vals.reduce(function(a,b){return a+b},0) / vals.length;
+    secTotal++;
+    if (avg > 0) secUp++;
+    else if (avg < 0) secDn++;
+  });
+  document.getElementById('sSecUp').textContent = secUp;
+  document.getElementById('sSecDn').textContent = secDn;
+  document.getElementById('sSecTotal').textContent = 'de '+secTotal+' sectores';
 }
 
 function renderScanner(){
@@ -2737,9 +2878,9 @@ function renderTech(){
       '<td>'+distCell(d.distEma200)+'</td>'+
       '<td>'+fv(d.volume)+'</td>'+
       '<td>'+fv(d.avgVol20)+'</td>'+
-      '<td>'+squeezeCell(d)+'</td>'+
+      '<td>'+squeezeCell(d,'d')+'</td>'+
+      '<td>'+squeezeCell(d,'1h')+'</td>'+
       '<td style="color:var(--text-dim)">'+(d.beta!=null?f2(d.beta):'--')+'</td>'+
-      '<td>'+doSpark(d.spark)+'</td>'+
       '</tr>';
   }
 
@@ -2796,8 +2937,9 @@ function renderTech(){
           '<th style="width:75px">Ticker</th><th style="width:68px">Precio</th><th style="width:56px">% Día</th>' +
           '<th style="width:56px" title="RSI (Indice de Fuerza Relativa) 0-100: mide la velocidad de los cambios de precio. Menos de 30 = sobrevendido (posible rebote). Mas de 70 = sobrecomprado (posible correccion).">RSI</th><th style="width:56px" title="ADX (Indice Direccional Promedio) 0-100: mide la fuerza de la tendencia, no la direccion. Menos de 20 = sin tendencia, 20-25 debil, 25-50 fuerte, mas de 50 muy fuerte.">ADX</th><th style="width:68px">EMA200%</th>' +
           '<th style="width:65px">Vol</th><th style="width:65px">Vol20</th>' +
-          '<th style="width:108px" title="TTM Squeeze Momentum: detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom</th><th style="width:44px">Beta</th>' +
-          '<th style="width:54px">Spark</th>' +
+          '<th style="width:108px" title="TTM Squeeze Momentum (grafico DIARIO): detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom (D)</th>' +
+          '<th style="width:108px" title="TTM Squeeze Momentum (grafico 1 HORA): mismo indicador pero calculado sobre velas horarias, para lectura de corto plazo.">Squeeze Mom (1h)</th>' +
+          '<th style="width:44px">Beta</th>' +
         '</tr></thead>' +
         '<tbody>' + secData.map(makeRow).join('') + '</tbody>' +
       '</table></div></div>';
@@ -3504,14 +3646,19 @@ var squeezeOn = true;
 
 function toggleSqueeze(e) {}
 
-function squeezeCell(d) {
-  // Usa campos reales calculados por server.py (LazyBear TTM Squeeze)
-  var sqzOn  = d.sqzOn;
-  var sqzOff = d.sqzOff;
-  var mom    = d.sqzMom;
-  var momPrev= d.sqzMomPrev;
+function squeezeCell(d, tf) {
+  // tf === '1h'  → usa el TTM Squeeze calculado en el cliente sobre velas horarias (Yahoo Finance)
+  // tf === 'd' / (default) → usa los campos calculados por server.py sobre velas diarias
+  var suf = (tf === '1h') ? '1h' : '';
+  var sqzOn  = d['sqzOn'+suf];
+  var sqzOff = d['sqzOff'+suf];
+  var mom    = d['sqzMom'+suf];
+  var momPrev= d['sqzMomPrev'+suf];
 
-  if (mom == null) return '<span style="color:var(--text-dim)">--</span>';
+  if (mom == null) {
+    var pendTitle = (suf === '1h') ? 'Squeeze 1h: calculando…' : 'Sin dato';
+    return '<span style="color:var(--text-dim)" title="'+pendTitle+'">--</span>';
+  }
 
   // ── Color del punto (estado del squeeze) ──────
   // Amarillo  = squeeze ON  (comprimido, energía acumulada)
