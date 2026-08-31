@@ -700,6 +700,11 @@ textarea.ti-area:focus{border-color:var(--accent)}
 .sum-sub{font-size:12px;color:var(--text-dim);font-family:var(--mono);margin-top:2px}
 .tbl-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:2px;overflow:hidden;margin-bottom:4px}
 table.dt{width:100%;border-collapse:collapse;table-layout:fixed}
+/* La tabla de la pestaña Técnico no debe estirarse a lo ancho de la pantalla:
+   que use el ancho real de sus columnas (nada de columnas infladas con
+   espacio vacío) y, si no entra, que scrollee horizontal. */
+#tab-technical table.dt{width:auto}
+#tab-technical .tbl-wrap{overflow-x:auto}
 table.dt th{background:var(--bg3);color:var(--text-dim);font-family:var(--head);font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:6px 7px;text-align:right;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap}
 table.dt th:first-child{text-align:left}
 table.dt th:hover{color:var(--accent)}
@@ -1252,8 +1257,8 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           <th style="width:68px" data-field="distEma200" onclick="ts('distEma200',this)">EMA200%<span class="sort-icon">⇅</span></th>
           <th style="width:65px" data-field="volume" onclick="ts('volume',this)">Vol<span class="sort-icon">⇅</span></th>
           <th style="width:65px" data-field="avgVol20" onclick="ts('avgVol20',this)">Vol20<span class="sort-icon">⇅</span></th>
-          <th style="width:76px" title="TTM Squeeze Momentum (grafico DIARIO): detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom (D)</th>
-          <th style="width:76px" title="TTM Squeeze Momentum (grafico 1 HORA): mismo indicador que la columna anterior pero calculado sobre velas horarias, para lectura de corto plazo. Punto amarillo = squeeze ON. Punto celeste = squeeze OFF. Punto gris = sin squeeze.">Squeeze Mom (1h)</th>
+          <th style="width:108px" title="TTM Squeeze Momentum (grafico DIARIO): detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom (D)</th>
+          <th style="width:108px" title="TTM Squeeze Momentum (grafico 1 HORA): mismo indicador que la columna anterior pero calculado sobre velas horarias, para lectura de corto plazo. Punto amarillo = squeeze ON. Punto celeste = squeeze OFF. Punto gris = sin squeeze.">Squeeze Mom (1h)</th>
           <th style="width:44px" data-field="beta" onclick="ts('beta',this)">Beta<span class="sort-icon">⇅</span></th>
         </tr></thead>
         <tbody id="techBody"></tbody>
@@ -2191,17 +2196,17 @@ async function cargarCompleto() {
   buildTape();
   startCountdown();
   document.getElementById('expInfo').textContent = allData.length+' tickers | Cargado: '+new Date().toLocaleTimeString('es-AR');
-  // Cargar fechas de earnings en background
-  var symsParaEarnings = allData.map(function(d){return d.symbol;}).filter(function(s){return SECTORS[s]!=='ETF';});
-  fetchEarnings(symsParaEarnings).then(function(){ renderAllTab(); renderEarningsTab(); });
-  // Completar Máx/Mín diario y 52 semanas en background (Yahoo Finance, best-effort)
-  var symsParaHL = allData.map(function(d){ return d.symbol; });
-  fetchHighLow52Supplement(symsParaHL).then(function(res){
-    applyHighLowSupplement(res);
-    // Recién cuando termina Máx/Mín arranca el Squeeze 1h, para no pelear
-    // por los mismos proxies CORS gratuitos y que ambos vayan más rápido.
-    var symsParaSqz1h = allData.map(function(d){ return d.symbol; });
-    fetchSqueeze1hSupplement(symsParaSqz1h);
+  // ── Orden de las cargas en background ──────────────────────────
+  // 1º Squeeze 1h (lo más importante para vos, se prioriza y arranca ya)
+  // 2º Máx/Mín diario y 52 semanas
+  // 3º Earnings (lo más pesado — pega contra un solo proxy sin reintentos — se deja para el final)
+  var symsParaSqz1h = allData.map(function(d){ return d.symbol; });
+  fetchSqueeze1hSupplement(symsParaSqz1h).then(function(){
+    var symsParaHL = allData.map(function(d){ return d.symbol; });
+    return fetchHighLow52Supplement(symsParaHL).then(applyHighLowSupplement);
+  }).then(function(){
+    var symsParaEarnings = allData.map(function(d){return d.symbol;}).filter(function(s){return SECTORS[s]!=='ETF';});
+    return fetchEarnings(symsParaEarnings).then(function(){ renderAllTab(); renderEarningsTab(); });
   });
 }
 
@@ -2983,8 +2988,8 @@ function renderTech(){
           '<th style="width:75px">Ticker</th><th style="width:68px">Precio</th><th style="width:56px">% Día</th>' +
           '<th style="width:56px" title="RSI (Indice de Fuerza Relativa) 0-100: mide la velocidad de los cambios de precio. Menos de 30 = sobrevendido (posible rebote). Mas de 70 = sobrecomprado (posible correccion).">RSI</th><th style="width:56px" title="ADX (Indice Direccional Promedio) 0-100: mide la fuerza de la tendencia, no la direccion. Menos de 20 = sin tendencia, 20-25 debil, 25-50 fuerte, mas de 50 muy fuerte.">ADX</th><th style="width:68px">EMA200%</th>' +
           '<th style="width:65px">Vol</th><th style="width:65px">Vol20</th>' +
-          '<th style="width:76px" title="TTM Squeeze Momentum (grafico DIARIO): detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom (D)</th>' +
-          '<th style="width:76px" title="TTM Squeeze Momentum (grafico 1 HORA): mismo indicador pero calculado sobre velas horarias, para lectura de corto plazo.">Squeeze Mom (1h)</th>' +
+          '<th style="width:108px" title="TTM Squeeze Momentum (grafico DIARIO): detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom (D)</th>' +
+          '<th style="width:108px" title="TTM Squeeze Momentum (grafico 1 HORA): mismo indicador pero calculado sobre velas horarias, para lectura de corto plazo.">Squeeze Mom (1h)</th>' +
           '<th style="width:44px">Beta</th>' +
         '</tr></thead>' +
         '<tbody>' + secData.map(makeRow).join('') + '</tbody>' +
@@ -3742,12 +3747,12 @@ function squeezeCell(d, tf) {
   var sign    = mom >= 0 ? '+' : '';
 
   // Recuadro fijo: borde siempre visible, relleno de derecha a izquierda
-  return '<div style="display:flex;align-items:center;gap:3px;justify-content:flex-end">' +
-    '<span style="font-family:var(--mono);font-size:10px;color:'+barColor+';min-width:30px;text-align:right">'+sign+f2(mom)+'</span>' +
-    '<div style="width:22px;height:9px;background:var(--bg3);border:1px solid '+(mom>=0?'rgba(0,230,118,0.35)':'rgba(255,61,90,0.35)')+';border-radius:2px;overflow:hidden;flex-shrink:0;direction:rtl" title="Momentum: '+sign+f2(mom)+'">' +
+  return '<div style="display:flex;align-items:center;gap:5px;justify-content:flex-end">' +
+    '<span style="font-family:var(--mono);font-size:11px;color:'+barColor+';min-width:40px;text-align:right">'+sign+f2(mom)+'</span>' +
+    '<div style="width:40px;height:10px;background:var(--bg3);border:1px solid '+(mom>=0?'rgba(0,230,118,0.35)':'rgba(255,61,90,0.35)')+';border-radius:2px;overflow:hidden;flex-shrink:0;direction:rtl" title="Momentum: '+sign+f2(mom)+'">' +
       '<div style="height:100%;width:'+fillPct+'%;background:'+barColor+';border-radius:1px;transition:width .3s"></div>' +
     '</div>' +
-    '<div title="'+dotTitle+'" style="width:8px;height:8px;border-radius:50%;background:'+dotColor+';box-shadow:0 0 4px '+dotColor+';flex-shrink:0"></div>' +
+    '<div title="'+dotTitle+'" style="width:9px;height:9px;border-radius:50%;background:'+dotColor+';box-shadow:0 0 5px '+dotColor+';flex-shrink:0"></div>' +
   '</div>';
 }
 
