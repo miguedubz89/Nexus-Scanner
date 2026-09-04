@@ -1191,8 +1191,8 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
         <div class="sum-card"><div class="sum-lbl">RSI Prom</div><div class="sum-val" id="sRsi">--</div><div class="sum-sub">media</div></div>
         <div class="sum-card"><div class="sum-lbl">Sobre EMA200</div><div class="sum-val" style="color:var(--green)" id="sAbove">0</div><div class="sum-sub">tickers</div></div>
         <div class="sum-card"><div class="sum-lbl">Bajo EMA200</div><div class="sum-val" style="color:var(--red)" id="sBelow">0</div><div class="sum-sub">tickers</div></div>
-        <div class="sum-card"><div class="sum-lbl">Sectores Suben</div><div class="sum-val" style="color:var(--green)" id="sSecUp">0</div><div class="sum-sub">de <span id="sSecTotal">0</span></div></div>
-        <div class="sum-card"><div class="sum-lbl">Sectores Bajan</div><div class="sum-val" style="color:var(--red)" id="sSecDn">0</div><div class="sum-sub">de <span id="sSecTotal2">0</span></div></div>
+        <div class="sum-card"><div class="sum-lbl">Sectores Suben</div><div class="sum-val" style="color:var(--green)" id="sSecUp">0</div><div class="sum-sub">de <span id="sSecTotal">0</span></div><div class="sc-tags" id="tSecUp"></div></div>
+        <div class="sum-card"><div class="sum-lbl">Sectores Bajan</div><div class="sum-val" style="color:var(--red)" id="sSecDn">0</div><div class="sum-sub">de <span id="sSecTotal2">0</span></div><div class="sc-tags" id="tSecDn"></div></div>
       </div>
       <div class="sc-grid">
         <div class="sc-card c1"><div class="sc-lbl">RSI &lt; 30 Sobrevendido</div><div class="sc-num" id="n1">0</div><div class="sc-tags" id="t1"></div></div>
@@ -1252,6 +1252,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           <th style="width:56px" data-field="chgPct" onclick="ts('chgPct',this)">% Día<span class="sort-icon">⇅</span></th>
           <th style="width:56px" data-field="rsi" onclick="ts('rsi',this)" title="RSI (Indice de Fuerza Relativa) 0-100: mide la velocidad de los cambios de precio. Menos de 30 = sobrevendido (posible rebote). Mas de 70 = sobrecomprado (posible correccion).">RSI<span class="sort-icon">⇅</span></th>
           <th style="width:56px" data-field="adx" onclick="ts('adx',this)" title="ADX (Indice Direccional Promedio) 0-100: mide la fuerza de la tendencia, no la direccion. Menos de 20 = sin tendencia, 20-25 debil, 25-50 fuerte, mas de 50 muy fuerte.">ADX<span class="sort-icon">⇅</span></th>
+          <th style="width:68px" data-field="distEma50" onclick="ts('distEma50',this)">EMA50%<span class="sort-icon">⇅</span></th>
           <th style="width:68px" data-field="distEma200" onclick="ts('distEma200',this)">EMA200%<span class="sort-icon">⇅</span></th>
           <th style="width:65px" data-field="volume" onclick="ts('volume',this)">Vol<span class="sort-icon">⇅</span></th>
           <th style="width:65px" data-field="avgVol20" onclick="ts('avgVol20',this)">Vol20<span class="sort-icon">⇅</span></th>
@@ -2545,17 +2546,24 @@ function renderSummary(){
   var secGroups={};
   d.forEach(function(x){ if(!secGroups[x.sector])secGroups[x.sector]=[]; secGroups[x.sector].push(x); });
   var secNames=Object.keys(secGroups);
-  var secUp=0, secDn=0;
+  var secUp=0, secDn=0, secUpNames=[], secDnNames=[];
   secNames.forEach(function(sec){
     var chgVals=secGroups[sec].map(function(x){return x.chgPct;}).filter(function(v){return v!=null;});
     if(!chgVals.length)return;
     var avg=chgVals.reduce(function(a,b){return a+b},0)/chgVals.length;
-    if(avg>0)secUp++; else if(avg<0)secDn++;
+    if(avg>0){secUp++;secUpNames.push(sec);} else if(avg<0){secDn++;secDnNames.push(sec);}
   });
   document.getElementById('sSecUp').textContent=secUp;
   document.getElementById('sSecDn').textContent=secDn;
   document.getElementById('sSecTotal').textContent=secNames.length;
   document.getElementById('sSecTotal2').textContent=secNames.length;
+  setSecTags('tSecUp',secUpNames);
+  setSecTags('tSecDn',secDnNames);
+}
+function setSecTags(id,names){
+  var el=document.getElementById(id);
+  if(!el)return;
+  el.innerHTML=names.length?names.map(function(s){return '<span class="sc-tag">'+s+'</span>'}).join(''):'<span style="color:var(--text-dim);font-size:10px;font-family:var(--mono)">ninguno</span>';
 }
 
 function renderScanner(){
@@ -2802,6 +2810,7 @@ function renderTech(){
       '<td>'+chipChg(d.chgPct)+'</td>'+
       '<td>'+rsiCell(d.rsi)+'</td>'+
       '<td>'+adxCell(d.adx)+'</td>'+
+      '<td>'+distCell(d.distEma50)+'</td>'+
       '<td>'+distCell(d.distEma200)+'</td>'+
       '<td>'+fv(d.volume)+'</td>'+
       '<td>'+fv(d.avgVol20)+'</td>'+
@@ -2863,7 +2872,7 @@ function renderTech(){
       '<div class="tbl-wrap" style="border-radius:0 0 2px 2px"><table class="dt" style="min-width:720px">' +
         '<thead><tr>' +
           '<th style="width:75px">Ticker</th><th style="width:68px">Precio</th><th style="width:56px">% Día</th>' +
-          '<th style="width:56px" title="RSI (Indice de Fuerza Relativa) 0-100: mide la velocidad de los cambios de precio. Menos de 30 = sobrevendido (posible rebote). Mas de 70 = sobrecomprado (posible correccion).">RSI</th><th style="width:56px" title="ADX (Indice Direccional Promedio) 0-100: mide la fuerza de la tendencia, no la direccion. Menos de 20 = sin tendencia, 20-25 debil, 25-50 fuerte, mas de 50 muy fuerte.">ADX</th><th style="width:68px">EMA200%</th>' +
+          '<th style="width:56px" title="RSI (Indice de Fuerza Relativa) 0-100: mide la velocidad de los cambios de precio. Menos de 30 = sobrevendido (posible rebote). Mas de 70 = sobrecomprado (posible correccion).">RSI</th><th style="width:56px" title="ADX (Indice Direccional Promedio) 0-100: mide la fuerza de la tendencia, no la direccion. Menos de 20 = sin tendencia, 20-25 debil, 25-50 fuerte, mas de 50 muy fuerte.">ADX</th><th style="width:68px">EMA50%</th><th style="width:68px">EMA200%</th>' +
           '<th style="width:65px">Vol</th><th style="width:65px">Vol20</th>' +
           '<th style="width:108px" title="TTM Squeeze Momentum: detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom</th><th style="width:108px" title="Mismo TTM Squeeze Momentum pero calculado en velas de 1 hora — carga por separado y más rápido.">Squeeze 1H</th><th style="width:44px">Beta</th>' +
           '<th style="width:54px">Spark</th>' +
