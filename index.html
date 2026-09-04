@@ -694,6 +694,9 @@ textarea.ti-area:focus{border-color:var(--accent)}
 .sc-tags{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;font-family:var(--mono);font-size:12px}
 .sc-tag{background:rgba(255,255,255,0.04);border:1px solid var(--border);padding:1px 5px;border-radius:2px;color:var(--text-dim)}
 .sum-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:14px}
+.sec-mov-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.sec-mov-card{background:var(--bg2);border:1px solid var(--border);border-radius:2px;padding:10px 12px}
+.sec-mov-lbl{font-family:var(--head);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px}
 .sum-card{background:var(--bg2);border:1px solid var(--border);border-radius:2px;padding:10px 12px}
 .sum-lbl{font-family:var(--head);font-size:11px;font-weight:700;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase;margin-bottom:4px}
 .sum-val{font-family:var(--mono);font-size:24px;color:var(--text-bright)}
@@ -786,6 +789,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
   #tab-technical table.dt th,#tab-technical table.dt td{padding:10px 7px;font-size:11px}
   .sum-grid{grid-template-columns:repeat(2,1fr)!important}
   .sc-grid{grid-template-columns:repeat(2,1fr)!important}
+  .sec-mov-grid{grid-template-columns:1fr!important}
   .pf-summary-grid{grid-template-columns:repeat(2,1fr)!important}
   .movers-grid{grid-template-columns:1fr}
   .topbar{padding:8px 12px;gap:8px}
@@ -1191,8 +1195,12 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
         <div class="sum-card"><div class="sum-lbl">RSI Prom</div><div class="sum-val" id="sRsi">--</div><div class="sum-sub">media</div></div>
         <div class="sum-card"><div class="sum-lbl">Sobre EMA200</div><div class="sum-val" style="color:var(--green)" id="sAbove">0</div><div class="sum-sub">tickers</div></div>
         <div class="sum-card"><div class="sum-lbl">Bajo EMA200</div><div class="sum-val" style="color:var(--red)" id="sBelow">0</div><div class="sum-sub">tickers</div></div>
-        <div class="sum-card"><div class="sum-lbl">Sectores Suben</div><div class="sum-val" style="color:var(--green)" id="sSecUp">0</div><div class="sum-sub">de <span id="sSecTotal">0</span></div><div class="sc-tags" id="tSecUp"></div></div>
-        <div class="sum-card"><div class="sum-lbl">Sectores Bajan</div><div class="sum-val" style="color:var(--red)" id="sSecDn">0</div><div class="sum-sub">de <span id="sSecTotal2">0</span></div><div class="sc-tags" id="tSecDn"></div></div>
+        <div class="sum-card"><div class="sum-lbl">Sectores Suben</div><div class="sum-val" style="color:var(--green)" id="sSecUp">0</div><div class="sum-sub">de <span id="sSecTotal">0</span></div></div>
+        <div class="sum-card"><div class="sum-lbl">Sectores Bajan</div><div class="sum-val" style="color:var(--red)" id="sSecDn">0</div><div class="sum-sub">de <span id="sSecTotal2">0</span></div></div>
+      </div>
+      <div class="sec-mov-grid">
+        <div class="sec-mov-card"><div class="sec-mov-lbl" style="color:var(--green)">▲ SECTORES QUE SUBEN</div><div class="sc-tags" id="tSecUp"></div></div>
+        <div class="sec-mov-card"><div class="sec-mov-lbl" style="color:var(--red)">▼ SECTORES QUE BAJAN</div><div class="sc-tags" id="tSecDn"></div></div>
       </div>
       <div class="sc-grid">
         <div class="sc-card c1"><div class="sc-lbl">RSI &lt; 30 Sobrevendido</div><div class="sc-num" id="n1">0</div><div class="sc-tags" id="t1"></div></div>
