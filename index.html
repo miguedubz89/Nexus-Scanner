@@ -1191,6 +1191,8 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
         <div class="sum-card"><div class="sum-lbl">RSI Prom</div><div class="sum-val" id="sRsi">--</div><div class="sum-sub">media</div></div>
         <div class="sum-card"><div class="sum-lbl">Sobre EMA200</div><div class="sum-val" style="color:var(--green)" id="sAbove">0</div><div class="sum-sub">tickers</div></div>
         <div class="sum-card"><div class="sum-lbl">Bajo EMA200</div><div class="sum-val" style="color:var(--red)" id="sBelow">0</div><div class="sum-sub">tickers</div></div>
+        <div class="sum-card"><div class="sum-lbl">Sectores Suben</div><div class="sum-val" style="color:var(--green)" id="sSecUp">0</div><div class="sum-sub">de <span id="sSecTotal">0</span></div></div>
+        <div class="sum-card"><div class="sum-lbl">Sectores Bajan</div><div class="sum-val" style="color:var(--red)" id="sSecDn">0</div><div class="sum-sub">de <span id="sSecTotal2">0</span></div></div>
       </div>
       <div class="sc-grid">
         <div class="sc-card c1"><div class="sc-lbl">RSI &lt; 30 Sobrevendido</div><div class="sc-num" id="n1">0</div><div class="sc-tags" id="t1"></div></div>
@@ -1254,6 +1256,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           <th style="width:65px" data-field="volume" onclick="ts('volume',this)">Vol<span class="sort-icon">⇅</span></th>
           <th style="width:65px" data-field="avgVol20" onclick="ts('avgVol20',this)">Vol20<span class="sort-icon">⇅</span></th>
           <th style="width:108px" title="TTM Squeeze Momentum: detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom</th>
+          <th style="width:108px" title="Mismo TTM Squeeze Momentum pero calculado en velas de 1 hora.">Squeeze 1H</th>
           <th style="width:44px" data-field="beta" onclick="ts('beta',this)">Beta<span class="sort-icon">⇅</span></th>
           <th style="width:54px">Spark</th>
         </tr></thead>
@@ -2136,6 +2139,12 @@ document.addEventListener('visibilitychange', function() {
 async function cargarCompleto() {
   if (!tickers.length) return;
 
+  // ⚡ Squeeze 1H: se dispara YA, en paralelo, sin esperar (fire-and-forget).
+  // Es un endpoint liviano que llega mucho antes que /quote, así que la
+  // columna de squeeze horario se completa primero y el resto (RSI, ADX,
+  // fundamentals, etc.) va llegando después con el loop pesado de abajo.
+  loadSqueeze1h(tickers.slice());
+
   // ── Mostrar cache inmediatamente (incluyendo IDB como fallback) ──
   await new Promise(function(resolve) {
     loadTickerCacheAsync(function(cached) {
@@ -2206,6 +2215,9 @@ async function doRefresh() {
   var ok = await checkServer();
   if (!ok) { setStatus('err','SIN SERVIDOR'); return; }
   setStatus('loading', 'ACTUALIZANDO PRECIOS...');
+
+  // Refrescar squeeze 1h en paralelo (liviano, no bloquea el resto)
+  loadSqueeze1h(allData.map(function(d){ return d.symbol; }));
 
   var BATCH_SIZE_R = 10; // ⚡ Aumentado para refresh más rápido
   for (var i = 0; i < allData.length; i += BATCH_SIZE_R) {
@@ -2319,6 +2331,46 @@ async function fetchQuote(sym) {
     markTickerError(sym, 'Timeout/Error');
     console.warn('Error fetching', sym, e.message);
     return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, marketCap: null, mom12m: null, mom6m: null, sector: resolveSector(sym), _error: true, _flash: '' };
+  }
+}
+
+// ── SQUEEZE 1H — carga rápida e independiente ──────
+// Endpoint liviano (server.py: /squeeze1h) que NO trae info()/financials
+// ni 1 año de historial diario, por eso llega mucho antes que /quote.
+// Se guarda aparte (no dentro de allData) para poder pintarlo apenas
+// llega, sin esperar a que termine la carga pesada de /quote.
+var squeeze1hData = {};      // { symbol: {sqzOn, sqzOff, sqzMom, sqzMomPrev} }
+var squeeze1hInFlight = false;
+
+async function fetchSqueeze1h(sym) {
+  try {
+    var fetchSym = resolveYahooSymbol(sym);
+    var r = await fetch(API+'/squeeze1h?symbol='+fetchSym, {signal: AbortSignal.timeout(6000)});
+    if (!r.ok) return null;
+    var d = await r.json();
+    return d.error ? null : d;
+  } catch(e) { return null; }
+}
+
+// Dispara la carga del squeeze 1h para toda la lista, en tandas, y va
+// pintando la tabla TÉCNICO apenas cada tanda vuelve — corre en paralelo
+// a cargarCompleto()/fetchQuote y termina mucho antes.
+async function loadSqueeze1h(symList) {
+  if (!symList || !symList.length || squeeze1hInFlight) return;
+  squeeze1hInFlight = true;
+  try {
+    var BATCH = 15; // liviano → tandas más grandes que /quote
+    for (var i = 0; i < symList.length; i += BATCH) {
+      var batch = symList.slice(i, i+BATCH);
+      var results = await Promise.all(batch.map(fetchSqueeze1h));
+      results.forEach(function(r, idx){
+        if (r) squeeze1hData[batch[idx]] = r;
+      });
+      // Repintar ya, sin esperar a que termine todo el resto de tandas
+      if (typeof renderTech === 'function' && document.getElementById('techBody')) renderTech();
+    }
+  } finally {
+    squeeze1hInFlight = false;
   }
 }
 
@@ -2488,6 +2540,22 @@ function renderSummary(){
   document.getElementById('sRsi').textContent=rsis.length?f1(rsis.reduce(function(a,b){return a+b},0)/rsis.length):'--';
   document.getElementById('sAbove').textContent=d.filter(function(x){return x.distEma200!=null&&x.distEma200>0}).length;
   document.getElementById('sBelow').textContent=d.filter(function(x){return x.distEma200!=null&&x.distEma200<0}).length;
+
+  // ── Sectores que suben / bajan (según el % día promedio de cada sector) ──
+  var secGroups={};
+  d.forEach(function(x){ if(!secGroups[x.sector])secGroups[x.sector]=[]; secGroups[x.sector].push(x); });
+  var secNames=Object.keys(secGroups);
+  var secUp=0, secDn=0;
+  secNames.forEach(function(sec){
+    var chgVals=secGroups[sec].map(function(x){return x.chgPct;}).filter(function(v){return v!=null;});
+    if(!chgVals.length)return;
+    var avg=chgVals.reduce(function(a,b){return a+b},0)/chgVals.length;
+    if(avg>0)secUp++; else if(avg<0)secDn++;
+  });
+  document.getElementById('sSecUp').textContent=secUp;
+  document.getElementById('sSecDn').textContent=secDn;
+  document.getElementById('sSecTotal').textContent=secNames.length;
+  document.getElementById('sSecTotal2').textContent=secNames.length;
 }
 
 function renderScanner(){
@@ -2738,6 +2806,7 @@ function renderTech(){
       '<td>'+fv(d.volume)+'</td>'+
       '<td>'+fv(d.avgVol20)+'</td>'+
       '<td>'+squeezeCell(d)+'</td>'+
+      '<td>'+squeezeCell1h(d)+'</td>'+
       '<td style="color:var(--text-dim)">'+(d.beta!=null?f2(d.beta):'--')+'</td>'+
       '<td>'+doSpark(d.spark)+'</td>'+
       '</tr>';
@@ -2796,7 +2865,7 @@ function renderTech(){
           '<th style="width:75px">Ticker</th><th style="width:68px">Precio</th><th style="width:56px">% Día</th>' +
           '<th style="width:56px" title="RSI (Indice de Fuerza Relativa) 0-100: mide la velocidad de los cambios de precio. Menos de 30 = sobrevendido (posible rebote). Mas de 70 = sobrecomprado (posible correccion).">RSI</th><th style="width:56px" title="ADX (Indice Direccional Promedio) 0-100: mide la fuerza de la tendencia, no la direccion. Menos de 20 = sin tendencia, 20-25 debil, 25-50 fuerte, mas de 50 muy fuerte.">ADX</th><th style="width:68px">EMA200%</th>' +
           '<th style="width:65px">Vol</th><th style="width:65px">Vol20</th>' +
-          '<th style="width:108px" title="TTM Squeeze Momentum: detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom</th><th style="width:44px">Beta</th>' +
+          '<th style="width:108px" title="TTM Squeeze Momentum: detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom</th><th style="width:108px" title="Mismo TTM Squeeze Momentum pero calculado en velas de 1 hora — carga por separado y más rápido.">Squeeze 1H</th><th style="width:44px">Beta</th>' +
           '<th style="width:54px">Spark</th>' +
         '</tr></thead>' +
         '<tbody>' + secData.map(makeRow).join('') + '</tbody>' +
@@ -3505,12 +3574,19 @@ var squeezeOn = true;
 function toggleSqueeze(e) {}
 
 function squeezeCell(d) {
-  // Usa campos reales calculados por server.py (LazyBear TTM Squeeze)
-  var sqzOn  = d.sqzOn;
-  var sqzOff = d.sqzOff;
-  var mom    = d.sqzMom;
-  var momPrev= d.sqzMomPrev;
+  // Usa campos reales calculados por server.py (LazyBear TTM Squeeze) — DIARIO
+  return squeezeDotBar(d.sqzOn, d.sqzOff, d.sqzMom, d.sqzMomPrev);
+}
 
+function squeezeCell1h(d) {
+  // Squeeze calculado en velas de 1 hora (endpoint liviano /squeeze1h,
+  // se carga aparte y más rápido — ver loadSqueeze1h)
+  var s = squeeze1hData[d.symbol];
+  if (!s) return '<span style="color:var(--text-dim)">…</span>';
+  return squeezeDotBar(s.sqzOn, s.sqzOff, s.sqzMom, s.sqzMomPrev);
+}
+
+function squeezeDotBar(sqzOn, sqzOff, mom, momPrev) {
   if (mom == null) return '<span style="color:var(--text-dim)">--</span>';
 
   // ── Color del punto (estado del squeeze) ──────
