@@ -399,6 +399,39 @@ def get_quote():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/squeeze1h', methods=['GET'])
+def get_squeeze_1h():
+    """Endpoint liviano: SOLO el TTM Squeeze Momentum calculado en velas de 1 hora.
+    A diferencia de /quote, acá NO se descarga 1 año de historial diario ni
+    ticker.info/financials (que es lo que hace lento a /quote) — solo se
+    piden ~10 días de velas horarias, lo mínimo para el cálculo (length=20).
+    Pensado para llamarse en paralelo y ANTES que /quote, así la columna
+    de squeeze aparece primero y el resto de los datos se completa después.
+    """
+    symbol = request.args.get('symbol', '').upper().strip()
+    if not symbol:
+        return jsonify({'error': 'No symbol provided'}), 400
+    try:
+        ticker = yf.Ticker(symbol)
+        # 10d de velas de 1h ≈ 60-70 velas en mercados US (6.5h/día) — de sobra
+        # para el largo=20 que usa calc_squeeze_momentum. Para tickers .BA con
+        # menos horas de rueda, igual alcanza.
+        hist = ticker.history(period='10d', interval='60m', auto_adjust=True)
+        if hist.empty or len(hist) < 25:
+            return jsonify({'error': 'No data'}), 404
+
+        sqz = calc_squeeze_momentum(hist) or {}
+        return jsonify({
+            'symbol':     symbol,
+            'sqzOn':      sqz.get('sqzOn'),
+            'sqzOff':     sqz.get('sqzOff'),
+            'sqzMom':     sqz.get('sqzMom'),
+            'sqzMomPrev': sqz.get('sqzMomPrev'),
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/quotes', methods=['POST'])
 def get_quotes():
     """Recibe lista de symbols y devuelve todos en paralelo."""
