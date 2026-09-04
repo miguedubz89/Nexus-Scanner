@@ -1264,8 +1264,8 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           <th style="width:68px" data-field="distEma200" onclick="ts('distEma200',this)">EMA200%<span class="sort-icon">⇅</span></th>
           <th style="width:65px" data-field="volume" onclick="ts('volume',this)">Vol<span class="sort-icon">⇅</span></th>
           <th style="width:65px" data-field="avgVol20" onclick="ts('avgVol20',this)">Vol20<span class="sort-icon">⇅</span></th>
-          <th style="width:108px" title="TTM Squeeze Momentum: detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom</th>
-          <th style="width:108px" title="Mismo TTM Squeeze Momentum pero calculado en velas de 1 hora.">Squeeze 1H</th>
+          <th style="width:133px" title="TTM Squeeze Momentum: detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom</th>
+          <th style="width:133px" title="Mismo TTM Squeeze Momentum pero calculado en velas de 1 hora.">Squeeze 1H</th>
           <th style="width:44px" data-field="beta" onclick="ts('beta',this)">Beta<span class="sort-icon">⇅</span></th>
           <th style="width:54px">Spark</th>
         </tr></thead>
@@ -2882,7 +2882,7 @@ function renderTech(){
           '<th style="width:75px">Ticker</th><th style="width:68px">Precio</th><th style="width:56px">% Día</th>' +
           '<th style="width:56px" title="RSI (Indice de Fuerza Relativa) 0-100: mide la velocidad de los cambios de precio. Menos de 30 = sobrevendido (posible rebote). Mas de 70 = sobrecomprado (posible correccion).">RSI</th><th style="width:56px" title="ADX (Indice Direccional Promedio) 0-100: mide la fuerza de la tendencia, no la direccion. Menos de 20 = sin tendencia, 20-25 debil, 25-50 fuerte, mas de 50 muy fuerte.">ADX</th><th style="width:68px">EMA50%</th><th style="width:68px">EMA200%</th>' +
           '<th style="width:65px">Vol</th><th style="width:65px">Vol20</th>' +
-          '<th style="width:108px" title="TTM Squeeze Momentum: detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom</th><th style="width:108px" title="Mismo TTM Squeeze Momentum pero calculado en velas de 1 hora — carga por separado y más rápido.">Squeeze 1H</th><th style="width:44px">Beta</th>' +
+          '<th style="width:133px" title="TTM Squeeze Momentum: detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom</th><th style="width:133px" title="Mismo TTM Squeeze Momentum pero calculado en velas de 1 hora — carga por separado y más rápido.">Squeeze 1H</th><th style="width:44px">Beta</th>' +
           '<th style="width:54px">Spark</th>' +
         '</tr></thead>' +
         '<tbody>' + secData.map(makeRow).join('') + '</tbody>' +
@@ -3644,7 +3644,7 @@ function squeezeDotBar(sqzOn, sqzOff, mom, momPrev) {
   // Recuadro fijo: borde siempre visible, relleno de derecha a izquierda
   return '<div style="display:flex;align-items:center;gap:5px;justify-content:flex-end">' +
     '<span style="font-family:var(--mono);font-size:11px;color:'+barColor+';min-width:40px;text-align:right">'+sign+f2(mom)+'</span>' +
-    '<div style="width:40px;height:10px;background:var(--bg3);border:1px solid '+(mom>=0?'rgba(0,230,118,0.35)':'rgba(255,61,90,0.35)')+';border-radius:2px;overflow:hidden;flex-shrink:0;direction:rtl" title="Momentum: '+sign+f2(mom)+'">' +
+    '<div style="width:65px;height:10px;background:var(--bg3);border:1px solid '+(mom>=0?'rgba(0,230,118,0.35)':'rgba(255,61,90,0.35)')+';border-radius:2px;overflow:hidden;flex-shrink:0;direction:rtl" title="Momentum: '+sign+f2(mom)+'">' +
       '<div style="height:100%;width:'+fillPct+'%;background:'+barColor+';border-radius:1px;transition:width .3s"></div>' +
     '</div>' +
     '<div title="'+dotTitle+'" style="width:9px;height:9px;border-radius:50%;background:'+dotColor+';box-shadow:0 0 5px '+dotColor+';flex-shrink:0"></div>' +
