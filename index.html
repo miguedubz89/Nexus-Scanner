@@ -1114,7 +1114,9 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
     <div class="sb-section">
       <div class="sb-label">Auto Refresh</div>
       <select class="sel" id="interval">
-        <option value="60" selected>1 minuto</option>
+        <option value="15" selected>15 segundos</option>
+        <option value="30">30 segundos</option>
+        <option value="60">1 minuto</option>
         <option value="300">5 minutos</option>
         <option value="600">10 minutos</option>
         <option value="1800">30 minutos</option>
@@ -1879,7 +1881,7 @@ var SEC_ORDER=['ETF','Software','Semiconductores','IA & Big Data','Hardware','Nu
 var SEC_ICON={ETF:'◈',Software:'⬡',Semiconductores:'◎','IA & Big Data':'◉',Hardware:'⬢','Nube & SaaS':'☁','Ciberseguridad':'🔒','E-commerce':'⬟',Comunicación:'◉',Gaming:'🎮','Vehículos Eléctricos':'⚡',Automotriz:'◈',Energía:'⬟','Consumo Discrecional':'⬠','Consumo Básico':'⬡',Salud:'✚','Tecnología Médica':'⚕',Biotech:'◎',Finanzas:'$',Fintech:'💳','Gestión de Activos':'📈',Seguros:'◆',Cripto:'◆',Defensa:'⬢',Industriales:'⚙',Transporte:'✈',Materiales:'◆',Utilities:'⚡',REITs:'⬛','Satélites & Espacio':'🛰','Agro & Alimentos':'🌾',Otros:'?'};
 
 var allData=[], filtered=[], tickers=[];
-var autoOn=true, cdTimer=null, cdSecs=60;
+var autoOn=true, cdTimer=null, cdSecs=15;
 var tblSortF='', tblSortD=1;
 var serverOk=false;
 var prevPrices={};
@@ -2325,10 +2327,13 @@ async function cargarCompleto() {
 }
 
 // ── AUTO-REFRESH ──────────────────────────────────
+var refreshInFlight = false; // evita que dos doRefresh() se pisen si el intervalo es muy corto
 async function doRefresh() {
   if (!allData.length) return;
+  if (refreshInFlight) { startCountdown(); return; } // el anterior todavía no terminó, esperamos al próximo tick
+  refreshInFlight = true;
   var ok = await checkServer();
-  if (!ok) { setStatus('err','SIN SERVIDOR'); return; }
+  if (!ok) { setStatus('err','SIN SERVIDOR'); refreshInFlight = false; return; }
   setStatus('loading', 'ACTUALIZANDO PRECIOS...');
 
   // Refrescar squeeze 1h en paralelo (liviano, no bloquea el resto)
@@ -2358,7 +2363,7 @@ async function doRefresh() {
     allData.length+' tickers | Precios: '+new Date().toLocaleTimeString('es-AR');
   // Refrescar CCL y precios reales de CEDEARs (desarbitraje) en cada ciclo de refresh
   fetchCclAuto().then(function(){ renderAllTab(); });
-  refreshCedearArsPrices(allData.map(function(d){ return d.symbol; })).then(function(){ renderAllTab(); });
+  refreshCedearArsPrices(allData.map(function(d){ return d.symbol; })).then(function(){ renderAllTab(); refreshInFlight = false; });
 }
 
 async function fetchPrecio(sym) {
