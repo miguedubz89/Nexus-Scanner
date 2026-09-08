@@ -1884,6 +1884,106 @@ var tblSortF='', tblSortD=1;
 var serverOk=false;
 var prevPrices={};
 
+// ═══════════════════════════════════════════════════════════════════
+// ── DESARBITRAJE CEDEAR ────────────────────────────────────────────
+// Precio teórico ARS de un CEDEAR = (precio USD de la acción / ratio) × CCL
+// Se compara contra el precio real del CEDEAR en pesos (Yahoo, sufijo .BA)
+// para detectar sobreprecio/descuento antes de operar.
+//
+// Fuentes:
+//  - Ratios de conversión: JSON público (CORS) mantenido por la comunidad,
+//    sincronizado periódicamente con BYMA/Comafi. Los ratios cambian por
+//    splits/ajustes de la CNV, así que esto se refetchea 1 vez por sesión
+//    y ante cualquier duda conviene chequear https://www.comafi.com.ar
+//    (Banco Comafi publica el listado oficial vigente).
+//  - CCL (Contado con Liqui): dolarapi.com, mismo patrón que ya usa la
+//    pestaña Portafolio para el MEP.
+//  - Precio ARS real del CEDEAR: mismo backend /precio que ya usa la app,
+//    pidiendo el símbolo con sufijo .BA (así lo expone Yahoo Finance).
+// ═══════════════════════════════════════════════════════════════════
+var CEDEAR_RATIOS = {};      // { 'AAPL': 20, 'TSLA': 15, ... } — se llena en fetchCedearRatios()
+var cedearRatiosLoaded = false;
+var cclRate = null;          // último dólar CCL conocido
+var cclUpdatedAt = null;
+var cedearArsPrices = {};    // { 'AAPL': { price: 12345.6, ts: <Date> }, ... }
+
+// Fuente pública (CORS-enabled) con ratios de conversión CEDEAR, sincronizada con BYMA.
+var CEDEAR_RATIOS_URL = 'https://ferminrp.github.io/google-sheets-argento/api/cedears.json';
+
+async function fetchCedearRatios() {
+  try {
+    var r = await fetch(CEDEAR_RATIOS_URL, {signal: AbortSignal.timeout(10000)});
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    var data = await r.json();
+    var map = {};
+    (data.items||[]).forEach(function(it){
+      var t = (it.Cedears||'').toUpperCase();
+      var ratio = parseFloat(it.Ratio);
+      if (t && ratio > 0) map[t] = ratio;
+    });
+    if (Object.keys(map).length) {
+      CEDEAR_RATIOS = map;
+      cedearRatiosLoaded = true;
+      console.log('[DUBZ] Ratios CEDEAR cargados: '+Object.keys(map).length+' tickers');
+    }
+  } catch(e) {
+    console.warn('[DUBZ] No se pudieron cargar ratios CEDEAR, se reintentará:', e);
+  }
+}
+
+// ── CCL AUTOMÁTICO (para desarbitraje) ────────────────────────────
+async function fetchCclAuto() {
+  try {
+    var r = await fetch('https://dolarapi.com/v1/dolares/contadoconliqui', {signal: AbortSignal.timeout(8000)});
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    var data = await r.json();
+    var rate = data && (data.venta || data.compra);
+    if (rate && !isNaN(rate)) { cclRate = parseFloat(rate); cclUpdatedAt = new Date(); return; }
+    throw new Error('sin dato');
+  } catch(e) {
+    // Fallback: mismo proxy que ya usa la app para el MEP (dato aproximado)
+    try {
+      var r2 = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent('https://mercados.ambito.com//dolar/contadoconliqui/variacion'));
+      var d2 = await r2.json();
+      var rate2 = d2 && (d2.venta || d2.valor);
+      if (rate2) {
+        rate2 = parseFloat(String(rate2).replace(',','.'));
+        if (!isNaN(rate2) && rate2 > 0) { cclRate = rate2; cclUpdatedAt = new Date(); return; }
+      }
+    } catch(e2) { console.warn('[DUBZ] No se pudo obtener CCL:', e2); }
+  }
+}
+
+// ── PRECIOS REALES DE LOS CEDEARS (ARS, vía .BA) ──────────────────
+async function refreshCedearArsPrices(symbols) {
+  var syms = (symbols||[]).map(function(s){return s.toUpperCase();})
+    .filter(function(s){ return CEDEAR_RATIOS[s]; })
+    .filter(function(s,i,a){ return a.indexOf(s)===i; }); // dedup
+  if (!syms.length) return;
+  var BATCH = 10;
+  for (var i=0; i<syms.length; i+=BATCH) {
+    var batch = syms.slice(i, i+BATCH);
+    var results = await Promise.all(batch.map(function(s){
+      return fetchPrecio(s+'.BA').then(function(r){ return {s:s, r:r}; }).catch(function(){ return {s:s, r:null}; });
+    }));
+    results.forEach(function(x){
+      if (x.r && x.r.price) cedearArsPrices[x.s] = { price: x.r.price, ts: new Date() };
+    });
+  }
+}
+
+// Precio teórico ARS de 1 CEDEAR según CCL, y % de desarbitraje vs precio real.
+// Devuelve null si falta algún dato (ratio, precio USD o CCL).
+function cedearDesarbitraje(symbol, priceUsd) {
+  var sym = (symbol||'').toUpperCase();
+  var ratio = CEDEAR_RATIOS[sym];
+  if (!ratio || priceUsd == null || cclRate == null) return null;
+  var teorico = (priceUsd / ratio) * cclRate;
+  var real = cedearArsPrices[sym] ? cedearArsPrices[sym].price : null;
+  var desarbPct = (real != null) ? ((real / teorico) - 1) * 100 : null;
+  return { teorico: teorico, real: real, desarbPct: desarbPct, ratio: ratio };
+}
+
 // ── TICKER ERRORS (símbolo no encontrado o mal escrito) ──
 var tickerErrors = {};
 function markTickerError(sym, reason) {
@@ -2148,6 +2248,10 @@ document.addEventListener('visibilitychange', function() {
 async function cargarCompleto() {
   if (!tickers.length) return;
 
+  // ── Desarbitraje CEDEAR: ratios + CCL en paralelo, sin bloquear el resto ──
+  if (!cedearRatiosLoaded) fetchCedearRatios();
+  fetchCclAuto();
+
   // ⚡ Squeeze 1H: se dispara YA, en paralelo, sin esperar (fire-and-forget).
   // Es un endpoint liviano que llega mucho antes que /quote, así que la
   // columna de squeeze horario se completa primero y el resto (RSI, ADX,
@@ -2216,6 +2320,8 @@ async function cargarCompleto() {
   // Completar Máx/Mín diario y 52 semanas en background (Yahoo Finance, best-effort)
   var symsParaHL = allData.map(function(d){ return d.symbol; });
   fetchHighLow52Supplement(symsParaHL).then(applyHighLowSupplement);
+  // Precio real ARS de los CEDEARs (para el desarbitraje) — best-effort, en background
+  refreshCedearArsPrices(symsParaHL).then(function(){ renderAllTab(); });
 }
 
 // ── AUTO-REFRESH ──────────────────────────────────
@@ -2250,6 +2356,9 @@ async function doRefresh() {
   startCountdown();
   document.getElementById('expInfo').textContent =
     allData.length+' tickers | Precios: '+new Date().toLocaleTimeString('es-AR');
+  // Refrescar CCL y precios reales de CEDEARs (desarbitraje) en cada ciclo de refresh
+  fetchCclAuto().then(function(){ renderAllTab(); });
+  refreshCedearArsPrices(allData.map(function(d){ return d.symbol; })).then(function(){ renderAllTab(); });
 }
 
 async function fetchPrecio(sym) {
@@ -3119,6 +3228,7 @@ function renderAllTab() {
         '<td>'+fcap(d.marketCap)+'</td>' +
         '<td>'+momCell(d.mom12m != null ? d.mom12m : d.mom6m)+'</td>' +
         '<td>'+canslimCell(d)+'</td>' +
+        cedearDesarbCells(d) +
         '<td style="text-align:center">'+getNoteIcon(d.symbol)+'</td>' +
         '<td style="text-align:center"><button class="tv-btn" onclick="openTVChart(\''+d.symbol+'\')">&#128200;</button></td>' +
         '</tr>';
@@ -3147,6 +3257,9 @@ function renderAllTab() {
             '<th style="width:62px" onclick="tsMkt(\'gl\',\'marketCap\',this)">Cap<span class="sort-icon">⇅</span></th>' +
             '<th style="width:60px" onclick="tsMkt(\'gl\',\'mom12m\',this)">Mom12M<span class="sort-icon">⇅</span></th>' +
             '<th style="width:108px">&#9670; CANSLIM</th>' +
+            '<th style="width:82px" title="Precio teorico del CEDEAR en pesos: (precio USD de la accion / ratio de conversion) x dolar CCL. Sirve como precio de referencia para no comprar/vender el CEDEAR muy lejos de su valor justo.">CEDEAR Teor.</th>' +
+            '<th style="width:82px" title="Ultimo precio real del CEDEAR operado en BYMA, en pesos (via Yahoo Finance, con el mismo delay que el resto de la app).">CEDEAR Merc.</th>' +
+            '<th style="width:70px" title="Desarbitraje: diferencia % entre el precio real del CEDEAR y su precio teorico. Positivo = el CEDEAR cotiza mas caro que lo que justifica el CCL (cuidado al comprar). Negativo = cotiza mas barato (cuidado al vender).">Desarb.%</th>' +
             '<th style="width:36px;text-align:center">📝</th>' +
             '<th style="width:44px;text-align:center">Chart</th>' +
           '</tr></thead>' +
@@ -3748,6 +3861,31 @@ function canslimCell(d) {
       '<div class="canslim-dots">'+dots+'</div>'+
     '</div>'+
   '</div>';
+}
+
+// ── Celdas de desarbitraje CEDEAR (columnas de la tabla GLOBAL) ──
+function cedearDesarbCells(d) {
+  var info = cedearDesarbitraje(d.symbol, d.price);
+  if (!info) {
+    // Sin ratio conocido para este ticker, o falta CCL todavía (cargando)
+    var loading = (CEDEAR_RATIOS[(d.symbol||'').toUpperCase()] && cclRate == null);
+    var txt = loading ? '…' : '—';
+    var title = loading ? 'Cargando dolar CCL...' : 'No es un CEDEAR conocido en el listado de ratios';
+    var emptyCell = '<td style="color:var(--text-dim);text-align:right" title="'+title+'">'+txt+'</td>';
+    return emptyCell + emptyCell + emptyCell;
+  }
+  var teoricoCell = '<td style="text-align:right" title="Ratio '+info.ratio+':1 · CCL $'+f2(cclRate)+'">$\u00a0'+fp(info.teorico)+'</td>';
+  var realCell = info.real != null
+    ? '<td style="text-align:right">$\u00a0'+fp(info.real)+'</td>'
+    : '<td style="color:var(--text-dim);text-align:right" title="Todavia no se pudo obtener el precio real del CEDEAR (poco volumen o fuera de horario de BYMA)">—</td>';
+  var desarbCell;
+  if (info.desarbPct != null) {
+    var col = Math.abs(info.desarbPct) < 1 ? 'var(--text-dim)' : (info.desarbPct > 0 ? 'var(--red)' : 'var(--green)');
+    desarbCell = '<td style="color:'+col+';text-align:right;font-weight:600">'+(info.desarbPct>=0?'+':'')+f2(info.desarbPct)+'%</td>';
+  } else {
+    desarbCell = '<td style="color:var(--text-dim);text-align:right">—</td>';
+  }
+  return teoricoCell + realCell + desarbCell;
 }
 
 // No hacer window.onload — la app se inicia desde Firebase onAuthStateChanged
