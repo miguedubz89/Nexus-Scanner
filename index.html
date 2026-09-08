@@ -3880,7 +3880,7 @@ function cedearDesarbCells(d) {
     : '<td style="color:var(--text-dim);text-align:right" title="Todavia no se pudo obtener el precio real del CEDEAR (poco volumen o fuera de horario de BYMA)">—</td>';
   var desarbCell;
   if (info.desarbPct != null) {
-    var col = Math.abs(info.desarbPct) < 1 ? 'var(--text-dim)' : (info.desarbPct > 0 ? 'var(--red)' : 'var(--green)');
+    var col = Math.abs(info.desarbPct) < 1 ? 'var(--text-dim)' : (info.desarbPct > 0 ? 'var(--green)' : 'var(--red)');
     desarbCell = '<td style="color:'+col+';text-align:right;font-weight:600">'+(info.desarbPct>=0?'+':'')+f2(info.desarbPct)+'%</td>';
   } else {
     desarbCell = '<td style="color:var(--text-dim);text-align:right">—</td>';
