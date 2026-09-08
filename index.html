@@ -3782,17 +3782,35 @@ function canslimScore(d) {
   var score = 0;
   var hits  = [];
 
-  // C — EPS trimestral YoY > 25% (dato real del server)
-  //     Fallback: PE razonable + día positivo si no hay dato
+  // C — EPS trimestral YoY > 25% (dato real del server), ahora con aceleración (epsAccel)
+  //     epsAccel = crecimiento YoY del trimestre más reciente MENOS el crecimiento YoY del
+  //     trimestre anterior. Positivo = está acelerando, negativo = está frenando.
+  //     Reglas:
+  //       - Crecimiento fuerte (>25%) pero desacelerando fuerte (<-15pp) → NO pasa
+  //         (señal clásica de alerta CANSLIM: el pico de crecimiento ya quedó atrás)
+  //       - Crecimiento moderado (15-25%) con aceleración fuerte (>25pp) → SÍ pasa
+  //         (empresa que recién está agarrando impulso, aunque el % todavía no sea gigante)
+  //     Fallback sin epsGrowthQ: PE razonable + día positivo
   var c_ok;
+  var epsAccelKnown = d.epsAccel != null;
   if (d.epsGrowthQ != null) {
-    c_ok = d.epsGrowthQ > 25;
+    var strongGrowth   = d.epsGrowthQ > 25;
+    var decelerating   = epsAccelKnown && d.epsAccel < -15;
+    var moderateGrowth = d.epsGrowthQ > 15 && d.epsGrowthQ <= 25;
+    var acceleratingHard = epsAccelKnown && d.epsAccel > 25;
+    c_ok = (strongGrowth && !decelerating) || (moderateGrowth && acceleratingHard);
   } else {
     c_ok = (d.pe && d.pe > 5 && d.pe < 40 && d.chgPct > 0);
   }
   if (c_ok) score++;
-  hits.push({ l:'C', ok: c_ok,
-    tip: d.epsGrowthQ != null ? 'EPS trim: '+(d.epsGrowthQ>0?'+':'')+d.epsGrowthQ+'%' : 'EPS sin dato — proxy P/E+día' });
+  var cTip;
+  if (d.epsGrowthQ != null) {
+    cTip = 'EPS trim: '+(d.epsGrowthQ>0?'+':'')+d.epsGrowthQ+'%';
+    cTip += ' | Acel: '+(epsAccelKnown ? (d.epsAccel>0?'+':'')+d.epsAccel+'pp' : 's/d');
+  } else {
+    cTip = 'EPS sin dato — proxy P/E+día';
+  }
+  hits.push({ l:'C', ok: c_ok, tip: cTip });
 
   // A — EPS anual YoY > 25%
   //     Fallback: momentum 12M > 20%
