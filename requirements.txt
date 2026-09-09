@@ -1,6 +1,7 @@
-yfinance
 flask
 flask-cors
+yfinance
 pandas
 numpy
-gunicorn
+requests
+firebase-admin

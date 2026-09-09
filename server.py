@@ -2,7 +2,7 @@
 NEXUS SCANNER — Servidor Proxy Local
 =====================================
 Instalación (una sola vez):
-    pip install yfinance flask flask-cors pandas numpy
+    pip install yfinance flask flask-cors pandas numpy requests firebase-admin
 
 Uso:
     python server.py
@@ -12,6 +12,9 @@ El servidor corre en http://localhost:5000
 """
 
 import os
+import json
+import requests
+from datetime import datetime, timedelta
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import yfinance as yf
@@ -21,6 +24,53 @@ import traceback
 
 app = Flask(__name__)
 CORS(app)  # Permite que el HTML local llame al servidor
+
+# ─── MONETIZACIÓN: MERCADO PAGO + FIREBASE ADMIN ──────────────────────────────
+# Variables de entorno necesarias (configurar en Railway → Variables):
+#   MP_ACCESS_TOKEN       -> Access Token de producción de tu cuenta Mercado Pago
+#   PRECIO_PREMIUM_ARS    -> 9000 (opcional, default abajo)
+#   APP_URL               -> https://dubzmarkets.com (para las urls de retorno del checkout)
+#   FIREBASE_SERVICE_ACCOUNT_JSON -> contenido completo del JSON de la service account
+#                                    de Firebase (Project Settings → Service Accounts →
+#                                    Generate new private key), pegado como texto plano.
+MP_ACCESS_TOKEN    = os.environ.get('MP_ACCESS_TOKEN', '')
+PRECIO_PREMIUM_ARS = float(os.environ.get('PRECIO_PREMIUM_ARS', '9000'))
+APP_URL            = os.environ.get('APP_URL', 'https://dubzmarkets.com')
+
+_db = None
+def get_firestore():
+    """Inicializa Firebase Admin una sola vez y devuelve el cliente Firestore."""
+    global _db
+    if _db is not None:
+        return _db
+    try:
+        import firebase_admin
+        from firebase_admin import credentials, firestore
+        cred_json = os.environ.get('FIREBASE_SERVICE_ACCOUNT_JSON')
+        if not cred_json:
+            print('[MP] FIREBASE_SERVICE_ACCOUNT_JSON no configurado — no se puede activar premium automáticamente.')
+            return None
+        cred_dict = json.loads(cred_json)
+        cred = credentials.Certificate(cred_dict)
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
+        _db = firestore.client()
+        return _db
+    except Exception as e:
+        print('[MP] Error inicializando Firebase Admin:', e)
+        return None
+
+
+def set_user_plan(uid, plan, extra=None):
+    """Escribe el plan (free/premium) del usuario en Firestore."""
+    db = get_firestore()
+    if db is None:
+        return False
+    data = {'plan': plan}
+    if extra:
+        data.update(extra)
+    db.collection('users').document(uid).set(data, merge=True)
+    return True
 
 # ─── INDICADORES TÉCNICOS ─────────────────────────────────────────────────────
 
@@ -481,6 +531,122 @@ def get_precio():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/crear-suscripcion', methods=['POST'])
+def crear_suscripcion():
+    """Crea una suscripción recurrente mensual en Mercado Pago (Preapproval API)
+    y devuelve la URL de checkout (init_point) para redirigir al usuario.
+    Body esperado: {"uid": "<firebase_uid>", "email": "<email_usuario>"}
+    """
+    if not MP_ACCESS_TOKEN:
+        return jsonify({'error': 'MP_ACCESS_TOKEN no configurado en el servidor'}), 500
+
+    data  = request.get_json(silent=True) or {}
+    uid   = data.get('uid')
+    email = data.get('email')
+    if not uid or not email:
+        return jsonify({'error': 'Falta uid o email'}), 400
+
+    payload = {
+        "reason": "DUBZ Monitor Premium — Suscripción mensual",
+        "auto_recurring": {
+            "frequency": 1,
+            "frequency_type": "months",
+            "transaction_amount": PRECIO_PREMIUM_ARS,
+            "currency_id": "ARS"
+        },
+        "payer_email": email,
+        # external_reference nos permite identificar al usuario cuando llega el webhook
+        "external_reference": uid,
+        "back_url": APP_URL,
+        "status": "pending"
+    }
+
+    try:
+        r = requests.post(
+            'https://api.mercadopago.com/preapproval',
+            headers={
+                'Authorization': f'Bearer {MP_ACCESS_TOKEN}',
+                'Content-Type': 'application/json'
+            },
+            json=payload,
+            timeout=15
+        )
+        r.raise_for_status()
+        mp_data = r.json()
+        return jsonify({
+            'init_point': mp_data.get('init_point'),
+            'id':         mp_data.get('id')
+        })
+    except requests.exceptions.HTTPError:
+        return jsonify({'error': 'Mercado Pago rechazó la solicitud', 'detalle': r.text}), 502
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/webhook-mp', methods=['POST'])
+def webhook_mp():
+    """Recibe las notificaciones IPN/webhook de Mercado Pago.
+    Configurar esta URL en: Mercado Pago → Tu integración → Webhooks
+    -> https://TU-DOMINIO/webhook-mp  (eventos: 'subscription_preapproval' y 'subscription_authorized_payment')
+    """
+    try:
+        topic = request.args.get('topic') or request.args.get('type')
+        body  = request.get_json(silent=True) or {}
+        resource_id = (
+            request.args.get('id')
+            or body.get('data', {}).get('id')
+            or body.get('id')
+        )
+        if not resource_id:
+            return jsonify({'status': 'ignored'}), 200
+
+        if not MP_ACCESS_TOKEN:
+            return jsonify({'status': 'ignored', 'reason': 'no MP token'}), 200
+
+        # 'preapproval' = alta/estado de la suscripción.
+        # 'authorized_payment' = cada cobro mensual efectivo.
+        if topic in ('preapproval', 'subscription_preapproval'):
+            r = requests.get(
+                f'https://api.mercadopago.com/preapproval/{resource_id}',
+                headers={'Authorization': f'Bearer {MP_ACCESS_TOKEN}'}, timeout=15
+            )
+            info = r.json()
+            uid    = info.get('external_reference')
+            status = info.get('status')  # authorized | paused | cancelled
+            if uid:
+                if status == 'authorized':
+                    hasta = (datetime.utcnow() + timedelta(days=35)).isoformat()
+                    set_user_plan(uid, 'premium', {
+                        'premiumUntil': hasta,
+                        'mpPreapprovalId': resource_id
+                    })
+                elif status in ('paused', 'cancelled'):
+                    set_user_plan(uid, 'free')
+
+        elif topic in ('authorized_payment', 'subscription_authorized_payment'):
+            r = requests.get(
+                f'https://api.mercadopago.com/authorized_payments/{resource_id}',
+                headers={'Authorization': f'Bearer {MP_ACCESS_TOKEN}'}, timeout=15
+            )
+            info = r.json()
+            if info.get('status') == 'approved':
+                preapproval_id = info.get('preapproval_id')
+                # Buscar el uid a partir del preapproval (guardado en Firestore al autorizar)
+                db = get_firestore()
+                if db is not None and preapproval_id:
+                    q = db.collection('users').where('mpPreapprovalId', '==', preapproval_id).limit(1).get()
+                    for docu in q:
+                        hasta = (datetime.utcnow() + timedelta(days=35)).isoformat()
+                        set_user_plan(docu.id, 'premium', {'premiumUntil': hasta})
+
+        return jsonify({'status': 'ok'}), 200
+    except Exception as e:
+        traceback.print_exc()
+        # Devolver 200 igual para que MP no reintente indefinidamente por errores nuestros
+        return jsonify({'status': 'error', 'detalle': str(e)}), 200
 
 
 @app.route('/health', methods=['GET'])

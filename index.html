@@ -175,6 +175,48 @@ self.addEventListener('message', e => {
     return null;
   };
 
+  // ── Plan del usuario (free / premium) ──────────────
+  window.TICKER_LIMIT_FREE = 15;
+  window.PRECIO_PREMIUM_TXT = '9.000';
+  window.isPremium = false;
+
+  window.loadPlanCloud = async function(uid) {
+    try {
+      const snap = await getDoc(doc(db, 'users', uid));
+      if (snap.exists()) {
+        const d = snap.data();
+        const premiumUntil = d.premiumUntil ? new Date(d.premiumUntil).getTime() : null;
+        const vigente = !premiumUntil || premiumUntil > Date.now();
+        return { plan: d.plan || 'free', premiumUntil, vigente };
+      }
+    } catch(e) { console.warn('Error cargando plan:', e); }
+    return { plan: 'free', premiumUntil: null, vigente: true };
+  };
+
+  window.iniciarSuscripcionPremium = async function() {
+    const user = auth.currentUser;
+    if (!user) return;
+    const btn = document.getElementById('mpSubscribeBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Redirigiendo a Mercado Pago...'; }
+    try {
+      const r = await fetch(window.API + '/crear-suscripcion', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ uid: user.uid, email: user.email })
+      });
+      const data = await r.json();
+      if (data.init_point) {
+        window.location.href = data.init_point;
+      } else {
+        alert('No se pudo iniciar la suscripción: ' + (data.error || 'error desconocido'));
+        if (btn) { btn.disabled = false; btn.textContent = '⚡ Suscribirme — $' + window.PRECIO_PREMIUM_TXT + '/mes'; }
+      }
+    } catch(e) {
+      alert('Error de conexión con el servidor de pagos.');
+      if (btn) { btn.disabled = false; btn.textContent = '⚡ Suscribirme — $' + window.PRECIO_PREMIUM_TXT + '/mes'; }
+    }
+  };
+
   // ── Guardar portafolio en Firestore (multi-cuenta) ───────────────
   window.savePortfolioCloud = async function(data) {
     const user = auth.currentUser;
@@ -243,6 +285,11 @@ self.addEventListener('message', e => {
         document.getElementById('userAvatar').style.display = 'inline-block';
       }
       document.getElementById('userBadge').style.display = 'flex';
+
+      // Cargar plan (free/premium) del usuario
+      const planInfo = await window.loadPlanCloud(user.uid);
+      window.isPremium = (planInfo.plan === 'premium' && planInfo.vigente);
+      if (window.updatePlanBadge) window.updatePlanBadge();
 
       // Cargar tickers personalizados
       const cloudTickers = await window.loadTickersCloud(user.uid);
@@ -1071,6 +1118,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
     <div class="user-badge" id="userBadge">
       <img class="user-avatar" id="userAvatar" src="" alt="">
       <span class="user-name" id="userLabel">Usuario</span>
+      <span id="planBadge" style="font-family:var(--mono);font-size:10px;letter-spacing:1px;padding:2px 7px;border-radius:2px;border:1px solid var(--border2);color:var(--text-dim);cursor:pointer" onclick="window.openUpgradeModal && window.openUpgradeModal()">FREE</span>
       <button class="btn-logout" onclick="doLogout()">SALIR</button>
     </div>
     <button class="btn btn-a btn-sm" onclick="doRefresh()">↺ REFRESH</button>
@@ -3657,6 +3705,43 @@ window.renderTickerList = function() {
   }
 };
 
+window.updatePlanBadge = function() {
+  var b = document.getElementById('planBadge');
+  if (!b) return;
+  if (window.isPremium) {
+    b.textContent = '★ PREMIUM';
+    b.style.color = 'var(--yellow)';
+    b.style.borderColor = 'var(--yellow2)';
+  } else {
+    b.textContent = 'FREE';
+    b.style.color = 'var(--text-dim)';
+    b.style.borderColor = 'var(--border2)';
+  }
+};
+
+window.openUpgradeModal = function() {
+  if (window.isPremium) return;
+  var old = document.getElementById('upgradeOverlay');
+  if (old) old.remove();
+  var overlay = document.createElement('div');
+  overlay.id = 'upgradeOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:4000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+  overlay.innerHTML =
+    '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:4px;padding:26px;max-width:360px;width:90%;font-family:var(--mono)">' +
+      '<div style="font-family:var(--head);font-weight:700;font-size:16px;color:var(--yellow);letter-spacing:.5px;margin-bottom:8px">★ DUBZ PREMIUM</div>' +
+      '<div style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px">' +
+        'El plan gratuito permite hasta <strong style="color:var(--text-bright)">' + window.TICKER_LIMIT_FREE + ' tickers</strong>. ' +
+        'Con Premium sumás tickers ilimitados y todo lo que agreguemos a futuro.' +
+      '</div>' +
+      '<div style="font-size:22px;color:var(--text-bright);font-weight:700;margin-bottom:16px">$' + window.PRECIO_PREMIUM_TXT + ' <span style="font-size:12px;color:var(--text-dim);font-weight:400">ARS / mes</span></div>' +
+      '<button id="mpSubscribeBtn" class="btn btn-a btn-full" onclick="window.iniciarSuscripcionPremium()">⚡ Suscribirme — $' + window.PRECIO_PREMIUM_TXT + '/mes</button>' +
+      '<div style="font-size:10px;color:var(--text-dim);text-align:center;margin-top:8px">Pago recurrente mensual vía Mercado Pago. Cancelás cuando quieras.</div>' +
+      '<button style="background:none;border:none;color:var(--text-dim);font-family:var(--mono);font-size:11px;margin-top:14px;width:100%;cursor:pointer" onclick="document.getElementById(\'upgradeOverlay\').remove()">Cerrar</button>' +
+    '</div>';
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+};
+
 function addTickerFromInput() {
   var inp = document.getElementById('tickerInputNew');
   var sym = inp.value.trim().toUpperCase().replace(/[^A-Z0-9.]/g,'');
@@ -3665,6 +3750,11 @@ function addTickerFromInput() {
     inp.style.borderColor = 'var(--yellow)';
     setTimeout(function(){ inp.style.borderColor = ''; }, 1000);
     inp.value = '';
+    return;
+  }
+  if (!window.isPremium && window.tickerList.length >= window.TICKER_LIMIT_FREE) {
+    inp.value = '';
+    window.openUpgradeModal();
     return;
   }
   window.tickerList.push(sym);
