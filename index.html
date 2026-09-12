@@ -1262,6 +1262,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
       <div class="tab" onclick="switchTab('sectors',this)">SECTORES</div>
       <div class="tab" onclick="switchTab('technical',this)">TÉCNICO</div>
       <div class="tab" onclick="switchTab('all',this)">TODOS</div>
+      <div class="tab" onclick="switchTab('cartera',this)">CARTERA</div>
     </div>
 
     <!-- SCANNER TAB -->
@@ -1399,6 +1400,233 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
       </div>
     </div>
 
+    <!-- CARTERA TAB — sección simplificada: alta de operaciones + import CSV broker + posiciones en vivo -->
+    <div class="tab-panel" id="tab-cartera">
+
+      <div class="pf-account-bar">
+        <div class="pf-account-tabs" id="pfAccountTabs"></div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-family:var(--mono);font-size:10px;color:var(--text-dim)"><span class="pf-live-dot"></span> precios en vivo</span>
+        </div>
+      </div>
+
+      <div class="pf-toolbar">
+        <div class="pf-toolbar-left">
+          <button class="btn btn-a btn-sm" onclick="pfOpenAddModal()">＋ Nueva operación</button>
+          <button class="btn btn-g btn-sm" onclick="pfOpenImportModal()">⇪ Importar CSV del broker</button>
+          <button class="btn btn-y btn-sm" id="pfRefreshBtn" onclick="pfRefreshAllPrices()">⟳ Refrescar</button>
+        </div>
+        <div class="pf-toolbar-right">
+          <input class="pf-search-input" id="pfSearch" placeholder="Buscar ticker..." oninput="pfApplyFilters()">
+          <div class="pf-currency-toggle">
+            <span class="pf-cur-label">MEP</span>
+            <input class="pf-mep-input" id="pfMepRate" type="number" step="0.01" onchange="pfMepRate=parseFloat(this.value)||pfMepRate;pfSave();pfRenderAll()">
+          </div>
+          <div class="pf-view-tabs">
+            <button class="pf-view-btn" id="pfBtnUSD" onclick="pfViewCurrency='USD';pfSave();pfRenderAll()">USD</button>
+            <button class="pf-view-btn" id="pfBtnARS" onclick="pfViewCurrency='ARS';pfSave();pfRenderAll()">ARS</button>
+          </div>
+          <button class="btn btn-g btn-sm" onclick="pfExportCSV()">⬇ CSV</button>
+        </div>
+      </div>
+
+      <div class="pf-summary-grid">
+        <div class="pf-sum-card">
+          <div class="pf-sum-icon">💰</div>
+          <div class="pf-sum-body"><div class="pf-sum-lbl">Valor total</div><div class="pf-sum-val" id="pfValTotal">—</div><div class="pf-sum-sub" id="pfValTotalSub">—</div></div>
+        </div>
+        <div class="pf-sum-card">
+          <div class="pf-sum-icon">📈</div>
+          <div class="pf-sum-body"><div class="pf-sum-lbl">Ganancia</div><div class="pf-sum-val" id="pfGanancia">—</div><div class="pf-sum-sub" id="pfGananciaSub">—</div></div>
+        </div>
+        <div class="pf-sum-card">
+          <div class="pf-sum-icon">%</div>
+          <div class="pf-sum-body"><div class="pf-sum-lbl">Rendimiento</div><div class="pf-sum-val" id="pfRendTotal">—</div><div class="pf-sum-sub" id="pfRendTotalSub">—</div></div>
+        </div>
+        <div class="pf-sum-card pf-today-card">
+          <div class="pf-sum-icon">⚡</div>
+          <div class="pf-sum-body"><div class="pf-sum-lbl">Hoy</div><div class="pf-sum-val" id="pfGananciaHoy">—</div><div class="pf-sum-sub" id="pfGananciaHoySub">—</div></div>
+        </div>
+        <div class="pf-sum-card realized">
+          <div class="pf-sum-icon">🏁</div>
+          <div class="pf-sum-body"><div class="pf-sum-lbl">Realizado</div><div class="pf-sum-val" id="pfRealizado">—</div><div class="pf-sum-sub" id="pfRealizadoSub">—</div></div>
+        </div>
+        <div class="pf-sum-card">
+          <div class="pf-sum-icon">🏦</div>
+          <div class="pf-sum-body"><div class="pf-sum-lbl">Liquidez</div><div class="pf-sum-val" id="pfLiquidezDisplay" style="font-size:13px">—</div><div class="pf-sum-sub"><span class="pf-currency-badge" id="pfCurrencyBadge">USD</span></div></div>
+        </div>
+      </div>
+
+      <div class="pf-dist-section">
+        <div class="pf-dist-header">
+          <div class="pf-dist-title">Distribución <span id="pfDistCount" style="color:var(--text-dim);font-weight:400;text-transform:none;letter-spacing:0"></span></div>
+        </div>
+        <div class="pf-dist-bar" id="pfDistBar"></div>
+        <div class="pf-dist-legend" id="pfDistLegend"></div>
+      </div>
+
+      <div class="pf-table-header">
+        <div class="pf-section-title">Posiciones abiertas</div>
+        <button class="btn btn-r btn-sm" onclick="pfClearAll()">✕ Vaciar cuenta</button>
+      </div>
+      <div class="tbl-wrap">
+        <table class="dt" id="pfTable">
+          <thead><tr>
+            <th style="width:26px"></th>
+            <th onclick="pfSortByCol('ticker',this)">Activo<span class="sort-icon">⇅</span></th>
+            <th onclick="pfSortByCol('cantidad',this)">Cantidad<span class="sort-icon">⇅</span></th>
+            <th onclick="pfSortByCol('precioCompra',this)">P. compra<span class="sort-icon">⇅</span></th>
+            <th onclick="pfSortByCol('precioActual',this)">Actual<span class="sort-icon">⇅</span></th>
+            <th onclick="pfSortByCol('costTotal',this)">Costo<span class="sort-icon">⇅</span></th>
+            <th onclick="pfSortByCol('valActual',this)">Valor<span class="sort-icon">⇅</span></th>
+            <th onclick="pfSortByCol('rendUsd',this)">P&amp;L<span class="sort-icon">⇅</span></th>
+            <th onclick="pfSortByCol('rendPct',this)">P&amp;L %<span class="sort-icon">⇅</span></th>
+            <th onclick="pfSortByCol('fecha',this)">Fecha<span class="sort-icon">⇅</span></th>
+            <th>Estado</th>
+            <th style="width:100px">Acciones</th>
+          </tr></thead>
+          <tbody id="pfBody"></tbody>
+        </table>
+        <div id="pfEmpty" style="display:none;text-align:center;color:var(--text-dim);font-family:var(--mono);padding:30px">Sin posiciones. Registrá una operación o importá el CSV de tu broker.</div>
+      </div>
+
+      <div class="pf-closed-section" id="pfClosedSection" style="display:none">
+        <div class="pf-closed-header">
+          <div class="pf-closed-title">Operaciones cerradas <span id="pfClosedCount" style="color:var(--text-dim);font-weight:400"></span> <span id="pfClosedPnlBadge"></span></div>
+          <button class="btn btn-r btn-sm" onclick="pfClearClosedTrades()">✕ Borrar historial</button>
+        </div>
+        <div class="tbl-wrap">
+          <table class="dt">
+            <thead><tr>
+              <th>Activo</th><th>Cant.</th><th>P.Compra</th><th>P.Venta</th><th>Costo</th><th>Ingreso</th><th>P&amp;L</th><th>P&amp;L %</th><th>F.Compra</th><th>F.Venta</th><th>Resultado</th><th></th>
+            </tr></thead>
+            <tbody id="pfClosedBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style="margin-top:18px">
+        <div class="pf-section-title" style="margin-bottom:8px">Rendimiento histórico anual</div>
+        <div id="pfAnualPerfContainer"></div>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ MODAL AGREGAR / EDITAR POSICIÓN ═══ -->
+<div class="pf-modal-overlay" id="pfModalOverlay" onclick="pfCloseModal(event)">
+  <div class="pf-modal">
+    <div class="pf-modal-header">
+      <div class="pf-modal-title" id="pfModalTitle">＋ AGREGAR POSICIÓN</div>
+      <button class="pf-action-btn" onclick="pfCloseModalForce()">✕</button>
+    </div>
+    <div class="pf-modal-body">
+      <input type="hidden" id="pfEditId">
+      <input type="hidden" id="pfFMoneda" value="ARS">
+      <div class="pf-field" style="margin-bottom:14px">
+        <label>Moneda</label>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="pf-cur-sel-btn" id="pfCurBtnARS" onclick="pfSelectCurrency('ARS')">ARS</button>
+          <button type="button" class="pf-cur-sel-btn" id="pfCurBtnUSD" onclick="pfSelectCurrency('USD')">USD</button>
+        </div>
+      </div>
+      <div class="pf-form-grid">
+        <div class="pf-field"><label>Ticker</label><input class="pf-input" id="pfFTicker" placeholder="Ej: GGAL"></div>
+        <div class="pf-field"><label>Nombre (opcional)</label><input class="pf-input" id="pfFNombre" placeholder="Ej: Grupo Galicia"></div>
+        <div class="pf-field"><label>Cantidad</label><input class="pf-input" id="pfFCantidad" type="number" step="any" placeholder="0"></div>
+        <div class="pf-field"><label>Precio compra <span id="pfFPCLabel">(ARS)</span></label><input class="pf-input" id="pfFPrecioCompra" type="number" step="any" placeholder="0"></div>
+        <div class="pf-field">
+          <label>Precio actual <span id="pfFPALabel">(ARS)</span></label>
+          <div style="display:flex;gap:6px">
+            <input class="pf-input" id="pfFPrecioActual" type="number" step="any" placeholder="opcional">
+            <button type="button" class="btn btn-a btn-sm" onclick="pfFetchPrice()" title="Buscar precio en vivo">⟳</button>
+          </div>
+        </div>
+        <div class="pf-field"><label>Fecha</label><input class="pf-input" id="pfFFecha" type="date"></div>
+      </div>
+      <div id="pfFetchStatus" style="display:none;font-family:var(--mono);font-size:11px;margin-top:8px"></div>
+      <div id="pfFormError" style="display:none;color:var(--red);font-family:var(--mono);font-size:12px;margin-top:10px"></div>
+    </div>
+    <div class="pf-modal-footer">
+      <button class="btn btn-r btn-sm" onclick="pfCloseModalForce()">Cancelar</button>
+      <button class="btn btn-a btn-sm" onclick="pfSavePosition()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL REGISTRAR VENTA ═══ -->
+<div class="pf-modal-overlay" id="pfSellModalOverlay" onclick="pfCloseSellModal(event)">
+  <div class="pf-modal">
+    <div class="pf-modal-header">
+      <div class="pf-modal-title">💰 REGISTRAR VENTA — <span id="pfSellTicker">?</span></div>
+      <button class="pf-action-btn" onclick="pfCloseSellModalForce()">✕</button>
+    </div>
+    <div class="pf-modal-body">
+      <input type="hidden" id="pfSellPosId">
+      <div style="display:flex;gap:18px;margin-bottom:14px;font-family:var(--mono);font-size:12px;color:var(--text-dim)">
+        <div>Tenés: <b style="color:var(--text-bright)" id="pfSellTenencia">—</b></div>
+        <div>P.Compra: <b style="color:var(--text-bright)" id="pfSellPCompra">—</b> <span id="pfSellMonedaLabel"></span></div>
+      </div>
+      <div class="pf-form-grid">
+        <div class="pf-field"><label>Cantidad a vender</label><input class="pf-input" id="pfSellCantidad" type="number" step="any" oninput="pfSellCalcPreview()"></div>
+        <div class="pf-field">
+          <label>Precio de venta</label>
+          <div style="display:flex;gap:6px">
+            <input class="pf-input" id="pfSellPrecioVenta" type="number" step="any" oninput="pfSellCalcPreview()">
+            <button type="button" class="btn btn-a btn-sm" onclick="pfSellFetchLive()">⟳</button>
+          </div>
+        </div>
+        <div class="pf-field"><label>Fecha</label><input class="pf-input" id="pfSellFecha" type="date"></div>
+        <div class="pf-field"><label>Nota (opcional)</label><input class="pf-input" id="pfSellNota" placeholder="Ej: toma de ganancias"></div>
+      </div>
+      <div id="pfSellLiveStatus" style="display:none;font-family:var(--mono);font-size:11px;margin-top:8px"></div>
+      <div id="pfSellPreview" style="display:none;margin-top:14px;padding:12px;background:var(--bg3);border-radius:2px;font-family:var(--mono);font-size:12px">
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--text-dim)">Costo</span><span id="pfSellPreviewCosto">—</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--text-dim)">Ingreso</span><span id="pfSellPreviewIngreso">—</span></div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-weight:700"><span>P&amp;L</span><span id="pfSellPreviewPnl">—</span></div>
+        <div id="pfSellPartialNote" style="display:none;color:var(--yellow);margin-top:6px;font-size:11px">⚠ Venta parcial — queda una posición abierta con el resto.</div>
+      </div>
+      <div id="pfSellError" style="display:none;color:var(--red);font-family:var(--mono);font-size:12px;margin-top:10px"></div>
+    </div>
+    <div class="pf-modal-footer">
+      <button class="btn btn-r btn-sm" onclick="pfCloseSellModalForce()">Cancelar</button>
+      <button class="btn btn-a btn-sm" onclick="pfConfirmSell()">Confirmar venta</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL IMPORTAR CSV DEL BROKER ═══ -->
+<div class="pf-modal-overlay" id="pfImportOverlay" onclick="pfCloseImportModal(event)">
+  <div class="pf-modal">
+    <div class="pf-modal-header">
+      <div class="pf-modal-title">⇪ IMPORTAR CSV DEL BROKER</div>
+      <button class="pf-action-btn" onclick="pfCloseImportForce()">✕</button>
+    </div>
+    <div class="pf-modal-body">
+      <div class="pf-field" style="margin-bottom:12px">
+        <label>Broker</label>
+        <select class="pf-input" id="pfImportBroker">
+          <option value="auto">Detectar automáticamente</option>
+          <option value="bullmarket">Bull Market</option>
+          <option value="balanz">Balanz</option>
+          <option value="generico">Genérico / otro</option>
+        </select>
+      </div>
+      <div class="pf-field" style="margin-bottom:10px">
+        <label>Archivo CSV</label>
+        <input class="pf-input" id="pfImportFileInput" type="file" accept=".csv,.txt">
+      </div>
+      <label style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--text-dim)">
+        <input type="checkbox" id="pfImportMerge"> Permitir duplicados (no fusionar con existentes)
+      </label>
+      <div id="pfImportResult" style="font-family:var(--mono);font-size:12px;margin-top:12px"></div>
+    </div>
+    <div class="pf-modal-footer">
+      <button class="btn btn-r btn-sm" onclick="pfCloseImportForce()">Cancelar</button>
+      <button class="btn btn-a btn-sm" onclick="pfImportCSV()">Importar</button>
+    </div>
   </div>
 </div>
 
@@ -2168,6 +2396,7 @@ window.initApp = function() {
   checkServer().then(function(ok) {
     if (ok) loadAndRefresh();
   });
+  if (typeof pfInit === 'function') pfInit();
 };
 
 // ── CLOCK ─────────────────────────────────────────
@@ -3633,6 +3862,7 @@ function switchTab(id,el){
   document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active')});
   el.classList.add('active');
   document.getElementById('tab-'+id).classList.add('active');
+  if (id === 'cartera' && typeof pfInit === 'function') { pfInit(); pfRefreshLivePrices(); }
 }
 
 // ── TABLE SORT ────────────────────────────────────
@@ -4111,9 +4341,14 @@ function pfSwitchAccount(id) {
 
 // ── AGREGAR CUENTA ────────────────────────────────────────────────
 function pfAddAccount() {
-  var nombre = prompt('Nombre para la nueva cuenta:', 'Cuenta ' + (pfAccounts.length + 1));
+  // Límite del plan free: 1 sola cuenta/broker. Premium: ilimitadas.
+  if (!window.isPremium && pfAccounts.length >= 1) {
+    if (typeof pfShowBrokerUpgrade === 'function') pfShowBrokerUpgrade();
+    return;
+  }
+  var nombre = prompt('Nombre para la nueva cuenta/broker:', 'Cuenta ' + (pfAccounts.length + 1));
   if (!nombre || !nombre.trim()) return;
-  var newAcct = { id: pfMakeAcctId(), name: nombre.trim(), positions: [], liqARS: 0, liqUSD: 0 };
+  var newAcct = { id: pfMakeAcctId(), name: nombre.trim(), positions: [], liqARS: 0, liqUSD: 0, closedTrades: [], broker: null };
   pfAccounts.push(newAcct);
   pfSaveAccounts();
   pfSwitchAccount(newAcct.id);
@@ -5626,20 +5861,42 @@ function pfCloseImportForce(){ document.getElementById('pfImportOverlay').classL
 function pfImportCSV() {
   var file=(document.getElementById('pfImportFileInput').files||[])[0];
   if(!file){document.getElementById('pfImportResult').textContent='⚠ Seleccioná un archivo CSV primero.';return;}
+  var brokerSel = (document.getElementById('pfImportBroker')||{}).value || 'auto';
   var reader=new FileReader();
   reader.onload=function(e){
     var text=(e.target.result||'').replace(/^\uFEFF/,'');
     var lines=text.split(/\r?\n/).filter(function(l){return l.trim();});
     if(lines.length<2){document.getElementById('pfImportResult').textContent='⚠ Archivo vacío o formato incorrecto.';return;}
     var header=lines[0].toLowerCase();
-    var imported=[];
-    if(header.indexOf('especie')!==-1||header.indexOf('denominacion')!==-1||header.indexOf('ppc')!==-1){
-      imported=pfParseBalanz(lines);
-    } else if(header.indexOf('ticker')!==-1||header.indexOf('simbolo')!==-1) {
-      imported=pfParseGeneric(lines);
+    var imported=[], brokerKey=brokerSel;
+    if (brokerSel === 'bullmarket') {
+      imported = pfParseBullMarket(lines);
+    } else if (brokerSel === 'balanz') {
+      imported = pfParseBalanz(lines);
+    } else if (brokerSel === 'generico') {
+      imported = pfParseGeneric(lines);
     } else {
-      imported=pfParseGeneric(lines);
+      // auto-detección por encabezados
+      if (header.indexOf('especie')!==-1||header.indexOf('denominacion')!==-1||header.indexOf('ppc')!==-1) {
+        brokerKey='balanz'; imported=pfParseBalanz(lines);
+      } else {
+        brokerKey='generico'; imported=pfParseGeneric(lines);
+      }
     }
+
+    // ── Límite del plan free: 1 solo broker conectado por cuenta ──
+    var acctBk = pfActiveAcct();
+    if (acctBk) {
+      if (!window.isPremium && acctBk.broker && acctBk.broker !== brokerKey) {
+        document.getElementById('pfImportResult').innerHTML = '⚠ El plan gratuito solo permite un broker por cuenta, y esta ya está vinculada a <b>' + acctBk.broker + '</b>. Con Premium podés combinar varios.';
+        document.getElementById('pfImportResult').style.color = 'var(--yellow)';
+        if (typeof pfShowBrokerUpgrade === 'function') pfShowBrokerUpgrade();
+        return;
+      }
+      acctBk.broker = brokerKey;
+      pfSaveAccounts();
+    }
+
     var added=0, skipped=0;
     var merge=document.getElementById('pfImportMerge')&&document.getElementById('pfImportMerge').checked;
     imported.forEach(function(pos){
@@ -5691,6 +5948,41 @@ function pfParseBalanz(lines) {
     var fecha   =iFecha>=0?pfNormalizeDate(cols[iFecha]||''):new Date().toISOString().slice(0,10);
     if(!ticker||cantidad<=0||pCompra<=0)continue;
     results.push({id:'pf_'+Date.now()+'_'+i, ticker:ticker, nombre:nombre, cantidad:cantidad, precioCompra:pCompra, precioActual:pActual||null, fecha:fecha, moneda:'ARS'});
+  }
+  return results;
+}
+
+// ── PARSER BULL MARKET ──────────────────────────────────────
+// Mapeo best-effort por nombres de columna habituales de Bull Market
+// (Especie/Ticker, Nominales/Cantidad, Precio Promedio/PPC, Precio Actual, Fecha, Moneda).
+// Ajustar los arrays de `idx(...)` cuando tengamos un export real para verificar.
+function pfParseBullMarket(lines) {
+  var results=[];
+  var sep=lines[0].indexOf(';')!==-1?';':',';
+  var header=lines[0].toLowerCase().split(sep);
+  var idx=function(names){for(var j=0;j<names.length;j++){for(var i=0;i<header.length;i++){if(header[i].indexOf(names[j])!==-1)return i;}}return -1;};
+  var iTicker  = idx(['especie','ticker','simbolo','símbolo']); if(iTicker<0)iTicker=0;
+  var iNombre  = idx(['denominaci','descripci','nombre']);
+  var iCant    = idx(['nominal','cantidad','cant','tenencia']);
+  var iPPC     = idx(['precio promedio','p. promedio','ppc','precio compra','p.compra','precio de compra','costo']);
+  var iPMkt    = idx(['precio actual','último precio','ultimo precio','precio de mercado','cotizacion','cotización','precio']);
+  var iFecha   = idx(['fecha']);
+  var iMoneda  = idx(['moneda','currency']);
+
+  for(var i=1;i<lines.length;i++){
+    var cols=pfSplitCSVLine(lines[i],sep);
+    if(!cols[iTicker])continue;
+    var ticker=(cols[iTicker]||'').trim().toUpperCase().replace(/[^A-Z0-9.]/g,'');
+    var nombre=iNombre>=0?(cols[iNombre]||'').trim():'';
+    var cleanNum=function(s){return parseFloat((s||'0').replace(/\./g,'').replace(',','.').replace(/[^0-9.-]/g,''))||0;};
+    var cantidad=cleanNum(iCant>=0?cols[iCant]:'0');
+    var pCompra =cleanNum(iPPC>=0?cols[iPPC]:'0');
+    var pActual =iPMkt>=0?cleanNum(cols[iPMkt]):null;
+    var fecha   =iFecha>=0?pfNormalizeDate(cols[iFecha]||''):new Date().toISOString().slice(0,10);
+    var moneda  ='ARS';
+    if(iMoneda>=0){ moneda=(cols[iMoneda]||'ARS').toUpperCase().indexOf('USD')!==-1?'USD':'ARS'; }
+    if(!ticker||cantidad<=0||pCompra<=0)continue;
+    results.push({id:'pf_'+Date.now()+'_'+i, ticker:ticker, nombre:nombre, cantidad:cantidad, precioCompra:pCompra, precioActual:pActual||null, fecha:fecha, moneda:moneda});
   }
   return results;
 }
@@ -5750,11 +6042,68 @@ function pfNormalizeDate(s) {
   return new Date().toISOString().slice(0,10);
 }
 
-// ── INICIALIZAR ───────────────────────────────────────────
-// Sección Portafolio eliminada de la UI — se desactiva el auto-init
-// para no intentar tocar elementos del DOM que ya no existen.
-// (Las funciones pf* quedan definidas pero inactivas por si se quiere
-// reactivar el portafolio más adelante.)
+// ── INICIALIZAR CARTERA ────────────────────────────────────
+window._pfInited = false;
+function pfInit() {
+  if (window._pfInited) return;
+  if (!document.getElementById('pfBody')) return; // el DOM de Cartera todavía no está listo
+  window._pfInited = true;
+  window._pfInitAlreadyRan = true;
+  pfLoad();
+  pfRenderAccountTabs();
+  pfRenderAll();
+  var tAll=[], mMap={};
+  pfPositions.forEach(function(p){ var t=(p.ticker||'').toUpperCase(); if(t){tAll.push(t);mMap[t]=(p.moneda||'USD');} });
+  tAll=tAll.filter(function(t,i,a){return a.indexOf(t)===i;});
+  if(tAll.length) pfFetchLivePrices(tAll, function(){ pfRenderAll(); }, mMap);
+  pfStartLiveRefresh();
+}
+
+// ── REFRESCO EN TIEMPO REAL (posiciones de Cartera) ────────
+// Actualiza precios cada ~15s mientras la pestaña Cartera está visible,
+// sin gastar llamadas si la ventana/pestaña del navegador no está en foco.
+var _pfLiveInterval = null;
+var PF_LIVE_REFRESH_MS = 15000;
+function pfStartLiveRefresh() {
+  if (_pfLiveInterval) return;
+  _pfLiveInterval = setInterval(function () {
+    if (document.hidden) return;
+    var panel = document.getElementById('tab-cartera');
+    if (!panel || !panel.classList.contains('active')) return;
+    if (!pfPositions.length) return;
+    pfRefreshLivePrices();
+  }, PF_LIVE_REFRESH_MS);
+
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) {
+      var panel = document.getElementById('tab-cartera');
+      if (panel && panel.classList.contains('active')) pfRefreshLivePrices();
+    }
+  });
+}
+
+// ── UPGRADE: LÍMITE DE BROKERS (plan free = 1 broker/cuenta) ──
+window.pfShowBrokerUpgrade = function () {
+  if (window.isPremium) return;
+  var old = document.getElementById('upgradeOverlay'); if (old) old.remove();
+  var overlay = document.createElement('div');
+  overlay.id = 'upgradeOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:4000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+  overlay.innerHTML =
+    '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:4px;padding:26px;max-width:360px;width:90%;font-family:var(--mono)">' +
+      '<div style="font-family:var(--head);font-weight:700;font-size:16px;color:var(--yellow);letter-spacing:.5px;margin-bottom:8px">★ DUBZ PREMIUM</div>' +
+      '<div style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px">' +
+        'El plan gratuito permite conectar <strong style="color:var(--text-bright)">1 solo broker/cuenta</strong> en tu Cartera. ' +
+        'Con Premium sumás brokers ilimitados (Bull Market, Balanz, y los que agreguemos) y todo lo que sumemos a futuro.' +
+      '</div>' +
+      '<div style="font-size:22px;color:var(--text-bright);font-weight:700;margin-bottom:16px">$' + window.PRECIO_PREMIUM_TXT + ' <span style="font-size:12px;color:var(--text-dim);font-weight:400">ARS / mes</span></div>' +
+      '<button id="mpSubscribeBtn2" class="btn btn-a btn-full" onclick="window.iniciarSuscripcionPremium()">⚡ Suscribirme — $' + window.PRECIO_PREMIUM_TXT + '/mes</button>' +
+      '<div style="font-size:10px;color:var(--text-dim);text-align:center;margin-top:8px">Pago recurrente mensual vía Mercado Pago. Cancelás cuando quieras.</div>' +
+      '<button style="background:none;border:none;color:var(--text-dim);font-family:var(--mono);font-size:11px;margin-top:14px;width:100%;cursor:pointer" onclick="document.getElementById(\'upgradeOverlay\').remove()">Cerrar</button>' +
+    '</div>';
+  overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+};
 
 </script>
 
