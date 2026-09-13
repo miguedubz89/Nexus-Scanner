@@ -399,6 +399,37 @@ def get_quote():
         except Exception:
             pass
 
+        # ── S de CANSLIM: Supply & Demand ──────────────────────────────────
+        # Float / acciones en circulación (poca oferta = movimientos de precio más marcados)
+        float_shares = safe('floatShares')
+        shares_outstanding = safe('sharesOutstanding')
+
+        # Volumen en días de suba vs. días de baja (accumulation/distribution),
+        # sobre las últimas 20 ruedas — más fiel a "demanda" que el volumen promedio solo.
+        up_down_vol_ratio = None
+        try:
+            n = min(20, len(closes) - 1)
+            if n > 5:
+                up_vol, down_vol = 0.0, 0.0
+                for i in range(len(closes) - n, len(closes)):
+                    if closes[i] > closes[i - 1]:
+                        up_vol += volumes[i]
+                    elif closes[i] < closes[i - 1]:
+                        down_vol += volumes[i]
+                if down_vol > 0:
+                    up_down_vol_ratio = round(up_vol / down_vol, 2)
+        except Exception:
+            pass
+
+        # ── I de CANSLIM: Institutional Sponsorship ────────────────────────
+        held_pct_institutions = None
+        try:
+            hpi = safe('heldPercentInstitutions')
+            if hpi is not None:
+                held_pct_institutions = round(float(hpi) * 100, 1)
+        except Exception:
+            pass
+
         # Mom 12M (calculado con historial, más preciso que solo 252 días)
         mom12 = momentum(closes, 252) if len(closes) >= 253 else mom6
 
@@ -436,6 +467,10 @@ def get_quote():
             'revGrowthQ':    rev_growth_q,
             'roe':           roe,
             'profitMargin':  profit_margin,
+            'floatShares':      float_shares,
+            'sharesOutstanding': shares_outstanding,
+            'upDownVolRatio':   up_down_vol_ratio,
+            'heldPctInstitutions': held_pct_institutions,
             # Squeeze Momentum (TTM LazyBear)
             'sqzOn':         sqz.get('sqzOn'),
             'sqzOff':        sqz.get('sqzOff'),
