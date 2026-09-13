@@ -6,6 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DUBZ MONITOR — Live</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+<!-- Lector de Excel (para importar el export .xlsx de Bull Market) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <!-- ── SERVICE WORKER (mantiene app activa en 2do plano) ── -->
 <script>
@@ -1609,14 +1611,21 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
         <label>Broker</label>
         <select class="pf-input" id="pfImportBroker">
           <option value="auto">Detectar automáticamente</option>
-          <option value="bullmarket">Bull Market</option>
+          <option value="bullmarket">Bull Market (cuenta corriente)</option>
           <option value="balanz">Balanz</option>
           <option value="generico">Genérico / otro</option>
         </select>
       </div>
+      <div class="pf-field" style="margin-bottom:12px">
+        <label>Moneda del archivo (solo Bull Market)</label>
+        <select class="pf-input" id="pfImportMoneda">
+          <option value="ARS">ARS — Cuenta Corriente PESOS</option>
+          <option value="USD">USD — Cuenta Corriente DÓLARES</option>
+        </select>
+      </div>
       <div class="pf-field" style="margin-bottom:10px">
-        <label>Archivo CSV</label>
-        <input class="pf-input" id="pfImportFileInput" type="file" accept=".csv,.txt">
+        <label>Archivo (CSV o Excel)</label>
+        <input class="pf-input" id="pfImportFileInput" type="file" accept=".csv,.txt,.xlsx,.xls">
       </div>
       <label style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--text-dim)">
         <input type="checkbox" id="pfImportMerge"> Permitir duplicados (no fusionar con existentes)
@@ -5860,64 +5869,118 @@ function pfCloseImportForce(){ document.getElementById('pfImportOverlay').classL
 
 function pfImportCSV() {
   var file=(document.getElementById('pfImportFileInput').files||[])[0];
-  if(!file){document.getElementById('pfImportResult').textContent='⚠ Seleccioná un archivo CSV primero.';return;}
-  var brokerSel = (document.getElementById('pfImportBroker')||{}).value || 'auto';
-  var reader=new FileReader();
-  reader.onload=function(e){
-    var text=(e.target.result||'').replace(/^\uFEFF/,'');
-    var lines=text.split(/\r?\n/).filter(function(l){return l.trim();});
-    if(lines.length<2){document.getElementById('pfImportResult').textContent='⚠ Archivo vacío o formato incorrecto.';return;}
-    var header=lines[0].toLowerCase();
-    var imported=[], brokerKey=brokerSel;
-    if (brokerSel === 'bullmarket') {
-      imported = pfParseBullMarket(lines);
-    } else if (brokerSel === 'balanz') {
-      imported = pfParseBalanz(lines);
-    } else if (brokerSel === 'generico') {
-      imported = pfParseGeneric(lines);
+  if(!file){document.getElementById('pfImportResult').textContent='⚠ Seleccioná un archivo primero.';return;}
+  var brokerSel  = (document.getElementById('pfImportBroker')||{}).value || 'auto';
+  var monedaSel  = (document.getElementById('pfImportMoneda')||{}).value || 'ARS';
+  var isXlsx     = /\.xlsx?$/i.test(file.name||'');
+
+  function processRows(rows) {
+    if (!rows || rows.length < 2) { document.getElementById('pfImportResult').textContent='⚠ Archivo vacío o formato incorrecto.'; return; }
+    var headerRow = (rows[0]||[]).map(function(c){ return (c==null?'':String(c)).trim().toLowerCase(); });
+    var imported=[], closed=[], brokerKey=brokerSel, extraNote='';
+
+    var looksLikeLedger = headerRow.indexOf('comprobante')!==-1 && headerRow.indexOf('especie')!==-1;
+    if (brokerSel === 'bullmarket' || (brokerSel === 'auto' && looksLikeLedger)) {
+      brokerKey = 'bullmarket';
+      var r = pfParseBullMarketLedger(rows, monedaSel);
+      imported = r.positions; closed = r.closedTrades;
+      if (r.skippedVentas) extraNote = ' ⚠ ' + r.skippedVentas + ' venta(s) no se pudieron reconciliar por falta de historial de compra en el archivo.';
     } else {
-      // auto-detección por encabezados
-      if (header.indexOf('especie')!==-1||header.indexOf('denominacion')!==-1||header.indexOf('ppc')!==-1) {
-        brokerKey='balanz'; imported=pfParseBalanz(lines);
-      } else {
-        brokerKey='generico'; imported=pfParseGeneric(lines);
+      // Parsers basados en líneas de texto (Balanz / Genérico)
+      var lines = rows.map(function(row){
+        return row.map(function(c){ return c instanceof Date ? pfDateToISO(c) : (c==null?'':String(c)); }).join(';');
+      });
+      if (brokerSel === 'balanz') { brokerKey='balanz'; imported=pfParseBalanz(lines); }
+      else if (brokerSel === 'generico') { brokerKey='generico'; imported=pfParseGeneric(lines); }
+      else {
+        var h = (lines[0]||'').toLowerCase();
+        if (h.indexOf('especie')!==-1||h.indexOf('denominacion')!==-1||h.indexOf('ppc')!==-1) { brokerKey='balanz'; imported=pfParseBalanz(lines); }
+        else { brokerKey='generico'; imported=pfParseGeneric(lines); }
       }
     }
+    pfFinishImport(imported, closed, brokerKey, extraNote);
+  }
 
-    // ── Límite del plan free: 1 solo broker conectado por cuenta ──
-    var acctBk = pfActiveAcct();
-    if (acctBk) {
-      if (!window.isPremium && acctBk.broker && acctBk.broker !== brokerKey) {
-        document.getElementById('pfImportResult').innerHTML = '⚠ El plan gratuito solo permite un broker por cuenta, y esta ya está vinculada a <b>' + acctBk.broker + '</b>. Con Premium podés combinar varios.';
-        document.getElementById('pfImportResult').style.color = 'var(--yellow)';
-        if (typeof pfShowBrokerUpgrade === 'function') pfShowBrokerUpgrade();
-        return;
-      }
-      acctBk.broker = brokerKey;
-      pfSaveAccounts();
+  if (isXlsx) {
+    if (typeof XLSX === 'undefined') {
+      document.getElementById('pfImportResult').textContent = '⚠ No se pudo cargar el lector de Excel. Recargá la página y probá de nuevo.';
+      return;
     }
-
-    var added=0, skipped=0;
-    var merge=document.getElementById('pfImportMerge')&&document.getElementById('pfImportMerge').checked;
-    imported.forEach(function(pos){
-      if(!merge){
-        var dup=pfPositions.some(function(p){return p.ticker===pos.ticker&&p.fecha===pos.fecha&&Math.abs(parseFloat(p.precioCompra)-parseFloat(pos.precioCompra))<0.01;});
-        if(dup){skipped++;return;}
+    var readerX = new FileReader();
+    readerX.onload = function(e){
+      try {
+        var wb   = XLSX.read(new Uint8Array(e.target.result), { type:'array', cellDates:true });
+        var ws   = wb.Sheets[wb.SheetNames[0]];
+        var rows = XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:'' });
+        processRows(rows);
+      } catch(err) {
+        document.getElementById('pfImportResult').textContent = '⚠ No se pudo leer el Excel: ' + err.message;
       }
-      pfPositions.push(pos); added++;
-    });
-    pfSave();
-    var msg='✓ '+added+' posiciones importadas.'; if(skipped>0)msg+=' '+skipped+' duplicadas omitidas.';
-    document.getElementById('pfImportResult').textContent=msg;
-    document.getElementById('pfImportResult').style.color='var(--green)';
-    // Fetch live para todos los tickers importados (USD y ARS)
-    var newTickers=imported.map(function(p){return p.ticker;}).filter(function(t,i,a){return a.indexOf(t)===i;});
-    var newMMap={}; imported.forEach(function(p){newMMap[p.ticker]=(p.moneda||'ARS');});
-    if(newTickers.length)pfFetchLivePrices(newTickers, function(){pfRenderAll();}, newMMap);
-    pfRenderAll();
-    setTimeout(function(){pfCloseImportForce();},2500);
-  };
-  reader.readAsText(file,'UTF-8');
+    };
+    readerX.readAsArrayBuffer(file);
+  } else {
+    var reader=new FileReader();
+    reader.onload=function(e){
+      var text=(e.target.result||'').replace(/^\uFEFF/,'');
+      var rawLines=text.split(/\r?\n/).filter(function(l){return l.trim();});
+      if(!rawLines.length){ document.getElementById('pfImportResult').textContent='⚠ Archivo vacío o formato incorrecto.'; return; }
+      var sep = rawLines[0].indexOf(';')!==-1 ? ';' : ',';
+      var rows = rawLines.map(function(l){ return pfSplitCSVLine(l, sep); });
+      processRows(rows);
+    };
+    reader.readAsText(file,'UTF-8');
+  }
+}
+
+function pfDateToISO(d) {
+  try { return d.toISOString().slice(0,10); } catch(e) { return new Date().toISOString().slice(0,10); }
+}
+
+// ── Aplica el límite free/premium de brokers y vuelca lo importado ──
+function pfFinishImport(imported, closedImported, brokerKey, extraNote) {
+  imported = imported || []; closedImported = closedImported || [];
+  var acctBk = pfActiveAcct();
+  if (acctBk) {
+    if (!window.isPremium && acctBk.broker && acctBk.broker !== brokerKey) {
+      document.getElementById('pfImportResult').innerHTML = '⚠ El plan gratuito solo permite un broker por cuenta, y esta ya está vinculada a <b>' + acctBk.broker + '</b>. Con Premium podés combinar varios.';
+      document.getElementById('pfImportResult').style.color = 'var(--yellow)';
+      if (typeof pfShowBrokerUpgrade === 'function') pfShowBrokerUpgrade();
+      return;
+    }
+    acctBk.broker = brokerKey;
+    pfSaveAccounts();
+  }
+
+  var added=0, skipped=0;
+  var merge=document.getElementById('pfImportMerge')&&document.getElementById('pfImportMerge').checked;
+  imported.forEach(function(pos){
+    if(!merge){
+      var dup=pfPositions.some(function(p){return p.ticker===pos.ticker&&p.fecha===pos.fecha&&Math.abs(parseFloat(p.precioCompra)-parseFloat(pos.precioCompra))<0.01;});
+      if(dup){skipped++;return;}
+    }
+    pfPositions.push(pos); added++;
+  });
+
+  var addedClosed = 0;
+  if (closedImported.length) {
+    pfClosedTrades = pfGetClosedTrades();
+    closedImported.forEach(function(t){ pfClosedTrades.unshift(t); addedClosed++; });
+    var a = pfActiveAcct(); if (a) a.closedTrades = pfClosedTrades;
+  }
+
+  pfSave();
+  var msg='✓ '+added+' posiciones importadas.';
+  if (addedClosed) msg += ' ' + addedClosed + ' operaciones cerradas reconstruidas.';
+  if (skipped>0) msg += ' ' + skipped + ' duplicadas omitidas.';
+  if (extraNote) msg += extraNote;
+  document.getElementById('pfImportResult').textContent=msg;
+  document.getElementById('pfImportResult').style.color = extraNote ? 'var(--yellow)' : 'var(--green)';
+
+  var newTickers=imported.map(function(p){return p.ticker;}).filter(function(t,i,a){return a.indexOf(t)===i;});
+  var newMMap={}; imported.forEach(function(p){newMMap[p.ticker]=(p.moneda||'ARS');});
+  if(newTickers.length)pfFetchLivePrices(newTickers, function(){pfRenderAll();}, newMMap);
+  pfRenderAll();
+  setTimeout(function(){pfCloseImportForce();},3500);
 }
 
 // ── PARSER BALANZ ─────────────────────────────────────────
@@ -5952,39 +6015,115 @@ function pfParseBalanz(lines) {
   return results;
 }
 
-// ── PARSER BULL MARKET ──────────────────────────────────────
-// Mapeo best-effort por nombres de columna habituales de Bull Market
-// (Especie/Ticker, Nominales/Cantidad, Precio Promedio/PPC, Precio Actual, Fecha, Moneda).
-// Ajustar los arrays de `idx(...)` cuando tengamos un export real para verificar.
-function pfParseBullMarket(lines) {
-  var results=[];
-  var sep=lines[0].indexOf(';')!==-1?';':',';
-  var header=lines[0].toLowerCase().split(sep);
-  var idx=function(names){for(var j=0;j<names.length;j++){for(var i=0;i<header.length;i++){if(header[i].indexOf(names[j])!==-1)return i;}}return -1;};
-  var iTicker  = idx(['especie','ticker','simbolo','símbolo']); if(iTicker<0)iTicker=0;
-  var iNombre  = idx(['denominaci','descripci','nombre']);
-  var iCant    = idx(['nominal','cantidad','cant','tenencia']);
-  var iPPC     = idx(['precio promedio','p. promedio','ppc','precio compra','p.compra','precio de compra','costo']);
-  var iPMkt    = idx(['precio actual','último precio','ultimo precio','precio de mercado','cotizacion','cotización','precio']);
-  var iFecha   = idx(['fecha']);
-  var iMoneda  = idx(['moneda','currency']);
+// ── PARSER BULL MARKET — Cuenta Corriente (ARS o USD) ───────────
+// Bull Market no exporta un snapshot de tenencias: exporta el LIBRO DE
+// MOVIMIENTOS de la cuenta (Liquida, Operado, Comprobante, Numero,
+// Cantidad, Especie, Precio, Importe, Saldo, Referencia), con una fila
+// por compra/venta y por caución (Especie = 'VARIAS').
+//
+// Esta función:
+//  1) Descarta las cauciones (no son posiciones de cartera).
+//  2) Reconstruye, por ticker y en orden cronológico, lotes de compra
+//     tipo FIFO y va calzando cada venta contra el/los lotes más
+//     antiguos para generar operaciones cerradas con P&L.
+//  3) Lo que queda sin vender en los lotes se fusiona en la posición
+//     abierta (costo promedio ponderado).
+//
+// `rows` es un array de arrays (fila 0 = encabezado). `defaultMoneda`
+// viene del selector del modal, porque Bull Market separa el export
+// en cuenta PESOS y cuenta DÓLARES y el archivo no lo indica por fila.
+function pfParseBullMarketLedger(rows, defaultMoneda) {
+  var moneda = defaultMoneda === 'USD' ? 'USD' : 'ARS';
+  var header = (rows[0]||[]).map(function(c){ return (c==null?'':String(c)).trim().toLowerCase(); });
+  var col = function(names){
+    for (var j=0;j<names.length;j++) for (var i=0;i<header.length;i++) if (header[i].indexOf(names[j])!==-1) return i;
+    return -1;
+  };
+  var iLiquida = col(['liquida']);
+  var iOperado = col(['operado']);
+  var iCompr   = col(['comprobante']);
+  var iCant    = col(['cantidad']);
+  var iEspecie = col(['especie']);
+  var iPrecio  = col(['precio']);
 
-  for(var i=1;i<lines.length;i++){
-    var cols=pfSplitCSVLine(lines[i],sep);
-    if(!cols[iTicker])continue;
-    var ticker=(cols[iTicker]||'').trim().toUpperCase().replace(/[^A-Z0-9.]/g,'');
-    var nombre=iNombre>=0?(cols[iNombre]||'').trim():'';
-    var cleanNum=function(s){return parseFloat((s||'0').replace(/\./g,'').replace(',','.').replace(/[^0-9.-]/g,''))||0;};
-    var cantidad=cleanNum(iCant>=0?cols[iCant]:'0');
-    var pCompra =cleanNum(iPPC>=0?cols[iPPC]:'0');
-    var pActual =iPMkt>=0?cleanNum(cols[iPMkt]):null;
-    var fecha   =iFecha>=0?pfNormalizeDate(cols[iFecha]||''):new Date().toISOString().slice(0,10);
-    var moneda  ='ARS';
-    if(iMoneda>=0){ moneda=(cols[iMoneda]||'ARS').toUpperCase().indexOf('USD')!==-1?'USD':'ARS'; }
-    if(!ticker||cantidad<=0||pCompra<=0)continue;
-    results.push({id:'pf_'+Date.now()+'_'+i, ticker:ticker, nombre:nombre, cantidad:cantidad, precioCompra:pCompra, precioActual:pActual||null, fecha:fecha, moneda:moneda});
+  var toNum = function(v){
+    if (typeof v === 'number') return v;
+    return parseFloat(String(v==null?'':v).replace(/\./g,'').replace(',','.').replace(/[^0-9.-]/g,'')) || 0;
+  };
+  var toDateStr = function(v){ return v instanceof Date ? pfDateToISO(v) : pfNormalizeDate(v); };
+
+  var ops = [];
+  for (var i=1;i<rows.length;i++){
+    var row = rows[i]; if(!row || !row.length) continue;
+    var especieRaw = iEspecie>=0 ? row[iEspecie] : '';
+    var especie = (especieRaw==null?'':String(especieRaw)).trim().toUpperCase();
+    if (!especie || especie === 'VARIAS') continue; // caución / colocación de liquidez, no es una posición
+    var comprRaw = iCompr>=0 ? row[iCompr] : '';
+    var compr = (comprRaw==null?'':String(comprRaw)).toUpperCase();
+    if (compr.indexOf('CAUCION') !== -1) continue;
+    var cantidad = iCant>=0 ? toNum(row[iCant]) : 0;
+    if (!cantidad) continue;
+    var precio = iPrecio>=0 ? toNum(row[iPrecio]) : 0;
+    if (!precio) continue;
+    var fechaRaw = iOperado>=0 ? row[iOperado] : (iLiquida>=0 ? row[iLiquida] : '');
+    ops.push({
+      especie: especie.replace(/[^A-Z0-9.]/g,''),
+      cantidad: cantidad, precio: precio,
+      fecha: toDateStr(fechaRaw), esCompra: cantidad > 0
+    });
   }
-  return results;
+
+  ops.sort(function(a,b){ return (a.fecha||'').localeCompare(b.fecha||''); }); // más antigua primero, para el FIFO
+
+  var lots = {};          // { TICKER: [ {qty, precio, fecha} ] }
+  var closedTrades = [];
+  var skippedVentas = 0;
+
+  ops.forEach(function(op){
+    if (!lots[op.especie]) lots[op.especie] = [];
+    var queue = lots[op.especie];
+    if (op.esCompra) {
+      queue.push({ qty: op.cantidad, precio: op.precio, fecha: op.fecha });
+      return;
+    }
+    var qtyVender = Math.abs(op.cantidad);
+    while (qtyVender > 0.0001 && queue.length) {
+      var lot = queue[0];
+      var consumido = Math.min(lot.qty, qtyVender);
+      var pnlNat = (op.precio - lot.precio) * consumido;
+      var pnlPct = lot.precio > 0 ? ((op.precio - lot.precio) / lot.precio * 100) : 0;
+      closedTrades.push({
+        id: 'trade_bm_' + Date.now() + '_' + closedTrades.length,
+        ticker: op.especie, nombre: '', cantidad: consumido,
+        precioCompra: lot.precio, precioVenta: op.precio, moneda: moneda,
+        fechaCompra: lot.fecha, fechaVenta: op.fecha,
+        nota: 'Importado de Bull Market', pnlNat: pnlNat, pnlPct: pnlPct
+      });
+      lot.qty -= consumido; qtyVender -= consumido;
+      if (lot.qty <= 0.0001) queue.shift();
+    }
+    if (qtyVender > 0.0001) skippedVentas++; // venta sin lote de compra disponible (el archivo no cubre todo el historial)
+  });
+
+  var positions = [];
+  Object.keys(lots).forEach(function(tk){
+    var queue = lots[tk].filter(function(l){ return l.qty > 0.0001; });
+    if (!queue.length) return;
+    var qtyTotal = 0, costoTotal = 0, fechaMin = null;
+    queue.forEach(function(l){
+      qtyTotal += l.qty; costoTotal += l.qty * l.precio;
+      if (!fechaMin || l.fecha < fechaMin) fechaMin = l.fecha;
+    });
+    positions.push({
+      id: 'pf_bm_' + Date.now() + '_' + tk,
+      ticker: tk, nombre: '', cantidad: qtyTotal,
+      precioCompra: qtyTotal > 0 ? costoTotal / qtyTotal : 0,
+      precioActual: null, fecha: fechaMin || new Date().toISOString().slice(0,10),
+      moneda: moneda
+    });
+  });
+
+  return { positions: positions, closedTrades: closedTrades, skippedVentas: skippedVentas };
 }
 
 // ── PARSER GENÉRICO ────────────────────────────────────────
