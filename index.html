@@ -6,8 +6,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DUBZ MONITOR — Live</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
-<!-- Lector de Excel (para importar el export .xlsx de Bull Market) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <!-- ── SERVICE WORKER (mantiene app activa en 2do plano) ── -->
 <script>
@@ -182,6 +180,12 @@ self.addEventListener('message', e => {
   window.PRECIO_PREMIUM_TXT = '9.000';
   window.isPremium = false;
 
+  // ── ADMIN: estos emails nunca ven el cartel de premium (quedan como premium siempre) ──
+  window.ADMIN_EMAILS = ['miguematador8977@gmail.com'];
+  window.isAdminUser = function(email) {
+    return window.ADMIN_EMAILS.indexOf((email || '').trim().toLowerCase()) !== -1;
+  };
+
   window.loadPlanCloud = async function(uid) {
     try {
       const snap = await getDoc(doc(db, 'users', uid));
@@ -290,7 +294,7 @@ self.addEventListener('message', e => {
 
       // Cargar plan (free/premium) del usuario
       const planInfo = await window.loadPlanCloud(user.uid);
-      window.isPremium = (planInfo.plan === 'premium' && planInfo.vigente);
+      window.isPremium = (planInfo.plan === 'premium' && planInfo.vigente) || window.isAdminUser(user.email);
       if (window.updatePlanBadge) window.updatePlanBadge();
 
       // Cargar tickers personalizados
@@ -5761,9 +5765,14 @@ function pfFetchLivePrices(tickers, callback, monedaMap) {
 
 function pfRefreshLivePrices() {
   var tickers=[], monedaMap={};
+  var now = Date.now();
+  var minAge = 8000; // si ya se pidió hace menos de 8s, no lo volvemos a pedir (evita ráfagas duplicadas)
   pfPositions.forEach(function(p){
     var t=(p.ticker||'').toUpperCase();
-    if(t){ tickers.push(t); monedaMap[t]=(p.moneda||'USD'); }
+    if(!t) return;
+    var cached = pfLiveCache[t];
+    if (cached && cached.ts && (now - cached.ts) < minAge) return;
+    tickers.push(t); monedaMap[t]=(p.moneda||'USD');
   });
   // Deduplicar
   tickers=tickers.filter(function(t,i,a){return a.indexOf(t)===i;});
@@ -5867,6 +5876,20 @@ function pfCloseImportForce(){ document.getElementById('pfImportOverlay').classL
   });
 })();
 
+function pfEnsureXLSXLoaded(callback) {
+  if (typeof XLSX !== 'undefined') { callback(); return; }
+  var existing = document.getElementById('pfXlsxLib');
+  if (existing) { existing.addEventListener('load', callback); return; }
+  var s = document.createElement('script');
+  s.id = 'pfXlsxLib';
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  s.onload = callback;
+  s.onerror = function(){
+    document.getElementById('pfImportResult').textContent = '⚠ No se pudo cargar el lector de Excel (revisá tu conexión).';
+  };
+  document.head.appendChild(s);
+}
+
 function pfImportCSV() {
   var file=(document.getElementById('pfImportFileInput').files||[])[0];
   if(!file){document.getElementById('pfImportResult').textContent='⚠ Seleccioná un archivo primero.';return;}
@@ -5902,22 +5925,23 @@ function pfImportCSV() {
   }
 
   if (isXlsx) {
-    if (typeof XLSX === 'undefined') {
-      document.getElementById('pfImportResult').textContent = '⚠ No se pudo cargar el lector de Excel. Recargá la página y probá de nuevo.';
-      return;
-    }
-    var readerX = new FileReader();
-    readerX.onload = function(e){
-      try {
-        var wb   = XLSX.read(new Uint8Array(e.target.result), { type:'array', cellDates:true });
-        var ws   = wb.Sheets[wb.SheetNames[0]];
-        var rows = XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:'' });
-        processRows(rows);
-      } catch(err) {
-        document.getElementById('pfImportResult').textContent = '⚠ No se pudo leer el Excel: ' + err.message;
-      }
-    };
-    readerX.readAsArrayBuffer(file);
+    document.getElementById('pfImportResult').textContent = 'Cargando lector de Excel...';
+    document.getElementById('pfImportResult').style.color = 'var(--text-dim)';
+    pfEnsureXLSXLoaded(function () {
+      if (typeof XLSX === 'undefined') return; // el onerror ya mostró el aviso
+      var readerX = new FileReader();
+      readerX.onload = function(e){
+        try {
+          var wb   = XLSX.read(new Uint8Array(e.target.result), { type:'array', cellDates:true });
+          var ws   = wb.Sheets[wb.SheetNames[0]];
+          var rows = XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:'' });
+          processRows(rows);
+        } catch(err) {
+          document.getElementById('pfImportResult').textContent = '⚠ No se pudo leer el Excel: ' + err.message;
+        }
+      };
+      readerX.readAsArrayBuffer(file);
+    });
   } else {
     var reader=new FileReader();
     reader.onload=function(e){
@@ -6200,13 +6224,23 @@ function pfInit() {
 
 // ── REFRESCO EN TIEMPO REAL (posiciones de Cartera) ────────
 // Actualiza precios cada ~15s mientras la pestaña Cartera está visible,
-// sin gastar llamadas si la ventana/pestaña del navegador no está en foco.
+// sin gastar llamadas si la ventana/pestaña del navegador no está en foco,
+// y sin tocar la pantalla si hay un modal abierto (cargando una orden,
+// vendiendo o importando), para no interrumpir lo que se está escribiendo.
 var _pfLiveInterval = null;
-var PF_LIVE_REFRESH_MS = 15000;
+var PF_LIVE_REFRESH_MS = 30000;
+function pfAnyModalOpen() {
+  var ids = ['pfModalOverlay', 'pfSellModalOverlay', 'pfImportOverlay'];
+  return ids.some(function(id){
+    var el = document.getElementById(id);
+    return el && el.classList.contains('open');
+  });
+}
 function pfStartLiveRefresh() {
   if (_pfLiveInterval) return;
   _pfLiveInterval = setInterval(function () {
     if (document.hidden) return;
+    if (pfAnyModalOpen()) return; // no interrumpir una carga en curso
     var panel = document.getElementById('tab-cartera');
     if (!panel || !panel.classList.contains('active')) return;
     if (!pfPositions.length) return;
@@ -6214,7 +6248,7 @@ function pfStartLiveRefresh() {
   }, PF_LIVE_REFRESH_MS);
 
   document.addEventListener('visibilitychange', function () {
-    if (!document.hidden) {
+    if (!document.hidden && !pfAnyModalOpen()) {
       var panel = document.getElementById('tab-cartera');
       if (panel && panel.classList.contains('active')) pfRefreshLivePrices();
     }
