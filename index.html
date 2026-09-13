@@ -4139,6 +4139,41 @@ function squeezeDotBar(sqzOn, sqzOff, mom, momPrev) {
 // I = Institutional: MarketCap > $2B
 // M = Market direction: sobre EMA200
 
+// ── CANSLIM — M real: dirección del MERCADO GENERAL, no de la acción ──
+// Se calcula una sola vez por índice de referencia y se aplica igual a
+// todas las acciones de ese mercado (SPY para EEUU, promedio de las
+// acciones argentinas cargadas como proxy del Merval, ya que no hay un
+// ticker de índice ARG en la lista por defecto).
+function canslimMarketDirectionUS() {
+  var spy = allData.filter(function(d){ return d.symbol === 'SPY'; })[0];
+  if (!spy || spy.distEma200 == null) return null;
+  return { ok: spy.distEma200 > 0, tip: 'SPY vs EMA200: ' + (spy.distEma200>0?'+':'') + spy.distEma200.toFixed(1) + '%' };
+}
+function canslimMarketDirectionAR() {
+  var arT = allData.filter(function(d){ return isArgentineTicker(d.symbol) && d.distEma200 != null; });
+  if (!arT.length) return null;
+  var avg = arT.reduce(function(s,d){ return s + d.distEma200; }, 0) / arT.length;
+  return { ok: avg > 0, tip: 'Promedio Merval vs EMA200: ' + (avg>0?'+':'') + avg.toFixed(1) + '%' };
+}
+
+// ── CANSLIM — L real: percentil de Relative Strength contra TU universo cargado ──
+// No es el RS Rating oficial de IBD (compara contra todo el mercado de EEUU,
+// datos que no tenemos), pero sí es un ranking de fuerza relativa genuino:
+// dónde queda el momentum de esta acción respecto a todas las que tenés
+// cargadas en el scanner ahora mismo.
+function canslimRSPercentile(symbol) {
+  var pool = allData.filter(function(d){ return (d.mom12m != null ? d.mom12m : d.mom6m) != null; });
+  if (pool.length < 5) return null; // muy pocos tickers cargados para que un percentil diga algo
+  var target = pool.filter(function(d){ return d.symbol === symbol; })[0];
+  if (!target) return null;
+  var targetMom = target.mom12m != null ? target.mom12m : target.mom6m;
+  var better = pool.filter(function(d){
+    var m = d.mom12m != null ? d.mom12m : d.mom6m;
+    return m <= targetMom;
+  }).length;
+  return (better / pool.length) * 100;
+}
+
 function canslimScore(d) {
   var score = 0;
   var hits  = [];
@@ -4159,7 +4194,11 @@ function canslimScore(d) {
     var decelerating   = epsAccelKnown && d.epsAccel < -15;
     var moderateGrowth = d.epsGrowthQ > 15 && d.epsGrowthQ <= 25;
     var acceleratingHard = epsAccelKnown && d.epsAccel > 25;
-    c_ok = (strongGrowth && !decelerating) || (moderateGrowth && acceleratingHard);
+    var epsOk = (strongGrowth && !decelerating) || (moderateGrowth && acceleratingHard);
+    // Si hay dato de ventas y están cayendo, la ganancia probablemente viene de
+    // recorte de costos/recompras, no de negocio real creciendo — CANSLIM exige ambas.
+    var salesFalling = (d.revGrowthQ != null && d.revGrowthQ < -5);
+    c_ok = epsOk && !salesFalling;
   } else {
     c_ok = (d.pe && d.pe > 5 && d.pe < 40 && d.chgPct > 0);
   }
@@ -4168,6 +4207,7 @@ function canslimScore(d) {
   if (d.epsGrowthQ != null) {
     cTip = 'EPS trim: '+(d.epsGrowthQ>0?'+':'')+d.epsGrowthQ+'%';
     cTip += ' | Acel: '+(epsAccelKnown ? (d.epsAccel>0?'+':'')+d.epsAccel+'pp' : 's/d');
+    cTip += ' | Ventas: '+(d.revGrowthQ!=null ? (d.revGrowthQ>0?'+':'')+d.revGrowthQ+'%' : 's/d');
   } else {
     cTip = 'EPS sin dato — proxy P/E+día';
   }
@@ -4192,34 +4232,67 @@ function canslimScore(d) {
   hits.push({ l:'N', ok: n_ok,
     tip: d.distFromHigh != null ? 'Dist máx 52s: '+(d.distFromHigh>0?'+':'')+d.distFromHigh.toFixed(1)+'%' : 'Sin dato' });
 
-  // S — Volumen > 1.2x promedio 20d
-  var s_ok = (d.avgVol20 && d.volume && d.volume > d.avgVol20 * 1.2);
+  // S — Supply & Demand: volumen fuerte de por sí no dice si es compra o venta.
+  //     Si tenemos el ratio de volumen en días de suba vs. baja (últimas 20 ruedas),
+  //     lo usamos como señal de acumulación real; si no, cae al volumen simple.
+  var s_ok, sTip;
+  var volSpike = (d.avgVol20 && d.volume && d.volume > d.avgVol20 * 1.2);
+  if (d.upDownVolRatio != null) {
+    s_ok = volSpike && d.upDownVolRatio >= 1;
+    sTip = 'Vol compra/venta (20d): '+d.upDownVolRatio.toFixed(2)+'x';
+  } else {
+    s_ok = volSpike;
+    sTip = d.avgVol20 ? 'Vol/Avg: '+(d.volume/d.avgVol20).toFixed(2)+'x (sin desglose compra/venta)' : 'Sin dato volumen';
+  }
+  if (d.floatShares) sTip += ' | Float: '+(d.floatShares/1e6).toFixed(0)+'M';
   if (s_ok) score++;
-  hits.push({ l:'S', ok: s_ok,
-    tip: d.avgVol20 ? 'Vol/Avg: '+(d.volume/d.avgVol20).toFixed(2)+'x' : 'Sin dato volumen' });
+  hits.push({ l:'S', ok: s_ok, tip: sTip });
 
-  // L — Líder: ROE > 17% (dato real) + RSI > 55 + sobre EMA200
-  var l_ok;
-  if (d.roe != null) {
+  // L — Líder: Relative Strength percentil vs. tu universo cargado (top ~30%) + tendencia intacta
+  //     RSI y ROE quedan como señales secundarias/fallback, no como el criterio principal,
+  //     porque RSI (oscilador de sobrecompra/sobreventa) NO es lo mismo que la Relative
+  //     Strength de CANSLIM (ranking de performance de precio vs. el resto del mercado).
+  var rsPct = canslimRSPercentile(d.symbol);
+  var l_ok, lTip;
+  if (rsPct != null) {
+    l_ok = (rsPct >= 70 && d.distEma200 != null && d.distEma200 > 0);
+    lTip = 'RS vs tu universo: percentil ' + rsPct.toFixed(0);
+  } else if (d.roe != null) {
     l_ok = (d.roe > 17 && d.rsi != null && d.rsi > 55 && d.distEma200 != null && d.distEma200 > 0);
+    lTip = 'Sin universo suficiente — proxy ROE: ' + d.roe + '% | RSI: ' + (d.rsi?d.rsi.toFixed(1):'--');
   } else {
     l_ok = (d.rsi != null && d.rsi > 55 && d.distEma200 != null && d.distEma200 > 0);
+    lTip = 'Sin universo ni ROE — proxy RSI+EMA200';
   }
   if (l_ok) score++;
-  hits.push({ l:'L', ok: l_ok,
-    tip: d.roe != null ? 'ROE: '+d.roe+'% | RSI: '+(d.rsi?d.rsi.toFixed(1):'--') : 'ROE sin dato — proxy RSI+EMA200' });
+  hits.push({ l:'L', ok: l_ok, tip: lTip });
 
-  // I — Soporte institucional: proxy MarketCap > $2B
-  var i_ok = (d.marketCap && d.marketCap > 2e9);
+  // I — Soporte institucional: % real de tenencia institucional (dato de Yahoo Finance).
+  //     Fallback si no hay dato: MarketCap > $2B (proxy de tamaño, no de sponsorship real).
+  var i_ok, iTip;
+  if (d.heldPctInstitutions != null) {
+    i_ok = d.heldPctInstitutions > 30;
+    iTip = 'Tenencia institucional: '+d.heldPctInstitutions+'%';
+  } else {
+    i_ok = (d.marketCap && d.marketCap > 2e9);
+    iTip = d.marketCap ? 'Sin dato institucional — proxy Cap: $'+(d.marketCap/1e9).toFixed(1)+'B' : 'Sin dato';
+  }
   if (i_ok) score++;
-  hits.push({ l:'I', ok: i_ok,
-    tip: d.marketCap ? 'Cap: $'+(d.marketCap/1e9).toFixed(1)+'B' : 'Sin Market Cap' });
+  hits.push({ l:'I', ok: i_ok, tip: iTip });
 
-  // M — Mercado alcista: sobre EMA200
-  var m_ok = (d.distEma200 != null && d.distEma200 > 0);
+  // M — Mercado alcista: dirección del ÍNDICE de referencia (SPY / promedio Merval),
+  //     no de la propia acción. Si no hay referencia de mercado cargada, cae al
+  //     comportamiento anterior (EMA200 de la propia acción) como último recurso.
+  var mktDir = isArgentineTicker(d.symbol) ? canslimMarketDirectionAR() : canslimMarketDirectionUS();
+  var m_ok, mTip;
+  if (mktDir) {
+    m_ok = mktDir.ok; mTip = mktDir.tip;
+  } else {
+    m_ok = (d.distEma200 != null && d.distEma200 > 0);
+    mTip = d.distEma200 != null ? 'Sin referencia de mercado — proxy propia EMA200: '+(d.distEma200>0?'+':'')+d.distEma200.toFixed(1)+'%' : 'Sin dato';
+  }
   if (m_ok) score++;
-  hits.push({ l:'M', ok: m_ok,
-    tip: d.distEma200 != null ? 'Dist EMA200: '+(d.distEma200>0?'+':'')+d.distEma200.toFixed(1)+'%' : 'Sin dato' });
+  hits.push({ l:'M', ok: m_ok, tip: mTip });
 
   return { score: score, hits: hits };
 }
