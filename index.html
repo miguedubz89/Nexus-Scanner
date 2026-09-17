@@ -138,6 +138,7 @@ self.addEventListener('message', e => {
   const app  = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db   = getFirestore(app);
+  window.auth = auth; // expuesto para que el chat de Rendi AI (script no-module) pueda leer el usuario logueado
 
   const DEFAULT_TICKERS = ['SPY','QQQ','XLE','AAPL','NVDA','META','MSFT','GOOG','TSLA','AMZN','CVX','XOM','VIST','JPM','WMT','JNJ','GLD','TLT','AMD','NFLX'];
 
@@ -4124,7 +4125,7 @@ async function aiSend() {
   var input = document.getElementById('aiInput');
   var pregunta = (input.value || '').trim();
   if (!pregunta) return;
-  var user = (typeof auth !== 'undefined' && auth.currentUser) ? auth.currentUser : null;
+  var user = (typeof window.auth !== 'undefined' && window.auth) ? window.auth.currentUser : null;
   if (!user) { aiAddMsg('Iniciá sesión para usar Rendi AI.', 'ai-msg-error'); return; }
 
   if (!window.isPremium && aiPreguntasRestantes === 0) { window.aiOpenUpgradeModal(); return; }
