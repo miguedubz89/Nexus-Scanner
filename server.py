@@ -812,6 +812,7 @@ def ai_chat():
             'preguntasRestantes': preguntas_restantes,
         })
     except requests.exceptions.HTTPError:
+        print('[Rendi AI] Anthropic devolvió error', r.status_code, '->', r.text)
         return jsonify({'error': 'La API de IA rechazó la solicitud', 'detalle': r.text}), 502
     except Exception as e:
         traceback.print_exc()
