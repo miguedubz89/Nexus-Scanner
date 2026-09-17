@@ -1034,16 +1034,31 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 /* ── RENDI AI ── */
 .ai-wrap{max-width:720px;margin:0 auto;display:flex;flex-direction:column;height:calc(100vh - 220px);min-height:420px}
 .ai-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px}
-.ai-messages{flex:1;overflow-y:auto;background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:14px;display:flex;flex-direction:column;gap:10px}
-.ai-msg{font-family:var(--mono);font-size:13px;line-height:1.55;padding:9px 12px;border-radius:4px;max-width:85%;white-space:pre-wrap}
-.ai-msg-bot{background:var(--bg3);border:1px solid var(--border2);color:var(--text);align-self:flex-start}
-.ai-msg-user{background:rgba(0,212,255,0.1);border:1px solid var(--accent2);color:var(--text-bright);align-self:flex-end}
-.ai-msg-error{background:rgba(255,61,90,0.1);border:1px solid var(--red2);color:var(--red);align-self:flex-start}
-.ai-msg-order{background:rgba(255,214,0,0.08);border:1px solid var(--yellow2);color:var(--text-bright);align-self:flex-start}
-.ai-msg-order button{margin-top:8px}
+.ai-messages{flex:1;overflow-y:auto;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.ai-msg{font-family:var(--head);font-size:14.5px;font-weight:400;line-height:1.65;padding:11px 16px;border-radius:16px;max-width:82%;white-space:pre-wrap;letter-spacing:.1px}
+.ai-msg-bot{background:var(--bg3);border:1px solid var(--border2);color:var(--text);align-self:flex-start;border-bottom-left-radius:4px}
+.ai-msg-user{background:linear-gradient(135deg,var(--accent2),var(--accent));border:none;color:#04141c;font-weight:500;align-self:flex-end;border-bottom-right-radius:4px}
+.ai-msg-error{background:rgba(255,61,90,0.1);border:1px solid var(--red2);color:var(--red);align-self:flex-start;border-bottom-left-radius:4px}
+.ai-msg-order{background:rgba(255,214,0,0.08);border:1px solid var(--yellow2);color:var(--text-bright);align-self:flex-start;border-bottom-left-radius:4px}
+.ai-msg-order button{margin-top:10px}
 .ai-input-row{display:flex;gap:8px;margin-top:10px}
-.ai-input-row .pf-input{flex:1}
+.ai-input-row .pf-input{flex:1;font-family:var(--head);border-radius:20px;padding:10px 16px}
 #aiMicBtn.listening{background:var(--red);color:var(--bg);border-color:var(--red);animation:pulse 1s infinite}
+
+/* ── Burbuja flotante Rendi AI (disponible en todas las secciones) ── */
+.ai-fab-btn{position:fixed;bottom:22px;right:22px;width:54px;height:54px;border-radius:50%;background:linear-gradient(135deg,var(--accent2),var(--accent));border:none;font-size:24px;cursor:pointer;box-shadow:0 4px 16px rgba(0,212,255,0.35);z-index:3500;display:flex;align-items:center;justify-content:center;transition:transform .15s}
+.ai-fab-btn:hover{transform:scale(1.07)}
+.ai-fab-popup{position:fixed;bottom:86px;right:22px;width:340px;max-width:calc(100vw - 32px);height:440px;max-height:calc(100vh - 130px);background:var(--bg2);border:1px solid var(--border2);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.5);z-index:3500;display:none;flex-direction:column;overflow:hidden}
+.ai-fab-popup.open{display:flex}
+.ai-fab-header{display:flex;align-items:flex-start;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border)}
+.ai-fab-close{background:none;border:none;color:var(--text-dim);font-size:16px;cursor:pointer;padding:2px 6px}
+.ai-fab-close:hover{color:var(--text-bright)}
+.ai-fab-messages{flex:1;border:none;border-radius:0;margin:0;padding:12px}
+.ai-fab-popup .ai-input-row{margin:0;padding:10px 12px;border-top:1px solid var(--border)}
+@media (max-width:640px){
+  .ai-fab-btn{bottom:16px;right:16px;width:50px;height:50px;font-size:21px}
+  .ai-fab-popup{right:10px;bottom:76px;width:calc(100vw - 20px)}
+}
 
 /* Live price badge */
 .pf-live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);animation:pulse 1.5s infinite}
@@ -1680,6 +1695,26 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
       <button class="btn btn-r btn-sm" onclick="pfCloseImportForce()">Cancelar</button>
       <button class="btn btn-a btn-sm" onclick="pfImportCSV()">Importar</button>
     </div>
+  </div>
+</div>
+
+<!-- ═══ BURBUJA FLOTANTE RENDI AI — acceso rápido desde cualquier sección ═══ -->
+<button class="ai-fab-btn" id="aiFabBtn" onclick="aiToggleFab()" title="Preguntarle a Rendi AI">🤖</button>
+<div class="ai-fab-popup" id="aiFabPopup">
+  <div class="ai-fab-header">
+    <div>
+      <div style="font-family:var(--head);font-weight:700;font-size:13px;color:var(--text-bright)">🤖 Rendi AI</div>
+      <div id="aiFabQuotaBadge" style="font-family:var(--mono);font-size:10px;color:var(--text-dim)"></div>
+    </div>
+    <button class="ai-fab-close" onclick="aiToggleFab()">✕</button>
+  </div>
+  <div class="ai-messages ai-fab-messages" id="aiFabMessages">
+    <div class="ai-msg ai-msg-bot">Preguntame lo que quieras sobre lo que estás viendo — un indicador, una acción, tu cartera, o dictame una orden.</div>
+  </div>
+  <div class="ai-input-row">
+    <button class="btn btn-g btn-sm" id="aiFabMicBtn" onclick="aiToggleVoice('aiFab')" title="Hablar">🎤</button>
+    <input class="pf-input" id="aiFabInput" placeholder="Preguntá algo..." onkeydown="if(event.key==='Enter')aiSend('aiFab')">
+    <button class="btn btn-a btn-sm" onclick="aiSend('aiFab')">➤</button>
   </div>
 </div>
 
@@ -4056,15 +4091,24 @@ window.openUpgradeModal = function() {
 
 // ══════════════════════════════════════════════════════════════════
 // ── RENDI AI: asistente financiero (texto + voz) ────────────────────
+//    Funciona tanto en la pestaña "IA" completa como en la burbuja
+//    flotante disponible en cualquier sección. Cada instancia se
+//    identifica por un "prefix" ('ai' para la pestaña, 'aiFab' para
+//    la burbuja) que determina los ids de sus elementos: <prefix>Messages,
+//    <prefix>Input, <prefix>MicBtn.
 // ══════════════════════════════════════════════════════════════════
 var AI_FREE_LIMIT = 2;
 var aiPreguntasRestantes = null; // null = todavía no sabemos / es premium
-var aiRecognition = null;
-var aiListening = false;
-var aiBusy = false;
+var aiPendingOrders = {};
+var aiInstanceState = {}; // { prefix: {busy, listening, recognition} }
 
-function aiAddMsg(html, cls) {
-  var box = document.getElementById('aiMessages');
+function aiGetState(prefix) {
+  if (!aiInstanceState[prefix]) aiInstanceState[prefix] = {busy:false, listening:false, recognition:null};
+  return aiInstanceState[prefix];
+}
+
+function aiAddMsg(prefix, html, cls) {
+  var box = document.getElementById(prefix + 'Messages');
   if (!box) return;
   var div = document.createElement('div');
   div.className = 'ai-msg ' + cls;
@@ -4077,9 +4121,12 @@ function aiEscape(s) {
   return String(s == null ? '' : s).replace(/[&<>]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]; });
 }
 
-// Arma un resumen de la cartera activa para darle contexto a la IA
+// Arma un resumen de la cartera activa para darle contexto a la IA.
+// Se asegura de que la cartera esté cargada aunque el usuario nunca haya
+// abierto la pestaña Cartera (por ej. si preguntó desde la burbuja flotante).
 function aiBuildContext() {
   try {
+    if (typeof pfInit === 'function') pfInit();
     if (!pfPositions || !pfPositions.length) return '(sin posiciones cargadas)';
     var lines = pfPositions.map(function(p){
       return '- ' + p.ticker + ': ' + p.cantidad + ' u. a precio de compra ' + p.precioCompra + ' ' + (p.moneda||'ARS') +
@@ -4090,12 +4137,14 @@ function aiBuildContext() {
 }
 
 window.aiUpdateQuotaBadge = function() {
-  var b = document.getElementById('aiQuotaBadge');
-  if (!b) return;
-  if (window.isPremium) { b.textContent = '★ Premium · preguntas ilimitadas'; b.style.color = 'var(--yellow)'; return; }
-  if (aiPreguntasRestantes === null) { b.textContent = AI_FREE_LIMIT + ' preguntas gratis'; return; }
-  b.textContent = aiPreguntasRestantes + ' pregunta' + (aiPreguntasRestantes===1?'':'s') + ' gratis restante' + (aiPreguntasRestantes===1?'':'s');
-  b.style.color = aiPreguntasRestantes > 0 ? 'var(--text-dim)' : 'var(--red)';
+  ['aiQuotaBadge','aiFabQuotaBadge'].forEach(function(id){
+    var b = document.getElementById(id);
+    if (!b) return;
+    if (window.isPremium) { b.textContent = '★ Premium · ilimitadas'; b.style.color = 'var(--yellow)'; return; }
+    if (aiPreguntasRestantes === null) { b.textContent = AI_FREE_LIMIT + ' gratis'; b.style.color=''; return; }
+    b.textContent = aiPreguntasRestantes + ' gratis restante' + (aiPreguntasRestantes===1?'':'s');
+    b.style.color = aiPreguntasRestantes > 0 ? 'var(--text-dim)' : 'var(--red)';
+  });
 };
 
 window.aiOpenUpgradeModal = function() {
@@ -4120,24 +4169,27 @@ window.aiOpenUpgradeModal = function() {
   document.body.appendChild(overlay);
 };
 
-async function aiSend() {
-  if (aiBusy) return;
-  var input = document.getElementById('aiInput');
+async function aiSend(prefix) {
+  prefix = prefix || 'ai';
+  var st = aiGetState(prefix);
+  if (st.busy) return;
+  var input = document.getElementById(prefix + 'Input');
+  if (!input) return;
   var pregunta = (input.value || '').trim();
   if (!pregunta) return;
   var user = (typeof window.auth !== 'undefined' && window.auth) ? window.auth.currentUser : null;
-  if (!user) { aiAddMsg('Iniciá sesión para usar Rendi AI.', 'ai-msg-error'); return; }
+  if (!user) { aiAddMsg(prefix, 'Iniciá sesión para usar Rendi AI.', 'ai-msg-error'); return; }
 
   if (!window.isPremium && aiPreguntasRestantes === 0) { window.aiOpenUpgradeModal(); return; }
 
   input.value = '';
-  aiAddMsg(aiEscape(pregunta), 'ai-msg-user');
-  aiBusy = true;
+  aiAddMsg(prefix, aiEscape(pregunta), 'ai-msg-user');
+  st.busy = true;
   var thinkingEl = document.createElement('div');
   thinkingEl.className = 'ai-msg ai-msg-bot';
-  thinkingEl.id = 'aiThinking';
+  thinkingEl.id = prefix + 'Thinking';
   thinkingEl.textContent = 'Pensando…';
-  document.getElementById('aiMessages').appendChild(thinkingEl);
+  document.getElementById(prefix + 'Messages').appendChild(thinkingEl);
 
   try {
     var r = await fetch(API + '/ai/chat', {
@@ -4151,17 +4203,17 @@ async function aiSend() {
       })
     });
     var data = await r.json();
-    document.getElementById('aiThinking').remove();
+    var th = document.getElementById(prefix + 'Thinking'); if (th) th.remove();
 
     if (r.status === 403 && data.error === 'limite_free') {
       aiPreguntasRestantes = 0;
       window.aiUpdateQuotaBadge();
-      aiAddMsg(aiEscape(data.mensaje), 'ai-msg-error');
+      aiAddMsg(prefix, aiEscape(data.mensaje), 'ai-msg-error');
       window.aiOpenUpgradeModal();
       return;
     }
     if (data.error) {
-      aiAddMsg('Ocurrió un error: ' + aiEscape(data.error), 'ai-msg-error');
+      aiAddMsg(prefix, 'Ocurrió un error: ' + aiEscape(data.error), 'ai-msg-error');
       return;
     }
 
@@ -4171,28 +4223,27 @@ async function aiSend() {
     }
 
     if (data.tipo === 'orden' && data.orden) {
-      aiShowOrderConfirm(data.orden, data.texto);
+      aiShowOrderConfirm(prefix, data.orden, data.texto);
     } else {
-      aiAddMsg(aiEscape(data.texto || '(sin respuesta)'), 'ai-msg-bot');
+      aiAddMsg(prefix, aiEscape(data.texto || '(sin respuesta)'), 'ai-msg-bot');
     }
   } catch(e) {
-    var th = document.getElementById('aiThinking'); if (th) th.remove();
-    aiAddMsg('No se pudo conectar con Rendi AI.', 'ai-msg-error');
+    var th2 = document.getElementById(prefix + 'Thinking'); if (th2) th2.remove();
+    aiAddMsg(prefix, 'No se pudo conectar con Rendi AI.', 'ai-msg-error');
   } finally {
-    aiBusy = false;
+    st.busy = false;
   }
 }
 
 // Muestra la orden interpretada por la IA y, si el usuario confirma,
-// precarga el modal de "Nueva operación" existente (el usuario siempre
-// revisa y guarda manualmente — nunca se escribe directo a la cartera).
-var aiPendingOrders = {};
-function aiShowOrderConfirm(orden, resumenTexto) {
+// precarga el modal de "Nueva operación" / "Vender" existente (el usuario
+// siempre revisa y guarda manualmente — nunca se escribe directo a la cartera).
+function aiShowOrderConfirm(prefix, orden, resumenTexto) {
   var id = 'aiOrder_' + Date.now();
   aiPendingOrders[id] = orden;
   var html = aiEscape(resumenTexto || 'Detecté una orden.') +
     '<div><button class="btn btn-a btn-sm" onclick="aiConfirmOrder(\'' + id + '\')">Revisar y cargar en Cartera</button></div>';
-  aiAddMsg(html, 'ai-msg-order');
+  aiAddMsg(prefix, html, 'ai-msg-order');
 }
 
 function aiConfirmOrder(orderId) {
@@ -4204,7 +4255,7 @@ function aiConfirmOrder(orderId) {
     var pos = null;
     for (var i = 0; i < pfPositions.length; i++) { if (pfPositions[i].ticker === ticker) { pos = pfPositions[i]; break; } }
     if (!pos) {
-      aiAddMsg('No encontré ' + aiEscape(ticker) + ' en tu cartera para vender. Revisá el ticker o cargalo manualmente.', 'ai-msg-error');
+      aiAddMsg('ai', 'No encontré ' + aiEscape(ticker) + ' en tu cartera para vender. Revisá el ticker o cargalo manualmente.', 'ai-msg-error');
       return;
     }
     pfOpenSellModal(pos.id);
@@ -4227,27 +4278,41 @@ function aiConfirmOrder(orderId) {
 }
 
 // ── Voz: Web Speech API (dictado). No disponible en todos los navegadores. ──
-function aiToggleVoice() {
+function aiToggleVoice(prefix) {
+  prefix = prefix || 'ai';
+  var st = aiGetState(prefix);
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { aiAddMsg('Tu navegador no soporta dictado por voz. Probá en Chrome.', 'ai-msg-error'); return; }
+  if (!SR) { aiAddMsg(prefix, 'Tu navegador no soporta dictado por voz. Probá en Chrome.', 'ai-msg-error'); return; }
 
-  if (aiListening) { aiRecognition && aiRecognition.stop(); return; }
+  if (st.listening) { st.recognition && st.recognition.stop(); return; }
 
-  aiRecognition = new SR();
-  aiRecognition.lang = 'es-AR';
-  aiRecognition.interimResults = false;
-  aiRecognition.maxAlternatives = 1;
+  st.recognition = new SR();
+  st.recognition.lang = 'es-AR';
+  st.recognition.interimResults = false;
+  st.recognition.maxAlternatives = 1;
 
-  var btn = document.getElementById('aiMicBtn');
-  aiRecognition.onstart = function(){ aiListening = true; btn.classList.add('listening'); };
-  aiRecognition.onend   = function(){ aiListening = false; btn.classList.remove('listening'); };
-  aiRecognition.onerror = function(){ aiListening = false; btn.classList.remove('listening'); };
-  aiRecognition.onresult = function(ev) {
+  var btn = document.getElementById(prefix + 'MicBtn');
+  st.recognition.onstart = function(){ st.listening = true; btn && btn.classList.add('listening'); };
+  st.recognition.onend   = function(){ st.listening = false; btn && btn.classList.remove('listening'); };
+  st.recognition.onerror = function(){ st.listening = false; btn && btn.classList.remove('listening'); };
+  st.recognition.onresult = function(ev) {
     var texto = ev.results[0][0].transcript;
-    document.getElementById('aiInput').value = texto;
-    aiSend();
+    document.getElementById(prefix + 'Input').value = texto;
+    aiSend(prefix);
   };
-  aiRecognition.start();
+  st.recognition.start();
+}
+
+// ── Burbuja flotante: acceso rápido a Rendi AI desde cualquier sección ──
+function aiToggleFab() {
+  var popup = document.getElementById('aiFabPopup');
+  if (!popup) return;
+  var opening = !popup.classList.contains('open');
+  popup.classList.toggle('open', opening);
+  if (opening) {
+    window.aiUpdateQuotaBadge();
+    setTimeout(function(){ var inp = document.getElementById('aiFabInput'); inp && inp.focus(); }, 50);
+  }
 }
 
 function addTickerFromInput() {
