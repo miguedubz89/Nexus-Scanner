@@ -1030,6 +1030,20 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 .pf-input::placeholder{color:var(--text-dim)}
 .pf-input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
 
+/* ── RENDI AI ── */
+.ai-wrap{max-width:720px;margin:0 auto;display:flex;flex-direction:column;height:calc(100vh - 220px);min-height:420px}
+.ai-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px}
+.ai-messages{flex:1;overflow-y:auto;background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.ai-msg{font-family:var(--mono);font-size:13px;line-height:1.55;padding:9px 12px;border-radius:4px;max-width:85%;white-space:pre-wrap}
+.ai-msg-bot{background:var(--bg3);border:1px solid var(--border2);color:var(--text);align-self:flex-start}
+.ai-msg-user{background:rgba(0,212,255,0.1);border:1px solid var(--accent2);color:var(--text-bright);align-self:flex-end}
+.ai-msg-error{background:rgba(255,61,90,0.1);border:1px solid var(--red2);color:var(--red);align-self:flex-start}
+.ai-msg-order{background:rgba(255,214,0,0.08);border:1px solid var(--yellow2);color:var(--text-bright);align-self:flex-start}
+.ai-msg-order button{margin-top:8px}
+.ai-input-row{display:flex;gap:8px;margin-top:10px}
+.ai-input-row .pf-input{flex:1}
+#aiMicBtn.listening{background:var(--red);color:var(--bg);border-color:var(--red);animation:pulse 1s infinite}
+
 /* Live price badge */
 .pf-live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);animation:pulse 1.5s infinite}
 
@@ -1269,6 +1283,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
       <div class="tab" onclick="switchTab('technical',this)">TÉCNICO</div>
       <div class="tab" onclick="switchTab('all',this)">TODOS</div>
       <div class="tab" onclick="switchTab('cartera',this)">CARTERA</div>
+      <div class="tab" onclick="switchTab('ia',this)">🤖 IA</div>
     </div>
 
     <!-- SCANNER TAB -->
@@ -1516,6 +1531,30 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
         <div id="pfAnualPerfContainer"></div>
       </div>
 
+    </div>
+
+    <!-- IA TAB — Rendi AI: preguntas sobre cartera/mercado, por texto o voz -->
+    <div class="tab-panel" id="tab-ia">
+      <div class="ai-wrap">
+        <div class="ai-header">
+          <div>
+            <div class="pf-section-title" style="margin-bottom:2px">🤖 Rendi AI</div>
+            <div style="font-family:var(--mono);font-size:11px;color:var(--text-dim)">Preguntale por tu cartera, una acción, o dictale una orden para cargarla</div>
+          </div>
+          <div id="aiQuotaBadge" style="font-family:var(--mono);font-size:11px;color:var(--text-dim)"></div>
+        </div>
+
+        <div class="ai-messages" id="aiMessages">
+          <div class="ai-msg ai-msg-bot">Hola, soy Rendi AI 👋 Preguntame algo sobre tu cartera o el mercado, o dictame una orden como <i>"compré 10 GGAL a 4800"</i>.</div>
+        </div>
+
+        <div class="ai-input-row">
+          <button class="btn btn-g btn-sm" id="aiMicBtn" onclick="aiToggleVoice()" title="Hablar">🎤</button>
+          <input class="pf-input" id="aiInput" placeholder="Escribí tu pregunta..." onkeydown="if(event.key==='Enter')aiSend()">
+          <button class="btn btn-a btn-sm" onclick="aiSend()">Enviar</button>
+        </div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-top:6px">Rendi AI puede cometer errores. Verificá siempre los datos antes de operar. No es asesoramiento financiero.</div>
+      </div>
     </div>
 
   </div>
@@ -3876,6 +3915,7 @@ function switchTab(id,el){
   el.classList.add('active');
   document.getElementById('tab-'+id).classList.add('active');
   if (id === 'cartera' && typeof pfInit === 'function') { pfInit(); pfRefreshLivePrices(); }
+  if (id === 'ia' && typeof window.aiUpdateQuotaBadge === 'function') { window.aiUpdateQuotaBadge(); }
 }
 
 // ── TABLE SORT ────────────────────────────────────
@@ -4012,6 +4052,202 @@ window.openUpgradeModal = function() {
   overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
   document.body.appendChild(overlay);
 };
+
+// ══════════════════════════════════════════════════════════════════
+// ── RENDI AI: asistente financiero (texto + voz) ────────────────────
+// ══════════════════════════════════════════════════════════════════
+var AI_FREE_LIMIT = 2;
+var aiPreguntasRestantes = null; // null = todavía no sabemos / es premium
+var aiRecognition = null;
+var aiListening = false;
+var aiBusy = false;
+
+function aiAddMsg(html, cls) {
+  var box = document.getElementById('aiMessages');
+  if (!box) return;
+  var div = document.createElement('div');
+  div.className = 'ai-msg ' + cls;
+  div.innerHTML = html;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function aiEscape(s) {
+  return String(s == null ? '' : s).replace(/[&<>]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]; });
+}
+
+// Arma un resumen de la cartera activa para darle contexto a la IA
+function aiBuildContext() {
+  try {
+    if (!pfPositions || !pfPositions.length) return '(sin posiciones cargadas)';
+    var lines = pfPositions.map(function(p){
+      return '- ' + p.ticker + ': ' + p.cantidad + ' u. a precio de compra ' + p.precioCompra + ' ' + (p.moneda||'ARS') +
+        (p.precioActual ? ', precio actual ' + p.precioActual : '');
+    });
+    return lines.join('\n');
+  } catch(e) { return '(sin posiciones cargadas)'; }
+}
+
+window.aiUpdateQuotaBadge = function() {
+  var b = document.getElementById('aiQuotaBadge');
+  if (!b) return;
+  if (window.isPremium) { b.textContent = '★ Premium · preguntas ilimitadas'; b.style.color = 'var(--yellow)'; return; }
+  if (aiPreguntasRestantes === null) { b.textContent = AI_FREE_LIMIT + ' preguntas gratis'; return; }
+  b.textContent = aiPreguntasRestantes + ' pregunta' + (aiPreguntasRestantes===1?'':'s') + ' gratis restante' + (aiPreguntasRestantes===1?'':'s');
+  b.style.color = aiPreguntasRestantes > 0 ? 'var(--text-dim)' : 'var(--red)';
+};
+
+window.aiOpenUpgradeModal = function() {
+  if (window.isPremium) return;
+  var old = document.getElementById('upgradeOverlay');
+  if (old) old.remove();
+  var overlay = document.createElement('div');
+  overlay.id = 'upgradeOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:4000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+  overlay.innerHTML =
+    '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:4px;padding:26px;max-width:360px;width:90%;font-family:var(--mono)">' +
+      '<div style="font-family:var(--head);font-weight:700;font-size:16px;color:var(--yellow);letter-spacing:.5px;margin-bottom:8px">★ DUBZ PREMIUM</div>' +
+      '<div style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-bottom:16px">' +
+        'El plan gratuito incluye <strong style="color:var(--text-bright)">' + AI_FREE_LIMIT + ' preguntas</strong> a Rendi AI. ' +
+        'Con Premium tenés preguntas ilimitadas y todo lo que agreguemos a futuro.' +
+      '</div>' +
+      '<div style="font-size:22px;color:var(--text-bright);font-weight:700;margin-bottom:16px">$' + window.PRECIO_PREMIUM_TXT + ' <span style="font-size:12px;color:var(--text-dim);font-weight:400">ARS / mes</span></div>' +
+      '<button class="btn btn-a btn-full" onclick="window.iniciarSuscripcionPremium()">⚡ Suscribirme — $' + window.PRECIO_PREMIUM_TXT + '/mes</button>' +
+      '<button style="background:none;border:none;color:var(--text-dim);font-family:var(--mono);font-size:11px;margin-top:14px;width:100%;cursor:pointer" onclick="document.getElementById(\'upgradeOverlay\').remove()">Cerrar</button>' +
+    '</div>';
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+};
+
+async function aiSend() {
+  if (aiBusy) return;
+  var input = document.getElementById('aiInput');
+  var pregunta = (input.value || '').trim();
+  if (!pregunta) return;
+  var user = (typeof auth !== 'undefined' && auth.currentUser) ? auth.currentUser : null;
+  if (!user) { aiAddMsg('Iniciá sesión para usar Rendi AI.', 'ai-msg-error'); return; }
+
+  if (!window.isPremium && aiPreguntasRestantes === 0) { window.aiOpenUpgradeModal(); return; }
+
+  input.value = '';
+  aiAddMsg(aiEscape(pregunta), 'ai-msg-user');
+  aiBusy = true;
+  var thinkingEl = document.createElement('div');
+  thinkingEl.className = 'ai-msg ai-msg-bot';
+  thinkingEl.id = 'aiThinking';
+  thinkingEl.textContent = 'Pensando…';
+  document.getElementById('aiMessages').appendChild(thinkingEl);
+
+  try {
+    var r = await fetch(API + '/ai/chat', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        uid: user.uid,
+        pregunta: pregunta,
+        contexto: aiBuildContext(),
+        isAdmin: !!(window.isAdminUser && window.isAdminUser(user.email))
+      })
+    });
+    var data = await r.json();
+    document.getElementById('aiThinking').remove();
+
+    if (r.status === 403 && data.error === 'limite_free') {
+      aiPreguntasRestantes = 0;
+      window.aiUpdateQuotaBadge();
+      aiAddMsg(aiEscape(data.mensaje), 'ai-msg-error');
+      window.aiOpenUpgradeModal();
+      return;
+    }
+    if (data.error) {
+      aiAddMsg('Ocurrió un error: ' + aiEscape(data.error), 'ai-msg-error');
+      return;
+    }
+
+    if (typeof data.preguntasRestantes === 'number') {
+      aiPreguntasRestantes = data.preguntasRestantes;
+      window.aiUpdateQuotaBadge();
+    }
+
+    if (data.tipo === 'orden' && data.orden) {
+      aiShowOrderConfirm(data.orden, data.texto);
+    } else {
+      aiAddMsg(aiEscape(data.texto || '(sin respuesta)'), 'ai-msg-bot');
+    }
+  } catch(e) {
+    var th = document.getElementById('aiThinking'); if (th) th.remove();
+    aiAddMsg('No se pudo conectar con Rendi AI.', 'ai-msg-error');
+  } finally {
+    aiBusy = false;
+  }
+}
+
+// Muestra la orden interpretada por la IA y, si el usuario confirma,
+// precarga el modal de "Nueva operación" existente (el usuario siempre
+// revisa y guarda manualmente — nunca se escribe directo a la cartera).
+var aiPendingOrders = {};
+function aiShowOrderConfirm(orden, resumenTexto) {
+  var id = 'aiOrder_' + Date.now();
+  aiPendingOrders[id] = orden;
+  var html = aiEscape(resumenTexto || 'Detecté una orden.') +
+    '<div><button class="btn btn-a btn-sm" onclick="aiConfirmOrder(\'' + id + '\')">Revisar y cargar en Cartera</button></div>';
+  aiAddMsg(html, 'ai-msg-order');
+}
+
+function aiConfirmOrder(orderId) {
+  var orden = aiPendingOrders[orderId];
+  if (!orden) return;
+  var ticker = (orden.ticker || '').toUpperCase();
+
+  if (orden.accion === 'venta') {
+    var pos = null;
+    for (var i = 0; i < pfPositions.length; i++) { if (pfPositions[i].ticker === ticker) { pos = pfPositions[i]; break; } }
+    if (!pos) {
+      aiAddMsg('No encontré ' + aiEscape(ticker) + ' en tu cartera para vender. Revisá el ticker o cargalo manualmente.', 'ai-msg-error');
+      return;
+    }
+    pfOpenSellModal(pos.id);
+    setTimeout(function(){
+      if (orden.cantidad) document.getElementById('pfSellCantidad').value = orden.cantidad;
+      if (orden.precio)   document.getElementById('pfSellPrecioVenta').value = orden.precio;
+      pfSellCalcPreview();
+    }, 110);
+    return;
+  }
+
+  // Compra (default)
+  pfOpenAddModal();
+  setTimeout(function(){
+    document.getElementById('pfFTicker').value = ticker;
+    document.getElementById('pfFCantidad').value = orden.cantidad||'';
+    document.getElementById('pfFPrecioCompra').value = orden.precio||'';
+    pfSelectCurrency(orden.moneda === 'USD' ? 'USD' : 'ARS');
+  }, 110);
+}
+
+// ── Voz: Web Speech API (dictado). No disponible en todos los navegadores. ──
+function aiToggleVoice() {
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { aiAddMsg('Tu navegador no soporta dictado por voz. Probá en Chrome.', 'ai-msg-error'); return; }
+
+  if (aiListening) { aiRecognition && aiRecognition.stop(); return; }
+
+  aiRecognition = new SR();
+  aiRecognition.lang = 'es-AR';
+  aiRecognition.interimResults = false;
+  aiRecognition.maxAlternatives = 1;
+
+  var btn = document.getElementById('aiMicBtn');
+  aiRecognition.onstart = function(){ aiListening = true; btn.classList.add('listening'); };
+  aiRecognition.onend   = function(){ aiListening = false; btn.classList.remove('listening'); };
+  aiRecognition.onerror = function(){ aiListening = false; btn.classList.remove('listening'); };
+  aiRecognition.onresult = function(ev) {
+    var texto = ev.results[0][0].transcript;
+    document.getElementById('aiInput').value = texto;
+    aiSend();
+  };
+  aiRecognition.start();
+}
 
 function addTickerFromInput() {
   var inp = document.getElementById('tickerInputNew');
