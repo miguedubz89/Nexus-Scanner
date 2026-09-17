@@ -37,6 +37,12 @@ MP_ACCESS_TOKEN    = os.environ.get('MP_ACCESS_TOKEN', '')
 PRECIO_PREMIUM_ARS = float(os.environ.get('PRECIO_PREMIUM_ARS', '9000'))
 APP_URL            = os.environ.get('APP_URL', 'https://dubzmarkets.com')
 
+# ─── RENDI AI: asistente financiero ────────────────────────────────────────
+#   ANTHROPIC_API_KEY -> tu API key de Anthropic (configurar en Railway → Variables)
+ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
+AI_MODEL          = 'claude-haiku-4-5-20251001'  # rápido y económico, alcanza para este uso
+AI_FREE_LIMIT     = 2  # preguntas gratis antes de pedir upgrade a premium
+
 _db = None
 def get_firestore():
     """Inicializa Firebase Admin una sola vez y devuelve el cliente Firestore."""
@@ -71,6 +77,22 @@ def set_user_plan(uid, plan, extra=None):
         data.update(extra)
     db.collection('users').document(uid).set(data, merge=True)
     return True
+
+
+def get_user_plan_info(uid):
+    """Lee plan/premiumUntil/aiQuestionsUsed del usuario desde Firestore."""
+    db = get_firestore()
+    if db is None:
+        return {'plan': 'free', 'premiumUntil': None, 'aiQuestionsUsed': 0}
+    doc = db.collection('users').document(uid).get()
+    if not doc.exists:
+        return {'plan': 'free', 'premiumUntil': None, 'aiQuestionsUsed': 0}
+    d = doc.to_dict() or {}
+    return {
+        'plan': d.get('plan', 'free'),
+        'premiumUntil': d.get('premiumUntil'),
+        'aiQuestionsUsed': int(d.get('aiQuestionsUsed', 0) or 0),
+    }
 
 # ─── INDICADORES TÉCNICOS ─────────────────────────────────────────────────────
 
@@ -682,6 +704,118 @@ def webhook_mp():
         traceback.print_exc()
         # Devolver 200 igual para que MP no reintente indefinidamente por errores nuestros
         return jsonify({'status': 'error', 'detalle': str(e)}), 200
+
+
+@app.route('/ai/chat', methods=['POST'])
+def ai_chat():
+    """Asistente de IA financiero (Rendi AI).
+    Responde preguntas sobre la cartera/mercado y, si el usuario dicta una
+    orden ("compré 10 GGAL a 4800"), la devuelve como JSON estructurado
+    para que el frontend la muestre en el modal de carga (con confirmación
+    manual del usuario antes de guardarla).
+
+    Body esperado: {"uid": "...", "pregunta": "...", "contexto": "...", "isAdmin": bool}
+    """
+    if not ANTHROPIC_API_KEY:
+        return jsonify({'error': 'ANTHROPIC_API_KEY no configurado en el servidor'}), 500
+
+    data     = request.get_json(silent=True) or {}
+    uid      = data.get('uid')
+    pregunta = (data.get('pregunta') or '').strip()
+    contexto = data.get('contexto') or '(el usuario no tiene posiciones cargadas todavía)'
+    is_admin = bool(data.get('isAdmin'))
+
+    if not uid or not pregunta:
+        return jsonify({'error': 'Falta uid o pregunta'}), 400
+
+    info          = get_user_plan_info(uid)
+    premium_until = info.get('premiumUntil')
+    vigente       = True
+    if premium_until:
+        try:
+            vigente = datetime.fromisoformat(str(premium_until).replace('Z', '')) > datetime.utcnow()
+        except Exception:
+            vigente = True
+    es_premium = is_admin or (info['plan'] == 'premium' and vigente)
+
+    if not es_premium and info['aiQuestionsUsed'] >= AI_FREE_LIMIT:
+        return jsonify({
+            'error':   'limite_free',
+            'mensaje': 'Ya usaste tus ' + str(AI_FREE_LIMIT) + ' preguntas gratis a Rendi AI. Con Premium tenés preguntas ilimitadas.'
+        }), 403
+
+    system_prompt = (
+        "Sos Rendi AI, el asistente financiero dentro de la app DUBZ Monitor. Respondés en "
+        "español, de forma clara y breve, preguntas del usuario sobre su cartera de inversiones "
+        "y sobre acciones/mercado (Merval y mercado de EEUU). Tenés el contexto de su cartera "
+        "actual más abajo (puede venir vacío). No inventes precios ni datos que no estén en el "
+        "contexto ni en la pregunta; si no tenés el dato, decilo explícitamente. No dás garantías "
+        "de rendimiento ni asesoramiento financiero personalizado; aclará brevemente que es "
+        "información general y no una recomendación de inversión cuando la pregunta lo amerite.\n\n"
+        "Si el usuario está DICTANDO UNA ORDEN para cargar en su cartera (ej: 'compré 10 GGAL a "
+        "4800', 'vendí 50 AAPL a 220 dólares'), respondé ÚNICAMENTE con este JSON, sin texto "
+        "extra ni markdown:\n"
+        '{"tipo":"orden","orden":{"accion":"compra|venta","ticker":"...","cantidad":0,"precio":0,'
+        '"moneda":"ARS|USD"},"texto":"resumen breve para confirmarle al usuario"}\n\n'
+        "Si es una pregunta normal (no una orden), respondé ÚNICAMENTE con este JSON:\n"
+        '{"tipo":"respuesta","texto":"tu respuesta acá"}\n\n'
+        "Contexto de la cartera del usuario:\n" + contexto
+    )
+
+    try:
+        r = requests.post(
+            'https://api.anthropic.com/v1/messages',
+            headers={
+                'x-api-key':          ANTHROPIC_API_KEY,
+                'anthropic-version':  '2023-06-01',
+                'Content-Type':       'application/json',
+            },
+            json={
+                'model':      AI_MODEL,
+                'max_tokens': 700,
+                'system':     system_prompt,
+                'messages':   [{'role': 'user', 'content': pregunta}],
+            },
+            timeout=30,
+        )
+        r.raise_for_status()
+        result   = r.json()
+        raw_text = ''.join(
+            b.get('text', '') for b in result.get('content', []) if b.get('type') == 'text'
+        ).strip()
+
+        # El modelo debería devolver JSON puro; si viene con ```json o texto libre, lo degradamos
+        # a una respuesta de texto normal en vez de fallar.
+        try:
+            cleaned = raw_text.strip()
+            if cleaned.startswith('```'):
+                cleaned = cleaned.strip('`')
+                if cleaned[:4].lower() == 'json':
+                    cleaned = cleaned[4:]
+            parsed = json.loads(cleaned)
+        except Exception:
+            parsed = {'tipo': 'respuesta', 'texto': raw_text}
+
+        # Contabilizar solo a usuarios free (evita writes innecesarios para premium)
+        preguntas_restantes = None
+        if not es_premium:
+            nuevo_count = info['aiQuestionsUsed'] + 1
+            db = get_firestore()
+            if db is not None:
+                db.collection('users').document(uid).set({'aiQuestionsUsed': nuevo_count}, merge=True)
+            preguntas_restantes = max(0, AI_FREE_LIMIT - nuevo_count)
+
+        return jsonify({
+            'tipo':               parsed.get('tipo', 'respuesta'),
+            'texto':              parsed.get('texto', raw_text),
+            'orden':              parsed.get('orden'),
+            'preguntasRestantes': preguntas_restantes,
+        })
+    except requests.exceptions.HTTPError:
+        return jsonify({'error': 'La API de IA rechazó la solicitud', 'detalle': r.text}), 502
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/health', methods=['GET'])
