@@ -1384,7 +1384,8 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           <th style="width:78px" data-field="avgVolWeek" onclick="ts('avgVolWeek',this)" title="Volumen semanal promedio (promedio de las ultimas semanas, cada semana = suma de sus volumenes diarios).">Vol20Sem<span class="sort-icon">⇅</span></th>
           <th style="width:133px" title="TTM Squeeze Momentum calculado con velas DIARIAS (no es un dato mensual). Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze D</th>
           <th style="width:133px" title="Mismo TTM Squeeze Momentum pero calculado en velas de 1 hora.">Squeeze 1H</th>
-          <th style="width:44px" data-field="beta" onclick="ts('beta',this)" title="Beta a 5 anios vs. S&P 500 (dato provisto por Yahoo Finance / yfinance). Puede faltar (--) en ADRs o tickers con poca historia/liquidez.">Beta<span class="sort-icon">⇅</span></th>
+          <th style="width:44px" data-field="beta" onclick="ts('beta',this)" title="Beta vs. indice de referencia. Si Yahoo Finance no lo provee (comun en ADRs/tickers .BA), se usa un beta calculado localmente con 1 año de cierres diarios contra SPY o el Merval (marcado con *).">Beta<span class="sort-icon">⇅</span></th>
+          <th style="width:56px" data-field="volAnnualized" onclick="ts('volAnnualized',this)" title="Volatilidad anualizada: desvio estandar de los retornos diarios de las ultimas 20 ruedas, anualizado (%). Mayor numero = mas volatil.">Vol%<span class="sort-icon">⇅</span></th>
           <th style="width:54px">Spark</th>
         </tr></thead>
         <tbody id="techBody"></tbody>
@@ -2649,11 +2650,13 @@ async function cargarCompleto() {
   if (!cedearRatiosLoaded) fetchCedearRatios();
   fetchCclAuto();
 
-  // ⚡ Squeeze 1H: se dispara YA, en paralelo, sin esperar (fire-and-forget).
-  // Es un endpoint liviano que llega mucho antes que /quote, así que la
-  // columna de squeeze horario se completa primero y el resto (RSI, ADX,
-  // fundamentals, etc.) va llegando después con el loop pesado de abajo.
+  // ⚡ Squeeze 1H y Squeeze Diario: se disparan YA, en paralelo, sin esperar
+  // (fire-and-forget). Son endpoints livianos que llegan mucho antes que
+  // /quote, así que ambas columnas de squeeze se completan primero y el
+  // resto (RSI, ADX, fundamentals, etc.) va llegando después con el loop
+  // pesado de abajo.
   loadSqueeze1h(tickers.slice());
+  loadSqueezeD(tickers.slice());
 
   // ── Mostrar cache inmediatamente (incluyendo IDB como fallback) ──
   await new Promise(function(resolve) {
@@ -2734,8 +2737,9 @@ async function doRefresh() {
   if (!ok) { setStatus('err','SIN SERVIDOR'); refreshInFlight = false; return; }
   setStatus('loading', 'ACTUALIZANDO PRECIOS...');
 
-  // Refrescar squeeze 1h en paralelo (liviano, no bloquea el resto)
+  // Refrescar squeeze 1h y squeeze diario en paralelo (livianos, no bloquean el resto)
   loadSqueeze1h(allData.map(function(d){ return d.symbol; }));
+  loadSqueezeD(allData.map(function(d){ return d.symbol; }));
 
   var BATCH_SIZE_R = 25; // ⚡ Aumentado de 10 → 25 para refresh más rápido (bajar si el server tira 429/timeout)
   for (var i = 0; i < allData.length; i += BATCH_SIZE_R) {
@@ -2836,12 +2840,12 @@ async function fetchQuote(sym) {
     var r = await fetch(API+'/quote?symbol='+fetchSym, {signal: AbortSignal.timeout(8000)});
     if (!r.ok) {
       markTickerError(sym, 'HTTP '+r.status);
-      return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, volWeek: null, avgVolWeek: null, marketCap: null, mom12m: null, mom6m: null, sector: resolveSector(sym), _error: true, _flash: '' };
+      return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, volWeek: null, avgVolWeek: null, volAnnualized: null, beta: null, betaCalc: null, marketCap: null, mom12m: null, mom6m: null, sector: resolveSector(sym), _error: true, _flash: '' };
     }
     var d = await r.json();
     if (d.error) {
       markTickerError(sym, d.error);
-      return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, volWeek: null, avgVolWeek: null, marketCap: null, mom12m: null, mom6m: null, sector: resolveSector(sym), _error: true, _flash: '' };
+      return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, volWeek: null, avgVolWeek: null, volAnnualized: null, beta: null, betaCalc: null, marketCap: null, mom12m: null, mom6m: null, sector: resolveSector(sym), _error: true, _flash: '' };
     }
     clearTickerError(sym);
     d.sector = resolveSector(sym);
@@ -2853,7 +2857,45 @@ async function fetchQuote(sym) {
   } catch(e) {
     markTickerError(sym, 'Timeout/Error');
     console.warn('Error fetching', sym, e.message);
-    return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, volWeek: null, avgVolWeek: null, marketCap: null, mom12m: null, mom6m: null, sector: resolveSector(sym), _error: true, _flash: '' };
+    return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, volWeek: null, avgVolWeek: null, volAnnualized: null, beta: null, betaCalc: null, marketCap: null, mom12m: null, mom6m: null, sector: resolveSector(sym), _error: true, _flash: '' };
+  }
+}
+
+// ── SQUEEZE DIARIO — carga rápida e independiente ──
+// Mismo patrón que /squeeze1h: endpoint liviano (server.py: /squeezeD) que
+// NO trae info()/financials ni 1 año completo de historial — antes el
+// squeeze diario venía metido adentro de /quote y por eso tardaba lo mismo
+// que todo el resto (CANSLIM, fundamentals, etc). Ahora llega aparte y
+// mucho antes; squeezeCell() lo usa apenas está disponible.
+var squeezeDData = {};       // { symbol: {sqzOn, sqzOff, sqzMom, sqzMomPrev} }
+var squeezeDInFlight = false;
+
+async function fetchSqueezeD(sym) {
+  try {
+    var fetchSym = resolveYahooSymbol(sym);
+    var r = await fetch(API+'/squeezeD?symbol='+fetchSym, {signal: AbortSignal.timeout(6000)});
+    if (!r.ok) return null;
+    var d = await r.json();
+    return d.error ? null : d;
+  } catch(e) { return null; }
+}
+
+async function loadSqueezeD(symList) {
+  if (!symList || !symList.length || squeezeDInFlight) return;
+  squeezeDInFlight = true;
+  try {
+    var BATCH = 15; // liviano → tandas más grandes que /quote
+    for (var i = 0; i < symList.length; i += BATCH) {
+      var batch = symList.slice(i, i+BATCH);
+      var results = await Promise.all(batch.map(fetchSqueezeD));
+      results.forEach(function(r, idx){
+        if (r) squeezeDData[batch[idx]] = r;
+      });
+      // Repintar ya, sin esperar a que termine todo el resto de tandas
+      if (typeof renderTech === 'function' && document.getElementById('techBody')) renderTech();
+    }
+  } finally {
+    squeezeDInFlight = false;
   }
 }
 
@@ -3340,7 +3382,8 @@ function renderTech(){
       '<td>'+(d.avgVolWeek!=null?fv(d.avgVolWeek):'<span style="color:var(--text-dim)">--</span>')+'</td>'+
       '<td>'+squeezeCell(d)+'</td>'+
       '<td>'+squeezeCell1h(d)+'</td>'+
-      '<td style="color:var(--text-dim)">'+(d.beta!=null?f2(d.beta):'--')+'</td>'+
+      '<td style="color:var(--text-dim)" title="'+(d.beta!=null?'Beta Yahoo':(d.betaCalc!=null?'Beta calculado localmente (Yahoo no lo provee)':''))+'">'+(d.beta!=null?f2(d.beta):(d.betaCalc!=null?f2(d.betaCalc)+'*':'--'))+'</td>'+
+      '<td style="color:var(--text-dim)">'+(d.volAnnualized!=null?f2(d.volAnnualized)+'%':'--')+'</td>'+
       '<td>'+doSpark(d.spark)+'</td>'+
       '</tr>';
   }
@@ -3399,7 +3442,7 @@ function renderTech(){
           '<th style="width:56px" title="RSI (Indice de Fuerza Relativa) 0-100: mide la velocidad de los cambios de precio. Menos de 30 = sobrevendido (posible rebote). Mas de 70 = sobrecomprado (posible correccion).">RSI</th><th style="width:56px" title="ADX (Indice Direccional Promedio) 0-100: mide la fuerza de la tendencia, no la direccion. Menos de 20 = sin tendencia, 20-25 debil, 25-50 fuerte, mas de 50 muy fuerte.">ADX</th><th style="width:68px">EMA50%</th><th style="width:68px">EMA200%</th>' +
           '<th style="width:65px">Vol</th><th style="width:65px">Vol20</th>' +
           '<th style="width:70px" title="Volumen operado en la semana en curso.">VolSem</th><th style="width:78px" title="Volumen semanal promedio de las ultimas semanas.">Vol20Sem</th>' +
-          '<th style="width:133px" title="TTM Squeeze Momentum calculado con velas DIARIAS (no mensual). Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze D</th><th style="width:133px" title="Mismo TTM Squeeze Momentum pero calculado en velas de 1 hora — carga por separado y más rápido.">Squeeze 1H</th><th style="width:44px" title="Beta a 5 anios vs. S&P 500 (Yahoo Finance / yfinance). Puede faltar en ADRs poco liquidos.">Beta</th>' +
+          '<th style="width:133px" title="TTM Squeeze Momentum calculado con velas DIARIAS (no mensual). Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze D</th><th style="width:133px" title="Mismo TTM Squeeze Momentum pero calculado en velas de 1 hora — carga por separado y más rápido.">Squeeze 1H</th><th style="width:44px" title="Beta vs. indice de referencia (Yahoo, o calculado localmente con * si Yahoo no lo tiene).">Beta</th><th style="width:56px" title="Volatilidad anualizada (desvio estandar de retornos diarios, 20 ruedas).">Vol%</th>' +
           '<th style="width:54px">Spark</th>' +
         '</tr></thead>' +
         '<tbody>' + secData.map(makeRow).join('') + '</tbody>' +
@@ -3989,14 +4032,15 @@ function ts(field, el){
 
 // ── EXPORT ────────────────────────────────────────
 function exportCSV(){
-  var h=['Symbol','Sector','Price','Change%','RSI','ADX','DistEMA50%','DistEMA200%','Mom12M%','Volume','AvgVol20','VolWeek','AvgVolWeek','PE','MarketCap','Beta','DivYield%'];
+  var h=['Symbol','Sector','Price','Change%','RSI','ADX','DistEMA50%','DistEMA200%','Mom12M%','Volume','AvgVol20','VolWeek','AvgVolWeek','VolatilidadAnualizada%','PE','MarketCap','Beta','BetaCalculado','DivYield%'];
   var rows=filtered.map(function(d){
     return[d.symbol,d.sector,fp(d.price),f2(d.chgPct),d.rsi?f1(d.rsi):'',
       d.adx?f1(d.adx):'',
       d.distEma50?f2(d.distEma50):'',d.distEma200?f2(d.distEma200):'',
       (d.mom12m!=null?d.mom12m:d.mom6m)?f2(d.mom12m!=null?d.mom12m:d.mom6m):'',
-      d.volume||'',d.avgVol20||'',d.volWeek||'',d.avgVolWeek||'',d.pe?f2(d.pe):'',d.marketCap||'',
-      d.beta?f2(d.beta):'',d.divYield?f2(d.divYield):''];
+      d.volume||'',d.avgVol20||'',d.volWeek||'',d.avgVolWeek||'',d.volAnnualized!=null?f2(d.volAnnualized):'',
+      d.pe?f2(d.pe):'',d.marketCap||'',
+      d.beta!=null?f2(d.beta):'',d.betaCalc!=null?f2(d.betaCalc):'',d.divYield?f2(d.divYield):''];
   });
   var csv=[h].concat(rows).map(function(r){return r.join(',')}).join('\n');
   var a=document.createElement('a');
@@ -4382,8 +4426,12 @@ var squeezeOn = true;
 function toggleSqueeze(e) {}
 
 function squeezeCell(d) {
-  // Usa campos reales calculados por server.py (LazyBear TTM Squeeze) — DIARIO
-  return squeezeDotBar(d.sqzOn, d.sqzOff, d.sqzMom, d.sqzMomPrev);
+  // Prioriza el dato del endpoint liviano /squeezeD (llega mucho antes);
+  // si todavía no llegó, usa el que viene adentro de /quote como respaldo.
+  var s = squeezeDData[d.symbol];
+  if (s) return squeezeDotBar(s.sqzOn, s.sqzOff, s.sqzMom, s.sqzMomPrev);
+  if (d.sqzMom != null) return squeezeDotBar(d.sqzOn, d.sqzOff, d.sqzMom, d.sqzMomPrev);
+  return '<span style="color:var(--text-dim)">…</span>';
 }
 
 function squeezeCell1h(d) {
