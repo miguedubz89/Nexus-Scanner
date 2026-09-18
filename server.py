@@ -738,6 +738,38 @@ def get_squeeze_1h():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/squeezeD', methods=['GET'])
+def get_squeeze_daily():
+    """Endpoint liviano: SOLO el TTM Squeeze Momentum calculado en velas
+    DIARIAS. Existe por la misma razón que /squeeze1h: /quote es lento
+    porque además del historial pide ticker.info/financials/quarterly_financials
+    (varios round-trips extra a Yahoo), y hasta ahora el squeeze diario venía
+    metido adentro de esa respuesta pesada, así que tardaba lo mismo que todo
+    lo demás. Acá solo se piden ~6 meses de velas diarias (de sobra para el
+    largo=20 del cálculo) y no se toca info/financials — mucho más rápido.
+    Pensado para llamarse en paralelo y ANTES que /quote, igual que /squeeze1h.
+    """
+    symbol = request.args.get('symbol', '').upper().strip()
+    if not symbol:
+        return jsonify({'error': 'No symbol provided'}), 400
+    try:
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period='6mo', interval='1d', auto_adjust=True)
+        if hist.empty or len(hist) < 25:
+            return jsonify({'error': 'No data'}), 404
+
+        sqz = calc_squeeze_momentum(hist) or {}
+        return jsonify({
+            'symbol':     symbol,
+            'sqzOn':      sqz.get('sqzOn'),
+            'sqzOff':     sqz.get('sqzOff'),
+            'sqzMom':     sqz.get('sqzMom'),
+            'sqzMomPrev': sqz.get('sqzMomPrev'),
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/quotes', methods=['POST'])
 def get_quotes():
     """Recibe lista de symbols y devuelve todos en paralelo."""
