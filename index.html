@@ -1380,9 +1380,11 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           <th style="width:68px" data-field="distEma200" onclick="ts('distEma200',this)">EMA200%<span class="sort-icon">⇅</span></th>
           <th style="width:65px" data-field="volume" onclick="ts('volume',this)">Vol<span class="sort-icon">⇅</span></th>
           <th style="width:65px" data-field="avgVol20" onclick="ts('avgVol20',this)">Vol20<span class="sort-icon">⇅</span></th>
-          <th style="width:133px" title="TTM Squeeze Momentum: detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom</th>
+          <th style="width:70px" data-field="volWeek" onclick="ts('volWeek',this)" title="Volumen operado en la semana en curso (suma de los volumenes diarios de esta semana).">VolSem<span class="sort-icon">⇅</span></th>
+          <th style="width:78px" data-field="avgVolWeek" onclick="ts('avgVolWeek',this)" title="Volumen semanal promedio (promedio de las ultimas semanas, cada semana = suma de sus volumenes diarios).">Vol20Sem<span class="sort-icon">⇅</span></th>
+          <th style="width:133px" title="TTM Squeeze Momentum calculado con velas DIARIAS (no es un dato mensual). Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze D</th>
           <th style="width:133px" title="Mismo TTM Squeeze Momentum pero calculado en velas de 1 hora.">Squeeze 1H</th>
-          <th style="width:44px" data-field="beta" onclick="ts('beta',this)">Beta<span class="sort-icon">⇅</span></th>
+          <th style="width:44px" data-field="beta" onclick="ts('beta',this)" title="Beta a 5 anios vs. S&P 500 (dato provisto por Yahoo Finance / yfinance). Puede faltar (--) en ADRs o tickers con poca historia/liquidez.">Beta<span class="sort-icon">⇅</span></th>
           <th style="width:54px">Spark</th>
         </tr></thead>
         <tbody id="techBody"></tbody>
@@ -2685,7 +2687,7 @@ async function cargarCompleto() {
   if (!cached) document.getElementById('progressWrap').style.display = 'block';
   var total = tickers.length, done = 0;
   var nuevaData = [];
-  var BATCH_SIZE = 10; // ⚡ Aumentado de 5 → 10 para carga más rápida
+  var BATCH_SIZE = 25; // ⚡ Aumentado de 10 → 25 para carga más rápida (bajar si el server tira 429/timeout)
   for (var i = 0; i < tickers.length; i += BATCH_SIZE) {
     var batch = tickers.slice(i, i+BATCH_SIZE);
     var results = await Promise.all(batch.map(fetchQuote));
@@ -2696,6 +2698,9 @@ async function cargarCompleto() {
       document.getElementById('loadStatus').textContent = 'Cargando '+done+'/'+total+'...';
       document.getElementById('progress-txt').textContent = done+'/'+total+' tickers';
     }
+    // ⚡ Render progresivo: mostrar lo que ya llegó en vez de esperar al final
+    allData = nuevaData;
+    applyFilters();
   }
   allData = nuevaData;
   saveTickerCache(allData); // guardar en cache
@@ -2732,7 +2737,7 @@ async function doRefresh() {
   // Refrescar squeeze 1h en paralelo (liviano, no bloquea el resto)
   loadSqueeze1h(allData.map(function(d){ return d.symbol; }));
 
-  var BATCH_SIZE_R = 10; // ⚡ Aumentado para refresh más rápido
+  var BATCH_SIZE_R = 25; // ⚡ Aumentado de 10 → 25 para refresh más rápido (bajar si el server tira 429/timeout)
   for (var i = 0; i < allData.length; i += BATCH_SIZE_R) {
     var batch = allData.slice(i, i+BATCH_SIZE_R);
     var results = await Promise.all(batch.map(function(d){ return fetchPrecio(d.symbol); }));
@@ -2745,6 +2750,8 @@ async function doRefresh() {
       d.volume   = r.volume;
       d.prevClose= r.prevClose;
     });
+    // ⚡ Render progresivo también en el refresh periódico
+    applyFilters();
   }
   setStatus('live', 'LIVE — Yahoo Finance');
   saveTickerCache(allData); // actualizar cache tras refresh
@@ -2829,12 +2836,12 @@ async function fetchQuote(sym) {
     var r = await fetch(API+'/quote?symbol='+fetchSym, {signal: AbortSignal.timeout(8000)});
     if (!r.ok) {
       markTickerError(sym, 'HTTP '+r.status);
-      return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, marketCap: null, mom12m: null, mom6m: null, sector: resolveSector(sym), _error: true, _flash: '' };
+      return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, volWeek: null, avgVolWeek: null, marketCap: null, mom12m: null, mom6m: null, sector: resolveSector(sym), _error: true, _flash: '' };
     }
     var d = await r.json();
     if (d.error) {
       markTickerError(sym, d.error);
-      return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, marketCap: null, mom12m: null, mom6m: null, sector: resolveSector(sym), _error: true, _flash: '' };
+      return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, volWeek: null, avgVolWeek: null, marketCap: null, mom12m: null, mom6m: null, sector: resolveSector(sym), _error: true, _flash: '' };
     }
     clearTickerError(sym);
     d.sector = resolveSector(sym);
@@ -2846,7 +2853,7 @@ async function fetchQuote(sym) {
   } catch(e) {
     markTickerError(sym, 'Timeout/Error');
     console.warn('Error fetching', sym, e.message);
-    return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, marketCap: null, mom12m: null, mom6m: null, sector: resolveSector(sym), _error: true, _flash: '' };
+    return { symbol: sym, price: null, chgPct: null, rsi: null, adx: null, distEma50: null, distEma200: null, volume: null, avgVol20: null, volWeek: null, avgVolWeek: null, marketCap: null, mom12m: null, mom6m: null, sector: resolveSector(sym), _error: true, _flash: '' };
   }
 }
 
@@ -3329,6 +3336,8 @@ function renderTech(){
       '<td>'+distCell(d.distEma200)+'</td>'+
       '<td>'+fv(d.volume)+'</td>'+
       '<td>'+fv(d.avgVol20)+'</td>'+
+      '<td>'+(d.volWeek!=null?fv(d.volWeek):'<span style="color:var(--text-dim)">--</span>')+'</td>'+
+      '<td>'+(d.avgVolWeek!=null?fv(d.avgVolWeek):'<span style="color:var(--text-dim)">--</span>')+'</td>'+
       '<td>'+squeezeCell(d)+'</td>'+
       '<td>'+squeezeCell1h(d)+'</td>'+
       '<td style="color:var(--text-dim)">'+(d.beta!=null?f2(d.beta):'--')+'</td>'+
@@ -3389,7 +3398,8 @@ function renderTech(){
           '<th style="width:75px">Ticker</th><th style="width:68px">Precio</th><th style="width:56px">% Día</th>' +
           '<th style="width:56px" title="RSI (Indice de Fuerza Relativa) 0-100: mide la velocidad de los cambios de precio. Menos de 30 = sobrevendido (posible rebote). Mas de 70 = sobrecomprado (posible correccion).">RSI</th><th style="width:56px" title="ADX (Indice Direccional Promedio) 0-100: mide la fuerza de la tendencia, no la direccion. Menos de 20 = sin tendencia, 20-25 debil, 25-50 fuerte, mas de 50 muy fuerte.">ADX</th><th style="width:68px">EMA50%</th><th style="width:68px">EMA200%</th>' +
           '<th style="width:65px">Vol</th><th style="width:65px">Vol20</th>' +
-          '<th style="width:133px" title="TTM Squeeze Momentum: detecta compresion de volatilidad previa a movimientos fuertes. Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze Mom</th><th style="width:133px" title="Mismo TTM Squeeze Momentum pero calculado en velas de 1 hora — carga por separado y más rápido.">Squeeze 1H</th><th style="width:44px">Beta</th>' +
+          '<th style="width:70px" title="Volumen operado en la semana en curso.">VolSem</th><th style="width:78px" title="Volumen semanal promedio de las ultimas semanas.">Vol20Sem</th>' +
+          '<th style="width:133px" title="TTM Squeeze Momentum calculado con velas DIARIAS (no mensual). Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze D</th><th style="width:133px" title="Mismo TTM Squeeze Momentum pero calculado en velas de 1 hora — carga por separado y más rápido.">Squeeze 1H</th><th style="width:44px" title="Beta a 5 anios vs. S&P 500 (Yahoo Finance / yfinance). Puede faltar en ADRs poco liquidos.">Beta</th>' +
           '<th style="width:54px">Spark</th>' +
         '</tr></thead>' +
         '<tbody>' + secData.map(makeRow).join('') + '</tbody>' +
@@ -3979,13 +3989,13 @@ function ts(field, el){
 
 // ── EXPORT ────────────────────────────────────────
 function exportCSV(){
-  var h=['Symbol','Sector','Price','Change%','RSI','ADX','DistEMA50%','DistEMA200%','Mom12M%','Volume','AvgVol20','PE','MarketCap','Beta','DivYield%'];
+  var h=['Symbol','Sector','Price','Change%','RSI','ADX','DistEMA50%','DistEMA200%','Mom12M%','Volume','AvgVol20','VolWeek','AvgVolWeek','PE','MarketCap','Beta','DivYield%'];
   var rows=filtered.map(function(d){
     return[d.symbol,d.sector,fp(d.price),f2(d.chgPct),d.rsi?f1(d.rsi):'',
       d.adx?f1(d.adx):'',
       d.distEma50?f2(d.distEma50):'',d.distEma200?f2(d.distEma200):'',
       (d.mom12m!=null?d.mom12m:d.mom6m)?f2(d.mom12m!=null?d.mom12m:d.mom6m):'',
-      d.volume||'',d.avgVol20||'',d.pe?f2(d.pe):'',d.marketCap||'',
+      d.volume||'',d.avgVol20||'',d.volWeek||'',d.avgVolWeek||'',d.pe?f2(d.pe):'',d.marketCap||'',
       d.beta?f2(d.beta):'',d.divYield?f2(d.divYield):''];
   });
   var csv=[h].concat(rows).map(function(r){return r.join(',')}).join('\n');
