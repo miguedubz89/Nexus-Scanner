@@ -13,6 +13,7 @@ El servidor corre en http://localhost:5000
 
 import os
 import json
+import re
 import requests
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, request, send_from_directory
@@ -42,6 +43,106 @@ APP_URL            = os.environ.get('APP_URL', 'https://dubzmarkets.com')
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 AI_MODEL          = 'claude-haiku-4-5-20251001'  # rápido y económico, alcanza para este uso
 AI_FREE_LIMIT     = 2  # preguntas gratis antes de pedir upgrade a premium
+
+# Palabras cortas en mayúsculas que NO son tickers, para no confundirlas al detectarlos en la pregunta
+_AI_STOPWORDS_TICKERLIKE = {
+    'A','I','Y','O','U','EL','LA','LO','EN','DE','UN','ES','SI','NO','MI','TU','SE','TE','ME',
+    'SU','AL','OK','IA','VS','ETC','PBI','USD','ARS','CEO','CFO','ROE','ROA','EPS','PER','ETF',
+    'PDF','CSV','P&L','IVA','AFIP','BCRA','MEP','CCL',
+}
+
+def find_candidate_tickers(text):
+    """Busca posibles tickers (palabras en mayúsculas, 2 a 6 letras, con o sin sufijo .BA)
+    dentro de la pregunta del usuario. Es heurístico: los que no sean tickers válidos
+    simplemente no van a devolver datos en fetch_fundamentals() y se descartan solos."""
+    words = re.findall(r'\b[A-ZÑ]{1,6}(?:\.BA)?\b', (text or '').upper())
+    out = []
+    for w in words:
+        base = w.replace('.BA', '')
+        if base in _AI_STOPWORDS_TICKERLIKE or len(base) < 2:
+            continue
+        if w not in out:
+            out.append(w)
+    return out[:3]  # como mucho 3, para no demorar la respuesta
+
+
+def fetch_fundamentals(ticker):
+    """Trae datos de mercado y, si están disponibles, fundamentales de yfinance
+    para un ticker. Usa history() como base (el mismo endpoint que ya usan /quote
+    y /precio, confiable desde servidores cloud) y trata a .info como un "bonus"
+    de ratios/sector/resumen que puede fallar sin romper el resto — Yahoo suele
+    bloquear .info desde IPs de datacenter, pero no history()."""
+    try:
+        t = yf.Ticker(ticker)
+
+        precio, max52, min52 = None, None, None
+        try:
+            hist = t.history(period='1y', interval='1d', auto_adjust=True)
+            if not hist.empty:
+                closes = hist['Close'].dropna()
+                precio = round(float(closes.iloc[-1]), 4)
+                max52  = round(float(closes.max()), 4)
+                min52  = round(float(closes.min()), 4)
+        except Exception as e:
+            print('[Rendi AI] history() falló para', ticker, ':', e)
+
+        info = {}
+        try:
+            info = t.info or {}
+        except Exception as e:
+            print('[Rendi AI] .info falló para', ticker, '(seguimos solo con precio/rango):', e)
+
+        nombre = info.get('longName') or info.get('shortName')
+        if precio is None and not nombre:
+            return None  # no hay nada real para este "ticker" -> probablemente no es uno
+
+        return {
+            'ticker':                    ticker,
+            'nombre':                    nombre,
+            'sector':                    info.get('sector'),
+            'industria':                 info.get('industry'),
+            'precioActual':              precio or info.get('currentPrice') or info.get('regularMarketPrice'),
+            'moneda':                    info.get('currency'),
+            'marketCap':                 info.get('marketCap'),
+            'per_trailing':              info.get('trailingPE'),
+            'per_forward':               info.get('forwardPE'),
+            'priceToBook':               info.get('priceToBook'),
+            'dividendYield':             info.get('dividendYield'),
+            'margenNeto':                info.get('profitMargins'),
+            'margenOperativo':           info.get('operatingMargins'),
+            'roe':                       info.get('returnOnEquity'),
+            'crecimientoIngresosYoY':    info.get('revenueGrowth'),
+            'deudaSobrePatrimonio':      info.get('debtToEquity'),
+            'maxUltimas52Semanas':       max52 or info.get('fiftyTwoWeekHigh'),
+            'minUltimas52Semanas':       min52 or info.get('fiftyTwoWeekLow'),
+            'precioObjetivoAnalistas':   info.get('targetMeanPrice'),
+            'recomendacionAnalistas':    info.get('recommendationKey'),
+            'resumenNegocio':            (info.get('longBusinessSummary') or '')[:500],
+        }
+    except Exception as e:
+        print('[Rendi AI] fetch_fundamentals excepción inesperada para', ticker, ':', e)
+        return None
+
+
+def extract_json_loose(raw_text):
+    """Intenta parsear JSON estricto; si el modelo agregó texto extra antes/después
+    (pasa a veces), busca el primer bloque {...} y lo prueba también."""
+    cleaned = (raw_text or '').strip()
+    if cleaned.startswith('```'):
+        cleaned = cleaned.strip('`')
+        if cleaned[:4].lower() == 'json':
+            cleaned = cleaned[4:]
+    try:
+        return json.loads(cleaned)
+    except Exception:
+        pass
+    m = re.search(r'\{.*\}', cleaned, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group(0))
+        except Exception:
+            pass
+    return None
 
 _db = None
 def get_firestore():
@@ -744,22 +845,41 @@ def ai_chat():
             'mensaje': 'Ya usaste tus ' + str(AI_FREE_LIMIT) + ' preguntas gratis a Rendi AI. Con Premium tenés preguntas ilimitadas.'
         }), 403
 
+    # Detectar tickers mencionados en la pregunta y traer sus fundamentals reales de yfinance
+    fundamentales_txt = ''
+    for tk in find_candidate_tickers(pregunta):
+        datos = fetch_fundamentals(tk)
+        if datos:
+            fundamentales_txt += '\n' + tk + ': ' + json.dumps(datos, ensure_ascii=False, default=str)
+
     system_prompt = (
-        "Sos Rendi AI, el asistente financiero dentro de la app DUBZ Monitor. Respondés en "
-        "español, de forma clara y breve, preguntas del usuario sobre su cartera de inversiones "
-        "y sobre acciones/mercado (Merval y mercado de EEUU). Tenés el contexto de su cartera "
-        "actual más abajo (puede venir vacío). No inventes precios ni datos que no estén en el "
-        "contexto ni en la pregunta; si no tenés el dato, decilo explícitamente. No dás garantías "
-        "de rendimiento ni asesoramiento financiero personalizado; aclará brevemente que es "
-        "información general y no una recomendación de inversión cuando la pregunta lo amerite.\n\n"
+        "Sos Rendi AI, el asistente financiero dentro de la app DUBZ Monitor — un analista completo, "
+        "estilo 'Warren AI': podés hablar de la cartera del usuario, de acciones puntuales (Merval y "
+        "mercado de EEUU), y de los fundamentals de cualquier empresa que tenga ticker (valuación, "
+        "márgenes, rentabilidad, deuda, rango de precio, recomendación de analistas, qué hace el "
+        "negocio, etc.). Respondé siempre en español, de forma clara, con datos concretos cuando los "
+        "tengas.\n\n"
+        "Reglas sobre los datos:\n"
+        "- Si más abajo te paso 'Datos fundamentales en vivo' de una empresa, usalos como fuente de "
+        "verdad para esa empresa (son datos reales de mercado, no los inventes ni los contradigas).\n"
+        "- Si el usuario pregunta por una empresa y no aparece en 'Datos fundamentales en vivo' (por "
+        "ejemplo porque la nombró por su nombre en español y no por el ticker), respondé con lo que "
+        "sepas de memoria pero ACLARÁ que no tenés el dato en vivo y pedile el ticker exacto (ej. "
+        "'AAPL' para Apple) para poder traerle los números actualizados.\n"
+        "- No inventes precios ni cifras que no estén en el contexto/datos en vivo/pregunta.\n"
+        "- No dás garantías de rendimiento ni asesoramiento financiero personalizado; aclará "
+        "brevemente que es información general y no una recomendación de inversión cuando la "
+        "pregunta lo amerite (no hace falta repetirlo en cada mensaje si ya quedó claro antes).\n\n"
         "Si el usuario está DICTANDO UNA ORDEN para cargar en su cartera (ej: 'compré 10 GGAL a "
-        "4800', 'vendí 50 AAPL a 220 dólares'), respondé ÚNICAMENTE con este JSON, sin texto "
-        "extra ni markdown:\n"
+        "4800', 'vendí 50 AAPL a 220 dólares'), respondé ÚNICA Y EXCLUSIVAMENTE con este JSON, sin "
+        "texto antes ni después, sin markdown, sin explicaciones adicionales:\n"
         '{"tipo":"orden","orden":{"accion":"compra|venta","ticker":"...","cantidad":0,"precio":0,'
         '"moneda":"ARS|USD"},"texto":"resumen breve para confirmarle al usuario"}\n\n'
-        "Si es una pregunta normal (no una orden), respondé ÚNICAMENTE con este JSON:\n"
+        "Si es una pregunta normal (no una orden), respondé ÚNICA Y EXCLUSIVAMENTE con este JSON, sin "
+        "texto antes ni después, sin markdown fuera del campo texto:\n"
         '{"tipo":"respuesta","texto":"tu respuesta acá"}\n\n'
-        "Contexto de la cartera del usuario:\n" + contexto
+        "Contexto de la cartera del usuario:\n" + contexto + "\n\n" +
+        "Datos fundamentales en vivo:\n" + (fundamentales_txt or "(no se detectó ningún ticker válido en la pregunta)")
     )
 
     try:
@@ -772,7 +892,7 @@ def ai_chat():
             },
             json={
                 'model':      AI_MODEL,
-                'max_tokens': 700,
+                'max_tokens': 1000,
                 'system':     system_prompt,
                 'messages':   [{'role': 'user', 'content': pregunta}],
             },
@@ -784,16 +904,10 @@ def ai_chat():
             b.get('text', '') for b in result.get('content', []) if b.get('type') == 'text'
         ).strip()
 
-        # El modelo debería devolver JSON puro; si viene con ```json o texto libre, lo degradamos
-        # a una respuesta de texto normal en vez de fallar.
-        try:
-            cleaned = raw_text.strip()
-            if cleaned.startswith('```'):
-                cleaned = cleaned.strip('`')
-                if cleaned[:4].lower() == 'json':
-                    cleaned = cleaned[4:]
-            parsed = json.loads(cleaned)
-        except Exception:
+        # El modelo debería devolver JSON puro; si viene con texto extra antes/después
+        # (pasa a veces), extract_json_loose intenta salvarlo antes de degradarlo a texto plano.
+        parsed = extract_json_loose(raw_text)
+        if parsed is None:
             parsed = {'tipo': 'respuesta', 'texto': raw_text}
 
         # Contabilizar solo a usuarios free (evita writes innecesarios para premium)
