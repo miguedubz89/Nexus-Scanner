@@ -303,6 +303,96 @@ def calc_adx(hist, period=14):
     except Exception:
         return None
 
+def calc_weekly_volume(hist):
+    """A partir del historial diario ya descargado (sin pedir nada nuevo a
+    Yahoo), agrupa por semana calendario y devuelve:
+      - vol_week: volumen acumulado de la semana en curso (puede estar a mitad)
+      - avg_vol_week: promedio de volumen semanal de las semanas COMPLETAS
+        anteriores (excluye la semana en curso para no ensuciar el promedio
+        con una semana a la mitad), sobre las últimas ~20 semanas.
+    """
+    try:
+        weekly = hist['Volume'].resample('W').sum()
+        weekly = weekly[weekly > 0]
+        if weekly.empty:
+            return None, None
+        vol_week = int(weekly.iloc[-1])
+        prev_weeks = weekly.iloc[-21:-1] if len(weekly) > 1 else weekly.iloc[0:0]
+        avg_vol_week = int(prev_weeks.mean()) if len(prev_weeks) else vol_week
+        return vol_week, avg_vol_week
+    except Exception:
+        return None, None
+
+
+def calc_volatility_annualized(closes, period=20):
+    """Volatilidad real: desvío estándar de los retornos diarios (log),
+    anualizado y expresado en %. A diferencia del beta, no depende de un
+    dato externo de terceros — se calcula con los mismos cierres que ya
+    usamos para RSI/EMA, así que no agrega ningún request extra."""
+    try:
+        window = closes[-(period + 1):] if len(closes) >= period + 1 else closes
+        if len(window) < 5:
+            return None
+        log_rets = np.diff(np.log(window))
+        vol = float(np.std(log_rets, ddof=1) * np.sqrt(252) * 100)
+        return round(vol, 2)
+    except Exception:
+        return None
+
+
+# ─── BETA CALCULADO LOCALMENTE (cross-check del beta de Yahoo) ────────────────
+# El campo info['beta'] que trae yfinance es un dato de Yahoo a 5 años con
+# frecuencia MENSUAL, calculado contra el S&P 500 — y para varios ADRs
+# argentinos o tickers .BA viene vacío (None) directamente porque Yahoo no
+# tiene suficiente historial mensual "limpio" para esos papeles. Para no
+# depender solo de eso, calculamos un beta propio con los mismos precios
+# DIARIOS que ya bajamos para el resto de los indicadores (1 año, sin pedir
+# nada extra por ticker), contra un índice de referencia. El índice se
+# cachea en memoria (10 min) para no volver a pedirlo en cada request.
+_BENCH_CACHE = {}
+_BENCH_TTL_SECONDS = 600  # 10 minutos
+
+def _get_benchmark_closes(bench_symbol, period='1y'):
+    now = datetime.now().timestamp()
+    cached = _BENCH_CACHE.get(bench_symbol)
+    if cached and (now - cached[0]) < _BENCH_TTL_SECONDS:
+        return cached[1]
+    try:
+        bh = yf.Ticker(bench_symbol).history(period=period, interval='1d', auto_adjust=True)
+        bclose = bh['Close'].dropna()
+        if bclose.empty:
+            return cached[1] if cached else None
+        _BENCH_CACHE[bench_symbol] = (now, bclose)
+        return bclose
+    except Exception:
+        return cached[1] if cached else None
+
+def calc_beta_local(close_series, symbol):
+    """Beta propio = cov(retornos del activo, retornos del índice) / var(retornos
+    del índice), sobre ~1 año de cierres diarios. Índice de referencia: ^MERV
+    para tickers .BA (mercado argentino), SPY para el resto (ADRs y US)."""
+    try:
+        bench_symbol = '^MERV' if symbol.upper().endswith('.BA') else 'SPY'
+        bench_closes = _get_benchmark_closes(bench_symbol)
+        if bench_closes is None or len(bench_closes) < 30:
+            return None
+        df = pd.DataFrame({'a': close_series, 'b': bench_closes}).dropna()
+        if len(df) < 30:
+            return None
+        ra = df['a'].pct_change().dropna()
+        rb = df['b'].pct_change().dropna()
+        aligned = pd.DataFrame({'ra': ra, 'rb': rb}).dropna()
+        if len(aligned) < 30:
+            return None
+        cov = np.cov(aligned['ra'], aligned['rb'])[0][1]
+        var = np.var(aligned['rb'])
+        if not var:
+            return None
+        return round(float(cov / var), 3)
+    except Exception:
+        return None
+
+
 # ─── ENDPOINT PRINCIPAL ───────────────────────────────────────────────────────
 
 def calc_squeeze_momentum(hist, length=20, mult_bb=2.0, mult_kc=1.5):
@@ -401,7 +491,8 @@ def get_quote():
         if hist.empty or len(hist) < 5:
             return jsonify({'error': f'No data for {symbol}'}), 404
 
-        closes = hist['Close'].dropna().values.tolist()
+        close_series = hist['Close'].dropna()
+        closes = close_series.values.tolist()
         volumes = hist['Volume'].dropna().values.tolist()
 
         price = round(closes[-1], 4)
@@ -426,6 +517,8 @@ def get_quote():
         # Volúmenes
         vol_today = int(volumes[-1]) if volumes else 0
         avg_vol20 = int(np.mean(volumes[-20:])) if len(volumes) >= 20 else vol_today
+        vol_week, avg_vol_week = calc_weekly_volume(hist)
+        vol_annualized = calc_volatility_annualized(closes, period=20)
 
         # 52w high
         high52 = round(float(max(closes)), 4)
@@ -448,6 +541,7 @@ def get_quote():
         market_cap  = safe('marketCap')
         pe_ratio    = safe('trailingPE') or safe('forwardPE')
         beta        = safe('beta')
+        beta_calc   = calc_beta_local(close_series, symbol)
         div_yield   = safe('dividendYield')
         if div_yield is not None:
             div_yield = round(div_yield * 100, 4)
@@ -576,11 +670,15 @@ def get_quote():
             'mom12m':        mom12,
             'volume':        vol_today,
             'avgVol20':      avg_vol20,
+            'volWeek':       vol_week,
+            'avgVolWeek':    avg_vol_week,
+            'volAnnualized': vol_annualized,
             'high52':        high52,
             'distFromHigh':  dist_from_high,
             'marketCap':     market_cap,
             'pe':            round(pe_ratio, 2) if pe_ratio else None,
             'beta':          round(beta, 3) if beta else None,
+            'betaCalc':      beta_calc,
             'divYield':      div_yield,
             'spark':         spark,
             # CANSLIM fundamentals
@@ -953,4 +1051,12 @@ if __name__ == '__main__':
     print("  Abrí market-scanner.html en tu browser")
     print("  Ctrl+C para detener")
     print("="*50 + "\n")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    # threaded=True es CLAVE para la velocidad de carga: sin esto, Flask
+    # procesa los requests de a UNO por vez, aunque el frontend mande 25
+    # en paralelo (Promise.all) — cada /quote hace varios llamados a Yahoo
+    # (history + info + financials) y se queda "colgado" esperando red, así
+    # que sin threading todos los demás requests esperan en fila detrás de
+    # ese. Con threaded=True, Flask abre un hilo por request y sí corren
+    # en paralelo de verdad. Si en Railway usás gunicorn en vez de este
+    # app.run(), lo equivalente ahí es `gunicorn --workers 2 --threads 8 server:app`.
+    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
