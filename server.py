@@ -38,6 +38,10 @@ MP_ACCESS_TOKEN    = os.environ.get('MP_ACCESS_TOKEN', '')
 PRECIO_PREMIUM_ARS = float(os.environ.get('PRECIO_PREMIUM_ARS', '9000'))
 APP_URL            = os.environ.get('APP_URL', 'https://dubzmarkets.com')
 
+# ─── ADMIN: otorgar trials manualmente (herramienta trial.html) ──────────────
+#   ADMIN_SECRET -> clave que se pide en el formulario admin (configurar en Railway → Variables)
+ADMIN_SECRET = os.environ.get('ADMIN_SECRET', '')
+
 # ─── RENDI AI: asistente financiero ────────────────────────────────────────
 #   ANTHROPIC_API_KEY -> tu API key de Anthropic (configurar en Railway → Variables)
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
@@ -1061,6 +1065,61 @@ def ai_chat():
     except Exception as e:
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/grant-trial', methods=['POST'])
+def admin_grant_trial():
+    """Otorga premium temporal a usuarios ya registrados, a partir de su email.
+    Pensado para usarse desde la herramienta interna trial.html.
+
+    Body esperado: {"secret": "...", "emails": ["a@b.com", ...], "days": 14}
+    """
+    data   = request.get_json(silent=True) or {}
+    secret = data.get('secret')
+
+    if not ADMIN_SECRET:
+        return jsonify({'error': 'ADMIN_SECRET no configurado en el servidor'}), 500
+    if secret != ADMIN_SECRET:
+        return jsonify({'error': 'Clave admin incorrecta'}), 401
+
+    emails = data.get('emails')
+    if not isinstance(emails, list) or not emails:
+        return jsonify({'error': 'Falta la lista de emails'}), 400
+
+    try:
+        days = int(data.get('days') or 14)
+    except (TypeError, ValueError):
+        days = 14
+
+    db = get_firestore()
+    if db is None:
+        return jsonify({'error': 'Firebase Admin no está configurado en el servidor'}), 500
+
+    try:
+        from firebase_admin import auth as fb_auth
+    except Exception as e:
+        return jsonify({'error': 'firebase_admin no disponible: ' + str(e)}), 500
+
+    premium_until = (datetime.utcnow() + timedelta(days=days)).isoformat()
+    resultados = []
+
+    for raw_email in emails:
+        email = (raw_email or '').strip()
+        if not email:
+            continue
+        try:
+            user = fb_auth.get_user_by_email(email)
+            ok = set_user_plan(user.uid, 'premium', {'premiumUntil': premium_until})
+            if ok:
+                resultados.append({'email': email, 'status': 'ok', 'premiumUntil': premium_until})
+            else:
+                resultados.append({'email': email, 'status': 'error', 'detalle': 'No se pudo escribir en Firestore'})
+        except fb_auth.UserNotFoundError:
+            resultados.append({'email': email, 'status': 'error', 'detalle': 'No existe ningún usuario registrado con ese email'})
+        except Exception as e:
+            resultados.append({'email': email, 'status': 'error', 'detalle': str(e)})
+
+    return jsonify({'resultados': resultados})
 
 
 @app.route('/health', methods=['GET'])
