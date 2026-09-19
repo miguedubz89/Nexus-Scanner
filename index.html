@@ -182,7 +182,7 @@ self.addEventListener('message', e => {
   window.isPremium = false;
 
   // ── ADMIN: estos emails nunca ven el cartel de premium (quedan como premium siempre) ──
-  window.ADMIN_EMAILS = ['miguematador8977@gmail.com'];
+  window.ADMIN_EMAILS = ['miguematador8977@gmail.com', 'ladebkim@gmail.com', 'nadiaoviedo216@gmail.com', 'amaicha.depino@gmail.com', 'nicolas.feniger@gmail.com', 'angel89-cma@hotmail.com'];
   window.isAdminUser = function(email) {
     return window.ADMIN_EMAILS.indexOf((email || '').trim().toLowerCase()) !== -1;
   };
