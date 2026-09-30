@@ -4187,7 +4187,7 @@ function aiBuildContext() {
     if (!pfPositions || !pfPositions.length) return '(sin posiciones cargadas)';
     var lines = pfPositions.map(function(p){
       return '- ' + p.ticker + ': ' + p.cantidad + ' u. a precio de compra ' + p.precioCompra + ' ' + (p.moneda||'ARS') +
-        (p.precioActual ? ', precio actual ' + p.precioActual : '');
+        (p.precioActual ? ', precio actual ' + p.precioActual + (p.precioCompra ? ' (' + (((p.precioActual / p.precioCompra) - 1) * 100).toFixed(1) + '% vs compra)' : '') : '');
     });
     return lines.join('\n');
   } catch(e) { return '(sin posiciones cargadas)'; }
@@ -4226,6 +4226,160 @@ window.aiOpenUpgradeModal = function() {
   document.body.appendChild(overlay);
 };
 
+// ===== Rendi AI: memoria de la charla + contexto completo de mercado =====
+var aiHistory = {};   // { prefix: [{role:'user'|'assistant', content:'...'}] }
+var AI_HIST_MAX = 12;
+var aiQuoteCache = {}; // { SYM: {t:timestamp, d:data} } para no pedir el mismo quote dos veces
+var AI_ALIAS = {
+  'MICRON':'MU','NVIDIA':'NVDA','APPLE':'AAPL','TESLA':'TSLA','MICROSOFT':'MSFT','AMAZON':'AMZN',
+  'GOOGLE':'GOOGL','ALPHABET':'GOOGL','META':'META','FACEBOOK':'META','NETFLIX':'NFLX','AMD':'AMD',
+  'INTEL':'INTC','PALANTIR':'PLTR','COINBASE':'COIN','MERCADOLIBRE':'MELI','MELI':'MELI','DISNEY':'DIS',
+  'GALICIA':'GGAL','YPF':'YPFD','PAMPA':'PAMP','BMA':'BMA','MACRO':'BMA','SUPERVIELLE':'SUPV',
+  'TELECOM':'TECO2','TRANSENER':'TRAN','LOMA':'LOMA','CRESUD':'CRES','CENTRAL PUERTO':'CEPU','EDENOR':'EDN',
+  'BROADCOM':'AVGO','QUALCOMM':'QCOM','ORACLE':'ORCL','SALESFORCE':'CRM','UBER':'UBER','PAYPAL':'PYPL'
+};
+var AI_STOP = {'COME':1,'LONG':1,'HOLA':1,'PARA':1,'QUE':1,'COMO':1,'CON':1,'LOS':1,'LAS':1,'UNA':1,'MAS':1,'POR':1,'DEL':1,'ESTA':1,'ESTE':1,'HOY':1};
+
+function aiPushHistory(prefix, role, content) {
+  if (!aiHistory[prefix]) aiHistory[prefix] = [];
+  aiHistory[prefix].push({role: role, content: String(content || '').slice(0, 1500)});
+  if (aiHistory[prefix].length > AI_HIST_MAX) aiHistory[prefix] = aiHistory[prefix].slice(-AI_HIST_MAX);
+}
+
+function aiBaseSym(sym) { return String(sym || '').toUpperCase().replace(/\.BA$/, ''); }
+
+// Detecta tickers en la pregunta actual y en los ultimos mensajes (asi "si" / "y el otro?" siguen el hilo)
+function aiDetectTickers(pregunta, prefix) {
+  var hist = (aiHistory[prefix] || []).slice(-4).map(function(m){ return m.content; });
+  var texts = [pregunta].concat(hist.reverse());
+  var known = {};
+  (allData || []).forEach(function(d){ if (d && d.symbol) known[aiBaseSym(d.symbol)] = d.symbol; });
+  (pfPositions || []).forEach(function(p){ if (p && p.ticker) known[aiBaseSym(p.ticker)] = known[aiBaseSym(p.ticker)] || p.ticker; });
+  var found = [], seen = {};
+  function add(sym){ var k = aiBaseSym(sym); if (!seen[k] && found.length < 5) { seen[k] = 1; found.push(known[k] || sym); } }
+  texts.forEach(function(t){
+    var up = String(t || '').toUpperCase();
+    Object.keys(AI_ALIAS).forEach(function(name){ if (up.indexOf(name) !== -1 && new RegExp('(^|[^A-Z])' + name + '([^A-Z]|$)').test(up)) add(AI_ALIAS[name]); });
+    (String(t || '').match(/[A-Za-z0-9.]{2,8}/g) || []).forEach(function(w){
+      var u = w.toUpperCase();
+      if (AI_STOP[u]) return;
+      if (known[u]) { add(u); return; }
+      // ticker desconocido: solo si fue escrito TODO en mayusculas (ej. "NVDA", "MU")
+      if (w === u && /^[A-Z]{2,5}(\.BA)?$/.test(u) && !AI_STOP[u] && u.length >= 2 && /^[A-Z]+$/.test(u.replace('.BA',''))) {
+        if (AI_ALIAS[u] || u.length <= 5) add(u);
+      }
+    });
+  });
+  return found;
+}
+
+async function aiFetchQuoteSafe(sym) {
+  var k = aiBaseSym(sym);
+  var c = aiQuoteCache[k];
+  if (c && Date.now() - c.t < 60000) return c.d;
+  try {
+    var fs = (typeof resolveYahooSymbol === 'function') ? resolveYahooSymbol(sym) : sym;
+    var r = await fetch(API + '/quote?symbol=' + fs, {signal: AbortSignal.timeout(7000)});
+    if (!r.ok) return null;
+    var d = await r.json();
+    if (!d || d.error) return null;
+    aiQuoteCache[k] = {t: Date.now(), d: d};
+    return d;
+  } catch(e) { return null; }
+}
+
+function aiN(v, dec) { return (v == null || isNaN(v)) ? null : (+v).toFixed(dec == null ? 2 : dec); }
+function aiBig(v) {
+  if (v == null || isNaN(v)) return null;
+  v = +v;
+  if (Math.abs(v) >= 1e12) return (v/1e12).toFixed(2) + 'T';
+  if (Math.abs(v) >= 1e9) return (v/1e9).toFixed(2) + 'B';
+  if (Math.abs(v) >= 1e6) return (v/1e6).toFixed(1) + 'M';
+  return String(Math.round(v));
+}
+function aiSqzTxt(s) {
+  if (!s || s.sqzMom == null) return 'n/d';
+  return (s.sqzOn ? 'ON (comprimido)' : s.sqzOff ? 'OFF (recien liberado)' : 'sin squeeze') + ', momentum ' + aiN(s.sqzMom) + (s.sqzMomPrev != null ? (s.sqzMom >= s.sqzMomPrev ? ' subiendo' : ' bajando') : '');
+}
+
+// Una linea con todo lo que sabe el scanner de un ticker
+function aiTickerLine(d) {
+  if (!d || d.price == null) return null;
+  var sym = d.symbol;
+  var sD = (typeof squeezeDData !== 'undefined' && squeezeDData[sym]) || d;
+  var s1 = (typeof squeeze1hData !== 'undefined' && squeeze1hData[sym]) || null;
+  var parts = [];
+  function push(label, v, suf) { if (v != null) parts.push(label + ' ' + v + (suf || '')); }
+  push('precio', aiN(d.price));
+  push('var dia', aiN(d.chgPct), '%');
+  push('RSI', aiN(d.rsi, 1));
+  push('ADX', aiN(d.adx, 1));
+  push('dist EMA50', aiN(d.distEma50), '%');
+  push('dist EMA200', aiN(d.distEma200), '%');
+  if (d.volume && d.avgVol20) parts.push('volumen hoy ' + aiBig(d.volume) + ' vs prom20 ' + aiBig(d.avgVol20) + ' (' + (d.volume/d.avgVol20).toFixed(2) + 'x)');
+  parts.push('squeeze diario: ' + aiSqzTxt(sD));
+  parts.push('squeeze 1H: ' + aiSqzTxt(s1));
+  push('beta', aiN(d.beta != null ? d.beta : d.betaCalc));
+  push('volatilidad anual', aiN(d.volAnnualized, 1), '%');
+  push('min 52s', aiN(d.yearLow != null ? d.yearLow : d.week52Low));
+  push('max 52s', aiN(d.yearHigh != null ? d.yearHigh : d.week52High));
+  push('dist del max', aiN(d.distFromHigh, 1), '%');
+  push('momentum 6m', aiN(d.mom6m, 1), '%');
+  push('momentum 12m', aiN(d.mom12m, 1), '%');
+  push('PER', aiN(d.pe, 1));
+  push('cap', aiBig(d.marketCap));
+  push('EPS crec trim', aiN(d.epsGrowthQ != null && Math.abs(d.epsGrowthQ) < 5 ? d.epsGrowthQ * 100 : d.epsGrowthQ, 1), '%');
+  push('EPS crec anual', aiN(d.epsGrowthA != null && Math.abs(d.epsGrowthA) < 5 ? d.epsGrowthA * 100 : d.epsGrowthA, 1), '%');
+  push('ventas crec trim', aiN(d.revGrowthQ != null && Math.abs(d.revGrowthQ) < 5 ? d.revGrowthQ * 100 : d.revGrowthQ, 1), '%');
+  push('ROE', aiN(d.roe != null && Math.abs(d.roe) < 5 ? d.roe * 100 : d.roe, 1), '%');
+  push('inst %', aiN(d.heldPctInstitutions != null && d.heldPctInstitutions <= 1 ? d.heldPctInstitutions * 100 : d.heldPctInstitutions, 1), '%');
+  push('vol alza/baja 20d', aiN(d.upDownVolRatio));
+  push('div yield', aiN(d.divYield));
+  if (d.sector) parts.push('sector ' + d.sector);
+  return '- ' + sym + ': ' + parts.join(' | ');
+}
+
+// Resumen del universo cargado en el scanner (movers, squeezes, RSI extremos)
+function aiMarketOverview() {
+  var arr = (allData || []).filter(function(d){ return d && d.price != null && d.chgPct != null; });
+  if (!arr.length) return '';
+  var up = arr.filter(function(d){ return d.chgPct > 0; }).length;
+  var dn = arr.filter(function(d){ return d.chgPct < 0; }).length;
+  var byChg = arr.slice().sort(function(a,b){ return b.chgPct - a.chgPct; });
+  function list(a) { return a.map(function(d){ return d.symbol + ' ' + (d.chgPct >= 0 ? '+' : '') + d.chgPct.toFixed(1) + '%'; }).join(', '); }
+  var out = ['Universo del scanner: ' + arr.length + ' activos (' + up + ' suben, ' + dn + ' bajan).'];
+  out.push('Mayores subas: ' + list(byChg.slice(0, 5)));
+  out.push('Mayores bajas: ' + list(byChg.slice(-5).reverse()));
+  var sqzOn = arr.filter(function(d){ var s = (typeof squeezeDData !== 'undefined' && squeezeDData[d.symbol]) || d; return s && s.sqzOn; }).slice(0, 10).map(function(d){ return d.symbol; });
+  if (sqzOn.length) out.push('Squeeze diario ON: ' + sqzOn.join(', '));
+  var low = arr.filter(function(d){ return d.rsi != null && d.rsi < 30; }).slice(0, 8).map(function(d){ return d.symbol + ' (' + d.rsi.toFixed(0) + ')'; });
+  var high = arr.filter(function(d){ return d.rsi != null && d.rsi > 70; }).slice(0, 8).map(function(d){ return d.symbol + ' (' + d.rsi.toFixed(0) + ')'; });
+  if (low.length) out.push('RSI sobrevendido (<30): ' + low.join(', '));
+  if (high.length) out.push('RSI sobrecomprado (>70): ' + high.join(', '));
+  return out.join('\n');
+}
+
+// Arma TODO el contexto que viaja a la IA
+async function aiBuildFullContext(pregunta, prefix) {
+  var now = new Date();
+  var fecha = now.toLocaleString('es-AR', {dateStyle: 'full', timeStyle: 'short'});
+  var tickers = aiDetectTickers(pregunta, prefix);
+  var lines = [];
+  var quotes = await Promise.all(tickers.map(function(sym){
+    var k = aiBaseSym(sym);
+    var inScan = (allData || []).filter(function(d){ return d && aiBaseSym(d.symbol) === k && d.price != null; })[0];
+    return inScan ? Promise.resolve(inScan) : aiFetchQuoteSafe(sym).then(function(d){ if (d && !d.symbol) d.symbol = sym; return d; });
+  }));
+  quotes.forEach(function(d){ var l = aiTickerLine(d); if (l) lines.push(l); });
+
+  var ctx = 'FECHA Y HORA ACTUAL: ' + fecha + '\n\n' +
+    'CARTERA DEL USUARIO:\n' + aiBuildContext() + '\n\n' +
+    (lines.length ? 'DATOS EN VIVO DE LOS ACTIVOS MENCIONADOS (scanner DUBZ, Yahoo Finance):\n' + lines.join('\n') + '\n\n' : '') +
+    (aiMarketOverview() ? 'RESUMEN DE MERCADO (lista del usuario):\n' + aiMarketOverview() + '\n\n' : '') +
+    '';
+  return {contexto: ctx.slice(0, 9000), tickers: tickers, fecha: fecha};
+}
+
 async function aiSend(prefix) {
   prefix = prefix || 'ai';
   var st = aiGetState(prefix);
@@ -4249,13 +4403,17 @@ async function aiSend(prefix) {
   document.getElementById(prefix + 'Messages').appendChild(thinkingEl);
 
   try {
+    var full = await aiBuildFullContext(pregunta, prefix);
     var r = await fetch(API + '/ai/chat', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         uid: user.uid,
         pregunta: pregunta,
-        contexto: aiBuildContext(),
+        contexto: full.contexto,
+        historial: (aiHistory[prefix] || []).slice(-10),
+        tickersMencionados: full.tickers,
+        fecha: full.fecha,
         isAdmin: !!(window.isAdminUser && window.isAdminUser(user.email))
       })
     });
@@ -4279,6 +4437,8 @@ async function aiSend(prefix) {
       window.aiUpdateQuotaBadge();
     }
 
+    aiPushHistory(prefix, 'user', pregunta);
+    aiPushHistory(prefix, 'assistant', data.texto || '');
     if (data.tipo === 'orden' && data.orden) {
       aiShowOrderConfirm(prefix, data.orden, data.texto);
     } else {
