@@ -838,6 +838,12 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 ::-webkit-scrollbar-track{background:var(--bg)}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 @media(max-width:1100px){.sc-grid{grid-template-columns:repeat(3,1fr)}.sum-grid{grid-template-columns:repeat(3,1fr)}.pf-summary-grid{grid-template-columns:repeat(3,1fr)!important}}
+/* Tabla tecnica compacta: columnas mas juntas para que entre en pantalla de celu */
+#tab-technical table.dt.tech{table-layout:fixed;width:100%}
+#tab-technical table.dt.tech th{padding:6px 4px;font-size:10px;letter-spacing:.3px}
+#tab-technical table.dt.tech td{padding:6px 4px;font-size:11px}
+#tab-technical table.dt.tech .tk-sym{font-size:12px;letter-spacing:0}
+#tab-technical table.dt.tech .tk-cell{gap:4px}
 @media(max-width:800px){
   .layout{grid-template-columns:1fr!important}
   .sidebar{max-height:none;position:relative;width:100%!important;min-width:0!important;transition:none}
@@ -859,8 +865,8 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
     box-shadow:0 4px 16px rgba(0,212,255,0.3)!important;
   }
   #tab-technical .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-  #tab-technical table.dt{min-width:860px}
-  #tab-technical table.dt th,#tab-technical table.dt td{padding:10px 7px;font-size:11px}
+  #tab-technical table.dt:not(.tech){min-width:860px}
+  #tab-technical table.dt:not(.tech) th,#tab-technical table.dt:not(.tech) td{padding:10px 7px;font-size:11px}
   .sum-grid{grid-template-columns:repeat(2,1fr)!important}
   .sc-grid{grid-template-columns:repeat(2,1fr)!important}
   .sec-mov-grid{grid-template-columns:1fr!important}
@@ -1385,8 +1391,7 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
           <th style="width:133px" title="TTM Squeeze Momentum calculado con velas DIARIAS (no es un dato mensual). Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze D</th>
           <th style="width:133px" title="Mismo TTM Squeeze Momentum pero calculado en velas de 1 hora.">Squeeze 1H</th>
           <th style="width:44px" data-field="beta" onclick="ts('beta',this)" title="Beta vs. indice de referencia. Si Yahoo Finance no lo provee (comun en ADRs/tickers .BA), se usa un beta calculado localmente con 1 año de cierres diarios contra SPY o el Merval (marcado con *).">Beta<span class="sort-icon">⇅</span></th>
-          <th style="width:56px" data-field="volAnnualized" onclick="ts('volAnnualized',this)" title="Volatilidad anualizada: desvio estandar de los retornos diarios de las ultimas 20 ruedas, anualizado (%). Mayor numero = mas volatil.">Vol%<span class="sort-icon">⇅</span></th>
-          <th style="width:54px">Spark</th>
+          <th style="width:56px" data-field="volAnnualized" onclick="ts('volAnnualized',this)" title="Volatilidad anualizada: desvio estandar de los retornos diarios de las ultimas 20 ruedas, anualizado (%). Mayor numero = mas volatil.">Volat<span class="sort-icon">⇅</span></th>
         </tr></thead>
         <tbody id="techBody"></tbody>
       </table></div>
@@ -3384,7 +3389,6 @@ function renderTech(){
       '<td>'+squeezeCell1h(d)+'</td>'+
       '<td style="color:var(--text-dim)" title="'+(d.beta!=null?'Beta Yahoo':(d.betaCalc!=null?'Beta calculado localmente (Yahoo no lo provee)':''))+'">'+(d.beta!=null?f2(d.beta):(d.betaCalc!=null?f2(d.betaCalc)+'*':'--'))+'</td>'+
       '<td style="color:var(--text-dim)">'+(d.volAnnualized!=null?f2(d.volAnnualized)+'%':'--')+'</td>'+
-      '<td>'+doSpark(d.spark)+'</td>'+
       '</tr>';
   }
 
@@ -3436,14 +3440,13 @@ function renderTech(){
         '<span style="font-family:var(--mono);font-size:11px;color:var(--green);margin-left:6px">▲'+upC+'</span>' +
         '<span style="font-family:var(--mono);font-size:11px;color:var(--red)">▼'+dnC+'</span>' +
       '</div>' +
-      '<div class="tbl-wrap" style="border-radius:0 0 2px 2px"><table class="dt" style="min-width:720px">' +
+      '<div class="tbl-wrap" style="border-radius:0 0 2px 2px"><table class="dt tech" style="min-width:860px">' +
         '<thead><tr>' +
-          '<th style="width:75px">Ticker</th><th style="width:68px">Precio</th><th style="width:56px">% Día</th>' +
-          '<th style="width:56px" title="RSI (Indice de Fuerza Relativa) 0-100: mide la velocidad de los cambios de precio. Menos de 30 = sobrevendido (posible rebote). Mas de 70 = sobrecomprado (posible correccion).">RSI</th><th style="width:56px" title="ADX (Indice Direccional Promedio) 0-100: mide la fuerza de la tendencia, no la direccion. Menos de 20 = sin tendencia, 20-25 debil, 25-50 fuerte, mas de 50 muy fuerte.">ADX</th><th style="width:68px">EMA50%</th><th style="width:68px">EMA200%</th>' +
-          '<th style="width:65px">Vol</th><th style="width:65px">Vol20</th>' +
-          '<th style="width:70px" title="Volumen operado en la semana en curso.">VolSem</th><th style="width:78px" title="Volumen semanal promedio de las ultimas semanas.">Vol20Sem</th>' +
-          '<th style="width:133px" title="TTM Squeeze Momentum calculado con velas DIARIAS (no mensual). Punto amarillo = squeeze ON (comprimido, energia acumulada). Punto celeste = squeeze OFF (se acaba de liberar, posible ruptura en curso). Punto gris = sin squeeze activo. La barra indica el momentum: verde = impulso alcista, rojo = impulso bajista.">Squeeze D</th><th style="width:133px" title="Mismo TTM Squeeze Momentum pero calculado en velas de 1 hora — carga por separado y más rápido.">Squeeze 1H</th><th style="width:44px" title="Beta vs. indice de referencia (Yahoo, o calculado localmente con * si Yahoo no lo tiene).">Beta</th><th style="width:56px" title="Volatilidad anualizada (desvio estandar de retornos diarios, 20 ruedas).">Vol%</th>' +
-          '<th style="width:54px">Spark</th>' +
+          '<th style="width:70px" title="Símbolo del activo. La barra de color indica el sector.">Ticker</th><th style="width:58px" title="Último precio. Verde si sube en el día, rojo si baja.">Precio</th><th style="width:50px" title="Variación del precio respecto al cierre anterior.">% Día</th>' +
+          '<th style="width:40px" title="De 0 a 100. Menos de 30 = sobrevendido (posible rebote). Más de 70 = sobrecomprado (posible corrección).">RSI</th><th style="width:40px" title="Fuerza de la tendencia, no su dirección. Menos de 20 = sin tendencia, 25-50 = fuerte, más de 50 = muy fuerte.">ADX</th><th style="width:54px" title="Distancia del precio a su media móvil de 50 ruedas. Positivo = está por encima de la media.">EMA50%</th><th style="width:60px" title="Distancia del precio a su media móvil de 200 ruedas (tendencia de largo plazo).">EMA200%</th>' +
+          '<th style="width:50px" title="Volumen de hoy: cantidad de acciones operadas en el día.">Vol</th><th style="width:50px" title="Volumen diario promedio de las últimas 20 ruedas. Sirve para ver si hoy se opera más o menos de lo normal.">Vol20</th>' +
+          '<th style="width:54px" title="Volumen acumulado en la semana en curso.">VolSem</th><th style="width:62px" title="Volumen semanal promedio de las últimas semanas.">Vol20Sem</th>' +
+          '<th style="width:100px" title="Compresión de volatilidad (TTM Squeeze) en velas diarias. Punto amarillo = comprimido, celeste = recién liberado, gris = sin squeeze. Barra verde = impulso alcista, roja = bajista.">Squeeze D</th><th style="width:100px" title="Lo mismo que Squeeze D pero con velas de 1 hora. Sirve para ver señales de corto plazo.">Squeeze 1H</th><th style="width:38px" title="Sensibilidad frente al mercado (SPY o Merval). 1 = se mueve igual; mayor a 1 = más agresivo; menor a 1 = más defensivo. El * indica beta calculado localmente.">Beta</th><th style="width:46px" title="Volatilidad anualizada (últimas 20 ruedas). Cuanto más alto, más oscila el precio y más riesgo tiene.">Volat</th>' +
         '</tr></thead>' +
         '<tbody>' + secData.map(makeRow).join('') + '</tbody>' +
       '</table></div></div>';
@@ -4481,9 +4484,9 @@ function squeezeDotBar(sqzOn, sqzOff, mom, momPrev) {
   var sign    = mom >= 0 ? '+' : '';
 
   // Recuadro fijo: borde siempre visible, relleno de derecha a izquierda
-  return '<div style="display:flex;align-items:center;gap:5px;justify-content:flex-end">' +
-    '<span style="font-family:var(--mono);font-size:11px;color:'+barColor+';min-width:40px;text-align:right">'+sign+f2(mom)+'</span>' +
-    '<div style="width:65px;height:10px;background:var(--bg3);border:1px solid '+(mom>=0?'rgba(0,230,118,0.35)':'rgba(255,61,90,0.35)')+';border-radius:2px;overflow:hidden;flex-shrink:0;direction:rtl" title="Momentum: '+sign+f2(mom)+'">' +
+  return '<div style="display:flex;align-items:center;gap:4px;justify-content:flex-end">' +
+    '<span style="font-family:var(--mono);font-size:11px;color:'+barColor+';min-width:34px;text-align:right">'+sign+f2(mom)+'</span>' +
+    '<div style="width:38px;height:10px;background:var(--bg3);border:1px solid '+(mom>=0?'rgba(0,230,118,0.35)':'rgba(255,61,90,0.35)')+';border-radius:2px;overflow:hidden;flex-shrink:0;direction:rtl" title="Momentum: '+sign+f2(mom)+'">' +
       '<div style="height:100%;width:'+fillPct+'%;background:'+barColor+';border-radius:1px;transition:width .3s"></div>' +
     '</div>' +
     '<div title="'+dotTitle+'" style="width:9px;height:9px;border-radius:50%;background:'+dotColor+';box-shadow:0 0 5px '+dotColor+';flex-shrink:0"></div>' +
@@ -6713,5 +6716,21 @@ window.pfShowBrokerUpgrade = function () {
 
 </script>
 
+<script>
+/* Descripcion de columnas al tocar el encabezado (en celu no existe el hover) */
+document.addEventListener('click',function(e){
+  var old=document.getElementById('thTip'); if(old) old.remove();
+  if(!('ontouchstart' in window)) return;
+  var th=e.target.closest?e.target.closest('#tab-technical th[title]'):null;
+  if(!th) return;
+  var r=th.getBoundingClientRect();
+  var d=document.createElement('div'); d.id='thTip'; d.textContent=th.getAttribute('title');
+  d.style.cssText='position:fixed;z-index:9999;max-width:240px;background:var(--bg3);color:var(--text-bright);border:1px solid var(--accent);border-radius:3px;padding:8px 10px;font:11px/1.4 var(--mono);box-shadow:0 4px 16px rgba(0,0,0,.5);text-transform:none;letter-spacing:0;font-weight:400';
+  document.body.appendChild(d);
+  var left=Math.max(6,Math.min(r.left,window.innerWidth-d.offsetWidth-6));
+  d.style.left=left+'px'; d.style.top=(r.bottom+4)+'px';
+  setTimeout(function(){var x=document.getElementById('thTip'); if(x===d) d.remove();},6000);
+});
+</script>
 </body>
 </html>
