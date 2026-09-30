@@ -22,6 +22,8 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import traceback
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 app = Flask(__name__)
 CORS(app)  # Permite que el HTML local llame al servidor
@@ -45,7 +47,10 @@ ADMIN_SECRET = os.environ.get('ADMIN_SECRET', '')
 # ─── RENDI AI: asistente financiero ────────────────────────────────────────
 #   ANTHROPIC_API_KEY -> tu API key de Anthropic (configurar en Railway → Variables)
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
-AI_MODEL          = 'claude-haiku-4-5-20251001'  # rápido y económico, alcanza para este uso
+AI_MODEL          = os.environ.get('AI_MODEL', 'claude-haiku-4-5-20251001')  # se puede cambiar desde Railway sin tocar el código
+AI_MAX_TOKENS     = int(os.environ.get('AI_MAX_TOKENS', '2500'))
+AI_WEB_SEARCH     = os.environ.get('AI_WEB_SEARCH', '1') != '0'   # poner AI_WEB_SEARCH=0 para apagar la búsqueda web
+AI_WEB_MAX_USES   = int(os.environ.get('AI_WEB_MAX_USES', '3'))   # búsquedas web máximas por pregunta (cada una tiene costo)
 AI_FREE_LIMIT     = 2  # preguntas gratis antes de pedir upgrade a premium
 
 # Palabras cortas en mayúsculas que NO son tickers, para no confundirlas al detectarlos en la pregunta
@@ -80,6 +85,7 @@ def fetch_fundamentals(ticker):
         t = yf.Ticker(ticker)
 
         precio, max52, min52 = None, None, None
+        rend, vol_hoy, vol_prom20 = None, None, None
         try:
             hist = t.history(period='1y', interval='1d', auto_adjust=True)
             if not hist.empty:
@@ -87,6 +93,16 @@ def fetch_fundamentals(ticker):
                 precio = round(float(closes.iloc[-1]), 4)
                 max52  = round(float(closes.max()), 4)
                 min52  = round(float(closes.min()), 4)
+
+                def _ret(n):
+                    return round((float(closes.iloc[-1]) / float(closes.iloc[-1 - n]) - 1) * 100, 2) if len(closes) > n else None
+                rend = {'1d': _ret(1), '5d': _ret(5), '1m': _ret(21), '3m': _ret(63), '6m': _ret(126),
+                        '1y': _ret(len(closes) - 1) if len(closes) > 200 else None}
+                try:
+                    vol_hoy    = _num(hist['Volume'].iloc[-1])
+                    vol_prom20 = _num(hist['Volume'].tail(20).mean())
+                except Exception:
+                    pass
         except Exception as e:
             print('[Rendi AI] history() falló para', ticker, ':', e)
 
@@ -106,6 +122,9 @@ def fetch_fundamentals(ticker):
             'sector':                    info.get('sector'),
             'industria':                 info.get('industry'),
             'precioActual':              precio or info.get('currentPrice') or info.get('regularMarketPrice'),
+            'rendimientosPct':           rend,
+            'volumenHoy':                vol_hoy,
+            'volumenPromedio20d':        vol_prom20,
             'moneda':                    info.get('currency'),
             'marketCap':                 info.get('marketCap'),
             'per_trailing':              info.get('trailingPE'),
@@ -128,6 +147,276 @@ def fetch_fundamentals(ticker):
         return None
 
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  RENDI AI · FUENTES DE DATOS EXTRA (earnings, noticias, analistas) + TOOLS
+# ═══════════════════════════════════════════════════════════════════════════
+def _num(v):
+    try:
+        if v is None:
+            return None
+        f = float(v)
+        if f != f:  # NaN
+            return None
+        return round(f, 4)
+    except Exception:
+        return None
+
+
+def _fetch_earnings(t):
+    """Últimos balances trimestrales + fechas de earnings (estimado vs reportado)."""
+    out = {}
+    try:
+        qi = t.quarterly_income_stmt
+        if qi is not None and not qi.empty:
+            filas = {}
+            for label, key in (('Total Revenue', 'ingresos'), ('Gross Profit', 'utilidadBruta'),
+                               ('Operating Income', 'resultadoOperativo'), ('Net Income', 'resultadoNeto'),
+                               ('Diluted EPS', 'epsDiluido')):
+                if label in qi.index:
+                    ser = qi.loc[label].dropna().head(5)
+                    filas[key] = {str(c)[:10]: _num(v) for c, v in ser.items()}
+            if filas:
+                out['ultimosTrimestres'] = filas
+    except Exception as e:
+        print('[Rendi AI] quarterly_income_stmt falló:', e)
+    try:
+        ed = t.get_earnings_dates(limit=8)
+        if ed is not None and not ed.empty:
+            lst = []
+            for idx, row in ed.iterrows():
+                lst.append({
+                    'fecha':        str(idx)[:10],
+                    'epsEstimado':  _num(row.get('EPS Estimate')),
+                    'epsReportado': _num(row.get('Reported EPS')),
+                    'sorpresaPct':  _num(row.get('Surprise(%)')),
+                })
+            out['fechasEarnings'] = lst[:6]   # epsReportado vacío = todavía no reportó
+    except Exception as e:
+        print('[Rendi AI] get_earnings_dates falló:', e)
+    try:
+        cal = t.calendar
+        if isinstance(cal, dict) and cal:
+            fe = cal.get('Earnings Date')
+            if fe:
+                out['proximoEarnings'] = [str(x) for x in fe] if isinstance(fe, (list, tuple)) else str(fe)
+            if cal.get('Earnings Average') is not None:
+                out['epsEstimadoProximo'] = _num(cal.get('Earnings Average'))
+            if cal.get('Revenue Average') is not None:
+                out['ingresosEstimadosProximo'] = _num(cal.get('Revenue Average'))
+    except Exception as e:
+        print('[Rendi AI] calendar falló:', e)
+    return out
+
+
+def _fetch_news(t, limit=6):
+    items = []
+    try:
+        for n in (t.news or [])[:limit]:
+            c = n.get('content') if isinstance(n.get('content'), dict) else None
+            if c:   # formato nuevo de yfinance
+                items.append({'titulo': c.get('title'),
+                              'fuente': (c.get('provider') or {}).get('displayName'),
+                              'fecha':  str(c.get('pubDate') or '')[:10],
+                              'resumen': (c.get('summary') or '')[:200]})
+            else:   # formato viejo
+                ts = n.get('providerPublishTime')
+                items.append({'titulo': n.get('title'), 'fuente': n.get('publisher'),
+                              'fecha': datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d') if ts else None})
+    except Exception as e:
+        print('[Rendi AI] news falló:', e)
+    return items
+
+
+def _fetch_analysts(t):
+    out = {}
+    try:
+        apt = t.analyst_price_targets
+        if isinstance(apt, dict) and apt:
+            out['precioObjetivo'] = {k: _num(v) for k, v in apt.items()}
+    except Exception as e:
+        print('[Rendi AI] analyst_price_targets falló:', e)
+    try:
+        rs = t.recommendations_summary
+        if rs is not None and not rs.empty:
+            row = rs.iloc[0].to_dict()
+            out['recomendaciones'] = {k: (v if isinstance(v, str) else _num(v)) for k, v in row.items()}
+    except Exception as e:
+        print('[Rendi AI] recommendations_summary falló:', e)
+    try:
+        ud = t.upgrades_downgrades
+        if ud is not None and not ud.empty:
+            out['cambiosRecientes'] = [
+                {'fecha': str(i)[:10], 'firma': r.get('Firm'), 'de': r.get('FromGrade'),
+                 'a': r.get('ToGrade'), 'accion': r.get('Action')}
+                for i, r in ud.head(5).iterrows()
+            ]
+    except Exception as e:
+        print('[Rendi AI] upgrades_downgrades falló:', e)
+    return out
+
+
+_AI_PACK_CACHE = {}
+_AI_PACK_TTL   = 180  # segundos: evita pedirle lo mismo a Yahoo en preguntas seguidas
+
+
+def fetch_market_pack(ticker):
+    """Paquete completo de un ticker: precio/rendimientos/volumen + fundamentals +
+    balances y earnings + noticias + analistas. Cada fuente falla de forma independiente."""
+    ticker = (ticker or '').strip().upper()
+    if not re.match(r'^[A-Z0-9.^=\-]{1,14}$', ticker):
+        return None
+    c = _AI_PACK_CACHE.get(ticker)
+    if c and time.time() - c[0] < _AI_PACK_TTL:
+        return c[1]
+
+    base = fetch_fundamentals(ticker)
+    if not base:
+        return None
+    pack = dict(base)
+    try:
+        t = yf.Ticker(ticker)
+        ex = ThreadPoolExecutor(max_workers=3)
+        futs = {
+            'earnings': ex.submit(_fetch_earnings, t),
+            'noticias': ex.submit(_fetch_news, t),
+            'analistas': ex.submit(_fetch_analysts, t),
+        }
+        deadline = time.time() + 18
+        for k, f in futs.items():
+            try:
+                pack[k] = f.result(timeout=max(0.1, deadline - time.time()))
+            except Exception as e:
+                print('[Rendi AI]', k, 'no llegó a tiempo para', ticker, ':', e)
+        ex.shutdown(wait=False)
+    except Exception as e:
+        print('[Rendi AI] fetch_market_pack extras fallaron para', ticker, ':', e)
+
+    pack = {k: v for k, v in pack.items() if v not in (None, {}, [], '')}
+    _AI_PACK_CACHE[ticker] = (time.time(), pack)
+    return pack
+
+
+AI_TOOLS = [{
+    'name': 'datos_ticker',
+    'description': (
+        'Trae datos en vivo de un activo: precio, rendimientos (1d a 1 año), volumen, fundamentals '
+        '(PER, márgenes, deuda, ROE, crecimiento), últimos balances trimestrales (ingresos, resultado, EPS), '
+        'fechas de earnings con EPS estimado vs reportado y sorpresa, próximo earnings, noticias recientes y '
+        'opinión de analistas (precio objetivo, recomendaciones). Usala para CUALQUIER empresa o activo que '
+        'el usuario mencione y que no esté ya en los datos en vivo pre-cargados. Acepta tickers de EEUU '
+        '(MU, AAPL, NVDA) y argentinos con sufijo .BA (GGAL.BA, YPFD.BA). Si el usuario nombra la empresa '
+        'sin ticker, deducí el ticker vos mismo y llamala; podés llamarla varias veces para comparar activos.'),
+    'input_schema': {
+        'type': 'object',
+        'properties': {'ticker': {'type': 'string', 'description': 'Ticker de Yahoo Finance, ej. MU o GGAL.BA'}},
+        'required': ['ticker'],
+    },
+}]
+
+AI_WEB_TOOL = {'type': 'web_search_20250305', 'name': 'web_search', 'max_uses': AI_WEB_MAX_USES}
+
+
+def run_ai_tool(name, inp):
+    if name == 'datos_ticker':
+        tk = str((inp or {}).get('ticker') or '').strip().upper()
+        pack = fetch_market_pack(tk)
+        if not pack:
+            return 'No se encontraron datos para "%s". Probá con otro ticker (EEUU: MU, AAPL; Argentina: GGAL.BA).' % tk
+        return json.dumps(pack, ensure_ascii=False, default=str)[:7000]
+    return 'Herramienta desconocida: ' + str(name)
+
+
+class AIError(Exception):
+    def __init__(self, status, detail):
+        super().__init__('Anthropic devolvió %s' % status)
+        self.status = status
+        self.detail = detail
+
+
+def build_ai_messages(historial, pregunta):
+    """Arma la conversación para el modelo: historial previo (alternando user/assistant,
+    empezando por user) + la pregunta actual."""
+    msgs = []
+    for m in (historial or [])[-10:]:
+        if not isinstance(m, dict):
+            continue
+        role = m.get('role')
+        text = str(m.get('content') or '').strip()[:1500]
+        if role not in ('user', 'assistant') or not text:
+            continue
+        if msgs and msgs[-1]['role'] == role:
+            msgs[-1]['content'] += '\n' + text
+        else:
+            msgs.append({'role': role, 'content': text})
+    while msgs and msgs[0]['role'] != 'user':
+        msgs.pop(0)
+    if msgs and msgs[-1]['role'] == 'user':
+        msgs[-1]['content'] += '\n' + pregunta
+    else:
+        msgs.append({'role': 'user', 'content': pregunta})
+    return msgs
+
+
+def call_anthropic(system_prompt, messages, use_web=True):
+    """Llama a Claude con herramientas: datos_ticker (la ejecutamos nosotros) y web_search
+    (la ejecuta Anthropic). Itera hasta que el modelo da la respuesta final."""
+    tools = list(AI_TOOLS) + ([AI_WEB_TOOL] if use_web else [])
+    msgs = list(messages)
+    content = []
+    for _ in range(8):
+        r = requests.post(
+            'https://api.anthropic.com/v1/messages',
+            headers={
+                'x-api-key':         ANTHROPIC_API_KEY,
+                'anthropic-version': '2023-06-01',
+                'Content-Type':      'application/json',
+            },
+            json={'model': AI_MODEL, 'max_tokens': AI_MAX_TOKENS, 'system': system_prompt,
+                  'messages': msgs, 'tools': tools},
+            timeout=75,
+        )
+        if r.status_code == 400 and AI_WEB_TOOL in tools:
+            # búsqueda web no habilitada en la cuenta/modelo: seguimos sin ella en vez de fallar
+            print('[Rendi AI] 400 con web_search, reintento sin búsqueda web:', r.text[:300])
+            tools = list(AI_TOOLS)
+            continue
+        if not r.ok:
+            raise AIError(r.status_code, r.text)
+        res = r.json()
+        content = res.get('content', [])
+        stop = res.get('stop_reason')
+        if stop == 'tool_use':
+            msgs.append({'role': 'assistant', 'content': content})
+            results = []
+            for b in content:
+                if b.get('type') == 'tool_use':
+                    try:
+                        out = run_ai_tool(b.get('name'), b.get('input') or {})
+                    except Exception as e:
+                        out = 'Error al ejecutar la herramienta: ' + str(e)
+                    results.append({'type': 'tool_result', 'tool_use_id': b.get('id'), 'content': out})
+            msgs.append({'role': 'user', 'content': results})
+            continue
+        if stop == 'pause_turn':   # turno largo con búsquedas web: se continúa
+            msgs.append({'role': 'assistant', 'content': content})
+            continue
+        return content
+    return content
+
+
+def extract_final_text(content):
+    """Texto final del modelo, sin los comentarios que hace antes de usar las herramientas."""
+    last_tool = -1
+    for i, b in enumerate(content):
+        if b.get('type') in ('server_tool_use', 'web_search_tool_result', 'tool_use'):
+            last_tool = i
+    txt = ''.join(b.get('text', '') for b in content[last_tool + 1:] if b.get('type') == 'text').strip()
+    if not txt:
+        txt = ''.join(b.get('text', '') for b in content if b.get('type') == 'text').strip()
+    return txt
+
+
 def extract_json_loose(raw_text):
     """Intenta parsear JSON estricto; si el modelo agregó texto extra antes/después
     (pasa a veces), busca el primer bloque {...} y lo prueba también."""
@@ -137,13 +426,13 @@ def extract_json_loose(raw_text):
         if cleaned[:4].lower() == 'json':
             cleaned = cleaned[4:]
     try:
-        return json.loads(cleaned)
+        return json.loads(cleaned, strict=False)
     except Exception:
         pass
     m = re.search(r'\{.*\}', cleaned, re.DOTALL)
     if m:
         try:
-            return json.loads(m.group(0))
+            return json.loads(m.group(0), strict=False)
         except Exception:
             pass
     return None
@@ -949,7 +1238,8 @@ def ai_chat():
     para que el frontend la muestre en el modal de carga (con confirmación
     manual del usuario antes de guardarla).
 
-    Body esperado: {"uid": "...", "pregunta": "...", "contexto": "...", "isAdmin": bool}
+    Body esperado: {"uid": "...", "pregunta": "...", "contexto": "...", "isAdmin": bool,
+    "historial": [{"role": "user|assistant", "content": "..."}], "tickersMencionados": [...], "fecha": "..."}
     """
     if not ANTHROPIC_API_KEY:
         return jsonify({'error': 'ANTHROPIC_API_KEY no configurado en el servidor'}), 500
@@ -979,70 +1269,91 @@ def ai_chat():
             'mensaje': 'Ya usaste tus ' + str(AI_FREE_LIMIT) + ' preguntas gratis a Rendi AI. Con Premium tenés preguntas ilimitadas.'
         }), 403
 
-    # Detectar tickers mencionados en la pregunta y traer sus fundamentals reales de yfinance
+    # Tickers: los que detectó el frontend (incluye nombres como "micron" -> MU) + los que aparecen en la pregunta
+    candidatos = []
+    for tk in list(data.get('tickersMencionados') or []) + find_candidate_tickers(pregunta):
+        tk = str(tk or '').strip().upper()
+        if tk and tk not in candidatos and re.match(r'^[A-Z0-9.^=\-]{1,14}$', tk):
+            candidatos.append(tk)
+    candidatos = candidatos[:3]
+
+    # Pre-cargar en paralelo el paquete completo (precio, fundamentals, balances, noticias, analistas)
     fundamentales_txt = ''
-    for tk in find_candidate_tickers(pregunta):
-        datos = fetch_fundamentals(tk)
-        if datos:
-            fundamentales_txt += '\n' + tk + ': ' + json.dumps(datos, ensure_ascii=False, default=str)
+    if candidatos:
+        ex = ThreadPoolExecutor(max_workers=len(candidatos))
+        futs = [(tk, ex.submit(fetch_market_pack, tk)) for tk in candidatos]
+        for tk, f in futs:
+            try:
+                datos = f.result(timeout=25)
+                if datos:
+                    fundamentales_txt += '\n' + tk + ': ' + json.dumps(datos, ensure_ascii=False, default=str)[:6000]
+            except Exception as e:
+                print('[Rendi AI] pre-carga falló para', tk, ':', e)
+        ex.shutdown(wait=False)
+
+    fecha = (data.get('fecha') or datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC'))
 
     system_prompt = (
-        "Sos Rendi AI, el asistente financiero dentro de la app DUBZ Monitor — un analista completo, "
-        "estilo 'Warren AI': podés hablar de la cartera del usuario, de acciones puntuales (Merval y "
-        "mercado de EEUU), y de los fundamentals de cualquier empresa que tenga ticker (valuación, "
-        "márgenes, rentabilidad, deuda, rango de precio, recomendación de analistas, qué hace el "
-        "negocio, etc.). Respondé siempre en español, de forma clara, con datos concretos cuando los "
-        "tengas.\n\n"
-        "Reglas sobre los datos:\n"
-        "- Si más abajo te paso 'Datos fundamentales en vivo' de una empresa, usalos como fuente de "
-        "verdad para esa empresa (son datos reales de mercado, no los inventes ni los contradigas).\n"
-        "- Si el usuario pregunta por una empresa y no aparece en 'Datos fundamentales en vivo' (por "
-        "ejemplo porque la nombró por su nombre en español y no por el ticker), respondé con lo que "
-        "sepas de memoria pero ACLARÁ que no tenés el dato en vivo y pedile el ticker exacto (ej. "
-        "'AAPL' para Apple) para poder traerle los números actualizados.\n"
-        "- No inventes precios ni cifras que no estén en el contexto/datos en vivo/pregunta.\n"
-        "- No dás garantías de rendimiento ni asesoramiento financiero personalizado; aclará "
-        "brevemente que es información general y no una recomendación de inversión cuando la "
-        "pregunta lo amerite (no hace falta repetirlo en cada mensaje si ya quedó claro antes).\n\n"
-        "Si el usuario está DICTANDO UNA ORDEN para cargar en su cartera (ej: 'compré 10 GGAL a "
-        "4800', 'vendí 50 AAPL a 220 dólares'), respondé ÚNICA Y EXCLUSIVAMENTE con este JSON, sin "
-        "texto antes ni después, sin markdown, sin explicaciones adicionales:\n"
+        "Sos Rendi AI, el analista financiero de la app DUBZ Monitor. Ayudás al usuario con su cartera, "
+        "con acciones argentinas (Merval) y de EEUU, y con cualquier empresa o activo que tenga ticker. "
+        "Respondé siempre en español rioplatense, con datos concretos, completo pero sin relleno.\n\n"
+        "Fecha y hora actual: " + str(fecha) + "\n\n"
+        "CÓMO CONSEGUIR LOS DATOS (usá todas las fuentes que hagan falta, no te quedes con la primera):\n"
+        "1. 'Contexto del usuario' y 'Datos en vivo pre-cargados' (más abajo): vienen del scanner de la app y "
+        "de Yahoo Finance. Son actuales y confiables; usalos como fuente de verdad para precios, indicadores "
+        "técnicos (RSI, ADX, EMAs, squeeze, volumen), fundamentals, balances recientes, analistas y noticias.\n"
+        "2. Herramienta datos_ticker: llamala vos para cualquier activo que el usuario nombre y no esté ya en los "
+        "datos pre-cargados. Si nombra la empresa sin ticker (ej. 'Micron'), deducí el ticker (MU) y llamala "
+        "directamente. NUNCA le pidas al usuario que confirme un ticker que podés deducir vos.\n"
+        "3. Herramienta web_search: para todo lo reciente o que no está en las otras fuentes: resultados o balances "
+        "recién publicados, guidance, conference call, noticias del día, datos macro (dólar, inflación, tasas, "
+        "riesgo país, Fed, BCRA). Si preguntan por algo de hoy o de las últimas horas, buscá en la web antes de responder.\n"
+        "4. Tu conocimiento general, solo para contexto (qué hace la empresa, cómo leer un indicador). Nunca para "
+        "cifras actuales.\n\n"
+        "REGLAS:\n"
+        "- Nunca digas que no tenés datos en vivo sin haber probado antes las herramientas. Si aun así falta algo, "
+        "decí exactamente qué falta.\n"
+        "- No inventes cifras: cada número sale de los datos, de las herramientas o de la búsqueda. Si dos fuentes "
+        "difieren, mencionalo.\n"
+        "- Cuando uses la web, nombrá la fuente y la fecha (ej. 'según Reuters, 30/09').\n"
+        "- Balances y earnings: ingresos y EPS reportados vs. estimados (sorpresa), márgenes, crecimiento "
+        "interanual, guidance si lo hay, reacción del precio y qué está mirando el mercado.\n"
+        "- Sobre una acción: combiná lo técnico (tendencia, RSI, ADX, EMAs, volumen, squeeze) con lo fundamental "
+        "(valuación, crecimiento, márgenes, deuda, analistas) y el contexto (noticias, sector, macro). Cerrá con "
+        "una lectura clara: qué está bien, qué preocupa y qué niveles o eventos mirar.\n"
+        "- Si el activo está en la cartera del usuario, relacionalo con su posición (ganancia o pérdida vs. compra).\n"
+        "- Es información general, no asesoramiento personalizado ni garantía de rendimiento. Aclaralo en una línea "
+        "cuando des una opinión sobre comprar o vender, sin repetirlo en cada mensaje.\n"
+        "- Formato: texto plano. La app NO renderiza markdown (no uses **, # ni tablas). Para listas, líneas que "
+        "empiecen con '- '. Párrafos cortos separados por una línea en blanco.\n"
+        "- Seguí la conversación: si el usuario responde 'sí' o algo corto, continuá con lo que venían hablando; "
+        "no saludes de nuevo ni repitas preguntas.\n\n"
+        "Si el usuario está DICTANDO UNA ORDEN para cargar en su cartera (ej: 'compré 10 GGAL a 4800', "
+        "'vendí 50 AAPL a 220 dólares'), respondé ÚNICA Y EXCLUSIVAMENTE con este JSON, sin texto antes ni "
+        "después, sin markdown, sin explicaciones adicionales:\n"
         '{"tipo":"orden","orden":{"accion":"compra|venta","ticker":"...","cantidad":0,"precio":0,'
         '"moneda":"ARS|USD"},"texto":"resumen breve para confirmarle al usuario"}\n\n'
-        "Si es una pregunta normal (no una orden), respondé ÚNICA Y EXCLUSIVAMENTE con este JSON, sin "
-        "texto antes ni después, sin markdown fuera del campo texto:\n"
+        "Si es una pregunta normal (no una orden), respondé ÚNICA Y EXCLUSIVAMENTE con este JSON, sin texto "
+        "antes ni después y sin markdown fuera del campo texto (los saltos de línea dentro de texto van como \\n):\n"
         '{"tipo":"respuesta","texto":"tu respuesta acá"}\n\n'
-        "Contexto de la cartera del usuario:\n" + contexto + "\n\n" +
-        "Datos fundamentales en vivo:\n" + (fundamentales_txt or "(no se detectó ningún ticker válido en la pregunta)")
+        "Contexto del usuario (cartera, scanner y mercado, enviado por la app):\n" + contexto + "\n\n" +
+        "Datos en vivo pre-cargados:\n" + (fundamentales_txt or "(ninguno; usá la herramienta datos_ticker si hace falta)")
     )
 
     try:
-        r = requests.post(
-            'https://api.anthropic.com/v1/messages',
-            headers={
-                'x-api-key':          ANTHROPIC_API_KEY,
-                'anthropic-version':  '2023-06-01',
-                'Content-Type':       'application/json',
-            },
-            json={
-                'model':      AI_MODEL,
-                'max_tokens': 1000,
-                'system':     system_prompt,
-                'messages':   [{'role': 'user', 'content': pregunta}],
-            },
-            timeout=30,
-        )
-        r.raise_for_status()
-        result   = r.json()
-        raw_text = ''.join(
-            b.get('text', '') for b in result.get('content', []) if b.get('type') == 'text'
-        ).strip()
+        content  = call_anthropic(system_prompt, build_ai_messages(data.get('historial'), pregunta), AI_WEB_SEARCH)
+        raw_text = extract_final_text(content)
 
         # El modelo debería devolver JSON puro; si viene con texto extra antes/después
         # (pasa a veces), extract_json_loose intenta salvarlo antes de degradarlo a texto plano.
         parsed = extract_json_loose(raw_text)
         if parsed is None:
-            parsed = {'tipo': 'respuesta', 'texto': raw_text}
+            texto = raw_text
+            if raw_text.lstrip().startswith('{'):   # JSON cortado o mal cerrado: rescatamos el campo texto
+                m = re.search(r'"texto"\s*:\s*"(.*?)(?:"\s*\}\s*)?$', raw_text, re.DOTALL)
+                if m:
+                    texto = m.group(1).replace('\\n', '\n').replace('\\"', '"')
+            parsed = {'tipo': 'respuesta', 'texto': texto}
 
         # Contabilizar solo a usuarios free (evita writes innecesarios para premium)
         preguntas_restantes = None
@@ -1059,9 +1370,9 @@ def ai_chat():
             'orden':              parsed.get('orden'),
             'preguntasRestantes': preguntas_restantes,
         })
-    except requests.exceptions.HTTPError:
-        print('[Rendi AI] Anthropic devolvió error', r.status_code, '->', r.text)
-        return jsonify({'error': 'La API de IA rechazó la solicitud', 'detalle': r.text}), 502
+    except AIError as e:
+        print('[Rendi AI] Anthropic devolvió error', e.status, '->', e.detail)
+        return jsonify({'error': 'La API de IA rechazó la solicitud', 'detalle': e.detail}), 502
     except Exception as e:
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
