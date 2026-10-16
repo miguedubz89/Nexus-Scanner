@@ -960,7 +960,8 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 .pf-acct-rename-btn:hover{opacity:1}
 .pf-acct-add-btn{border-color:rgba(0,212,255,0.3);color:var(--accent);font-size:16px;padding:4px 11px;letter-spacing:0}
 .pf-acct-add-btn:hover{background:rgba(0,212,255,0.1);border-color:var(--accent)}
-.pf-acct-del-btn{white-space:nowrap;flex-shrink:0}
+.pf-acct-del-btn{white-space:nowrap;flex-shrink:0;margin-left:2px}
+.pf-acct-del-btn:hover{color:var(--red,#ff3d5a)}
 
 /* Toolbar */
 .pf-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;background:var(--bg2);border:1px solid var(--border);border-radius:2px;padding:10px 14px}
@@ -4927,6 +4928,7 @@ function pfRenderAccountTabs() {
     return '<button class="pf-acct-tab' + (isActive ? ' active' : '') + '" onclick="pfSwitchAccount(\'' + a.id + '\')" title="' + (a.name||'Cuenta') + '">' +
       '<span class="pf-acct-tab-name" id="pf-tab-name-' + a.id + '">' + (a.name||'Cuenta') + '</span>' +
       (isActive ? '<span class="pf-acct-rename-btn" onclick="pfPromptRename(event,\'' + a.id + '\')" title="Renombrar">✏</span>' : '') +
+      (isActive && pfAccounts.length > 1 ? '<span class="pf-acct-rename-btn pf-acct-del-btn" onclick="pfPromptDelete(event,\'' + a.id + '\')" title="Eliminar cuenta">✕</span>' : '') +
     '</button>';
   }).join('');
   html += '<button class="pf-acct-tab pf-acct-add-btn" onclick="pfAddAccount()" title="Agregar cuenta">＋</button>';
@@ -4973,6 +4975,12 @@ function pfPromptRename(evt, id) {
   acct.name = nuevo.trim();
   pfSaveAccounts();
   pfRenderAccountTabs();
+}
+
+// ── ELIMINAR CUENTA (handler del botón ✕ de la pestaña) ───────────
+function pfPromptDelete(evt, id) {
+  if (evt) evt.stopPropagation();
+  pfDeleteAccount(id);
 }
 
 // ── ELIMINAR CUENTA ───────────────────────────────────────────────
