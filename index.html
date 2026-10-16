@@ -6530,6 +6530,7 @@ function pfImportCSV() {
         try {
           var wb   = XLSX.read(new Uint8Array(e.target.result), { type:'array', cellDates:true });
           var ws   = wb.Sheets[wb.SheetNames[0]];
+          pfFixSheetRange(ws); // algunos exports (Bull Market) declaran un rango <dimension> erróneo (ej. A1:E2)
           var rows = XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:'' });
           processRows(rows);
         } catch(err) {
@@ -6550,6 +6551,21 @@ function pfImportCSV() {
     };
     reader.readAsText(file,'UTF-8');
   }
+}
+
+// Recalcula ws['!ref'] a partir de las celdas realmente presentes.
+// SheetJS confía en <dimension ref="..."> del XML; si el broker lo escribe mal
+// (ej. "A1:E2" con 438 filas y 10 columnas) solo se leen esas celdas.
+function pfFixSheetRange(ws) {
+  if (!ws) return;
+  var minR=Infinity, minC=Infinity, maxR=-1, maxC=-1;
+  Object.keys(ws).forEach(function(k){
+    if (k.charAt(0) === '!') return;
+    var a = XLSX.utils.decode_cell(k);
+    if (a.r < minR) minR = a.r; if (a.r > maxR) maxR = a.r;
+    if (a.c < minC) minC = a.c; if (a.c > maxC) maxC = a.c;
+  });
+  if (maxR >= 0) ws['!ref'] = XLSX.utils.encode_range({ s:{r:minR,c:minC}, e:{r:maxR,c:maxC} });
 }
 
 function pfDateToISO(d) {
