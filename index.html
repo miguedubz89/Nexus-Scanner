@@ -983,6 +983,13 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 
 /* Summary cards */
 .pf-summary-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:14px}
+.pf-cau-panel{background:linear-gradient(135deg,rgba(255,214,0,0.04),transparent);border:1px solid rgba(255,214,0,0.25);border-radius:2px;padding:12px 16px;margin-bottom:14px}
+.pf-cau-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.pf-cau-title{font-family:var(--head);font-weight:700;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--yellow)}
+.pf-cau-asof{font-family:var(--mono);font-size:10px;color:var(--text-dim)}
+.pf-cau-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.pf-cau-item{min-width:0}
+.pf-cau-item .pf-sum-val{font-size:15px}
 .pf-sum-card{background:var(--bg2);border:1px solid var(--border);border-radius:2px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px;transition:border-color .2s}
 .pf-sum-card:hover{border-color:var(--border2)}
 .pf-today-card{border-color:rgba(255,214,0,0.2)!important;background:linear-gradient(135deg,rgba(255,214,0,0.04),transparent)!important}
@@ -1503,6 +1510,20 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
         </div>
       </div>
 
+      <div class="pf-cau-panel" id="pfCauPanel" style="display:none">
+        <div class="pf-cau-head">
+          <div class="pf-cau-title">🏦 Cauciones y disponible real</div>
+          <div class="pf-cau-asof" id="pfCauAsOf"></div>
+        </div>
+        <div class="pf-cau-grid">
+          <div class="pf-cau-item"><div class="pf-sum-lbl">Disponible real</div><div class="pf-sum-val" id="pfCauDisp">—</div><div class="pf-sum-sub" id="pfCauDispSub">—</div></div>
+          <div class="pf-cau-item"><div class="pf-sum-lbl">Caución abierta</div><div class="pf-sum-val" id="pfCauAbierta">—</div><div class="pf-sum-sub" id="pfCauAbiertaSub">—</div></div>
+          <div class="pf-cau-item"><div class="pf-sum-lbl">Costo financiero</div><div class="pf-sum-val" id="pfCauCosto">—</div><div class="pf-sum-sub" id="pfCauCostoSub">—</div></div>
+          <div class="pf-cau-item"><div class="pf-sum-lbl">Último mes</div><div class="pf-sum-val" id="pfCauMes">—</div><div class="pf-sum-sub" id="pfCauMesSub">—</div></div>
+          <div class="pf-cau-item"><div class="pf-sum-lbl">Patrimonio neto</div><div class="pf-sum-val" id="pfCauNeto">—</div><div class="pf-sum-sub" id="pfCauNetoSub">—</div></div>
+        </div>
+      </div>
+
       <div class="pf-dist-section">
         <div class="pf-dist-header">
           <div class="pf-dist-title">Distribución <span id="pfDistCount" style="color:var(--text-dim);font-weight:400;text-transform:none;letter-spacing:0"></span></div>
@@ -1513,7 +1534,10 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 
       <div class="pf-table-header">
         <div class="pf-section-title">Posiciones abiertas</div>
-        <button class="btn btn-r btn-sm" onclick="pfClearAll()">✕ Vaciar cuenta</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-r btn-sm" onclick="pfClearAll()">✕ Vaciar cuenta</button>
+          <button class="btn btn-r btn-sm" id="pfDelAcctBtn" style="display:none" onclick="pfDeleteAccount(pfActiveAcctId)">🗑 Eliminar cuenta</button>
+        </div>
       </div>
       <div class="tbl-wrap">
         <table class="dt" id="pfTable">
@@ -4933,6 +4957,13 @@ function pfRenderAccountTabs() {
   }).join('');
   html += '<button class="pf-acct-tab pf-acct-add-btn" onclick="pfAddAccount()" title="Agregar cuenta">＋</button>';
   container.innerHTML = html;
+  // Botón "Eliminar cuenta" (solo si hay más de una)
+  var delBtn = document.getElementById('pfDelAcctBtn');
+  if (delBtn) {
+    var act = pfActiveAcct();
+    delBtn.style.display = pfAccounts.length > 1 ? '' : 'none';
+    delBtn.textContent = '🗑 Eliminar cuenta' + (act && act.name ? ' "' + act.name + '"' : '');
+  }
 }
 
 // ── CAMBIAR CUENTA ────────────────────────────────────────────────
@@ -5337,6 +5368,55 @@ function pfRenderSummary() {
   if (bdEl) { bdEl.textContent = pfViewCurrency; bdEl.className = 'pf-currency-badge' + (pfViewCurrency==='ARS' ? ' ars' : ''); }
   if (buEl) buEl.classList.toggle('active', pfViewCurrency==='USD');
   if (baEl) baEl.classList.toggle('active', pfViewCurrency==='ARS');
+
+  pfRenderCauciones(totalValView);
+}
+
+// ── PANEL CAUCIONES / DISPONIBLE REAL ─────────────────────
+// disponible real = saldo de la cuenta corriente − capital de cauciones abiertas
+// patrimonio neto = valor de las posiciones + disponible real (todo en la moneda de vista)
+function pfRenderCauciones(totalValView) {
+  var panel = document.getElementById('pfCauPanel');
+  if (!panel) return;
+  var a = pfActiveAcct();
+  var cau = a && a.cauciones;
+  if (!cau) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+
+  var mon  = cau.moneda === 'USD' ? 'USD' : 'ARS';
+  var toV  = function(v){ return pfToView(v || 0, mon); };
+  var sgn  = function(v){ return (v < 0 ? '−' : '') + pfFmtDisplay(Math.abs(v)); };
+  var setT = function(id, txt, color){ var e = document.getElementById(id); if (e) { e.textContent = txt; if (color !== undefined) e.style.color = color; } };
+
+  var saldoV = toV(cau.saldo), abV = toV(cau.abiertaMonto);
+  var dispV  = saldoV - abV;
+  var netoV  = (totalValView || 0) + dispV;
+
+  var fin = cau.fechaFin ? cau.fechaFin.slice(8,10) + '/' + cau.fechaFin.slice(5,7) + '/' + cau.fechaFin.slice(2,4) : '';
+  setT('pfCauAsOf', fin ? 'según el archivo del broker al ' + fin : '');
+
+  setT('pfCauDisp', sgn(dispV), dispV < 0 ? 'var(--red)' : 'var(--green)');
+  setT('pfCauDispSub', cau.nAbiertas > 0
+    ? 'saldo cta. cte. ' + sgn(saldoV) + ' − caución abierta'
+    : (dispV < 0 ? 'descubierto: falta financiar (caución)' : 'saldo cta. cte.'));
+
+  if (cau.nAbiertas > 0) {
+    setT('pfCauAbierta', pfFmtDisplay(abV), 'var(--yellow)');
+    setT('pfCauAbiertaSub', cau.nAbiertas + ' toma' + (cau.nAbiertas===1?'':'s') + ' sin devolver (capital, sin intereses)');
+  } else {
+    setT('pfCauAbierta', 'Ninguna', 'var(--text-bright)');
+    setT('pfCauAbiertaSub', cau.nTomas + ' tomadas · todas devueltas');
+  }
+
+  setT('pfCauCosto', pfFmtDisplay(toV(cau.interesTotal)), 'var(--red)');
+  setT('pfCauCostoSub', (cau.tna != null ? 'TNA prom. ' + pfFmt(cau.tna, 1) + '%' : '') +
+    (cau.maxCaucion ? ' · máx. ' + pfFmtDisplay(toV(cau.maxCaucion)) : ''));
+
+  setT('pfCauMes', pfFmtDisplay(toV(cau.interesUltMes)), 'var(--red)');
+  setT('pfCauMesSub', cau.nUltMes + ' toma' + (cau.nUltMes===1?'':'s') + ' en 30 días');
+
+  setT('pfCauNeto', sgn(netoV), netoV < 0 ? 'var(--red)' : 'var(--text-bright)');
+  setT('pfCauNetoSub', 'posiciones ' + pfFmtDisplay(totalValView || 0) + ' ' + (dispV < 0 ? '−' : '+') + ' ' + pfFmtDisplay(Math.abs(dispV)));
 }
 
 // ── DISTRIBUCIÓN ──────────────────────────────────────────
@@ -6525,13 +6605,13 @@ function pfImportCSV() {
   function processRows(rows) {
     if (!rows || rows.length < 2) { document.getElementById('pfImportResult').textContent='⚠ Archivo vacío o formato incorrecto.'; return; }
     var headerRow = (rows[0]||[]).map(function(c){ return (c==null?'':String(c)).trim().toLowerCase(); });
-    var imported=[], closed=[], brokerKey=brokerSel, extraNote='';
+    var imported=[], closed=[], brokerKey=brokerSel, extraNote='', cauData=null;
 
     var looksLikeLedger = headerRow.indexOf('comprobante')!==-1 && headerRow.indexOf('especie')!==-1;
     if (brokerSel === 'bullmarket' || (brokerSel === 'auto' && looksLikeLedger)) {
       brokerKey = 'bullmarket';
       var r = pfParseBullMarketLedger(rows, monedaSel);
-      imported = r.positions; closed = r.closedTrades;
+      imported = r.positions; closed = r.closedTrades; cauData = r.cauciones || null;
       if (r.skippedVentas) extraNote = ' ⚠ ' + r.skippedVentas + ' venta(s) no se pudieron reconciliar por falta de historial de compra en el archivo.';
     } else {
       // Parsers basados en líneas de texto (Balanz / Genérico)
@@ -6546,7 +6626,7 @@ function pfImportCSV() {
         else { brokerKey='generico'; imported=pfParseGeneric(lines); }
       }
     }
-    pfFinishImport(imported, closed, brokerKey, extraNote);
+    pfFinishImport(imported, closed, brokerKey, extraNote, cauData);
   }
 
   if (isXlsx) {
@@ -6602,7 +6682,7 @@ function pfDateToISO(d) {
 }
 
 // ── Aplica el límite free/premium de brokers y vuelca lo importado ──
-function pfFinishImport(imported, closedImported, brokerKey, extraNote) {
+function pfFinishImport(imported, closedImported, brokerKey, extraNote, cauData) {
   imported = imported || []; closedImported = closedImported || [];
   var acctBk = pfActiveAcct();
   if (acctBk) {
@@ -6613,6 +6693,7 @@ function pfFinishImport(imported, closedImported, brokerKey, extraNote) {
       return;
     }
     acctBk.broker = brokerKey;
+    if (cauData) acctBk.cauciones = cauData; // resumen de cauciones del libro (se reemplaza en cada import)
     pfSaveAccounts();
   }
 
@@ -6626,10 +6707,15 @@ function pfFinishImport(imported, closedImported, brokerKey, extraNote) {
     pfPositions.push(pos); added++;
   });
 
-  var addedClosed = 0;
+  var addedClosed = 0, skippedClosed = 0;
   if (closedImported.length) {
     pfClosedTrades = pfGetClosedTrades();
-    closedImported.forEach(function(t){ pfClosedTrades.unshift(t); addedClosed++; });
+    var tKey = function(t){ return [t.ticker, t.fechaCompra, t.fechaVenta, (+t.cantidad).toFixed(4), (+t.precioVenta).toFixed(4), (+t.precioCompra).toFixed(4)].join('|'); };
+    var seenT = {}; pfClosedTrades.forEach(function(t){ seenT[tKey(t)] = 1; });
+    closedImported.forEach(function(t){
+      if (!merge && seenT[tKey(t)]) { skippedClosed++; return; } // re-importar el mismo archivo no duplica trades
+      pfClosedTrades.unshift(t); addedClosed++;
+    });
     var a = pfActiveAcct(); if (a) a.closedTrades = pfClosedTrades;
   }
 
@@ -6637,6 +6723,8 @@ function pfFinishImport(imported, closedImported, brokerKey, extraNote) {
   var msg='✓ '+added+' posiciones importadas.';
   if (addedClosed) msg += ' ' + addedClosed + ' operaciones cerradas reconstruidas.';
   if (skipped>0) msg += ' ' + skipped + ' duplicadas omitidas.';
+  if (skippedClosed>0) msg += ' ' + skippedClosed + ' operaciones cerradas ya existían.';
+  if (cauData) msg += ' Cauciones actualizadas.';
   if (extraNote) msg += extraNote;
   document.getElementById('pfImportResult').textContent=msg;
   document.getElementById('pfImportResult').style.color = extraNote ? 'var(--yellow)' : 'var(--green)';
@@ -6788,7 +6876,75 @@ function pfParseBullMarketLedger(rows, defaultMoneda) {
     });
   });
 
-  return { positions: positions, closedTrades: closedTrades, skippedVentas: skippedVentas };
+  return { positions: positions, closedTrades: closedTrades, skippedVentas: skippedVentas,
+           cauciones: pfBuildCaucionSummary(rows, header, moneda, toNum, toDateStr) };
+}
+
+// ── CAUCIONES (tomadora) a partir del libro de Bull Market ─────────
+// Cada caución son 2 filas: 'VENTA CAUCION CONTADO' (entra plata) y, al
+// vencer, 'COMPRA CAUCION TERMINO' (sale capital + interés). Se emparejan
+// en orden cronológico; las tomas sin devolución quedan como caución abierta.
+// 'COMPRA CAUCION CONTADO' / 'VENTA CAUCION TERMINO' = colocadora (prestás vos).
+function pfBuildCaucionSummary(rows, header, moneda, toNum, toDateStr) {
+  var col = function(names){
+    for (var j=0;j<names.length;j++) for (var i=0;i<header.length;i++) if (header[i].indexOf(names[j])!==-1) return i;
+    return -1;
+  };
+  var iLiq = col(['liquida']), iOp = col(['operado']), iCompr = col(['comprobante']),
+      iNum = col(['numero']), iImp = col(['importe']), iSal = col(['saldo']);
+  if (iCompr < 0 || iImp < 0) return null;
+
+  var tomas = [], devs = [], colocNeto = 0, saldo = null, fechaFin = null;
+  for (var i=1;i<rows.length;i++){
+    var row = rows[i]; if (!row || !row.length) continue;
+    var compr = String(row[iCompr]==null?'':row[iCompr]).trim().toUpperCase();
+    var fRaw  = iLiq>=0 ? row[iLiq] : (iOp>=0 ? row[iOp] : '');
+    var fecha = toDateStr(fRaw);
+    if (fecha && (!fechaFin || fecha > fechaFin)) fechaFin = fecha;
+    if (iSal>=0 && row[iSal] !== '' && row[iSal] != null) saldo = toNum(row[iSal]);
+    var imp = toNum(row[iImp]);
+    var num = iNum>=0 ? toNum(row[iNum]) : i;
+    if (compr === 'VENTA CAUCION CONTADO')        tomas.push({ fecha:fecha, num:num, monto:imp });
+    else if (compr === 'COMPRA CAUCION TERMINO')  devs.push({ fecha:fecha, num:num, monto:-imp });
+    else if (compr === 'COMPRA CAUCION CONTADO' || compr === 'VENTA CAUCION TERMINO') colocNeto += imp;
+  }
+  if (!tomas.length && !colocNeto) return null;
+
+  var cmp = function(a,b){ return (a.fecha||'').localeCompare(b.fecha||'') || (a.num-b.num); };
+  tomas.sort(cmp); devs.sort(cmp);
+  var dayMs = 86400000;
+  var dDiff = function(a,b){ return Math.round((new Date(b+'T00:00:00Z') - new Date(a+'T00:00:00Z')) / dayMs); };
+
+  var interesTotal = 0, wTna = 0, wDen = 0, maxC = 0, sumMonto = 0, nPares = 0;
+  var interesMes = 0, nMes = 0, nTomasMonto = 0;
+  var corte = fechaFin ? new Date(new Date(fechaFin+'T00:00:00Z').getTime() - 30*dayMs).toISOString().slice(0,10) : null;
+  var n = Math.min(tomas.length, devs.length);
+  for (var k=0;k<n;k++){
+    var t = tomas[k], d = devs[k];
+    var days = dDiff(t.fecha, d.fecha);
+    if (!(t.monto > 0) || days <= 0) continue;
+    var interes = d.monto - t.monto;
+    interesTotal += interes; nPares++;
+    wTna += (interes / t.monto / days * 365 * 100) * t.monto * days; wDen += t.monto * days;
+    if (t.monto > maxC) maxC = t.monto;
+    sumMonto += t.monto;
+    if (corte && t.fecha >= corte) { interesMes += interes; nMes++; }
+  }
+  var abiertas = tomas.slice(devs.length);
+  var abiertaMonto = 0; abiertas.forEach(function(t){ abiertaMonto += t.monto; });
+
+  return {
+    moneda: moneda,
+    nTomas: tomas.length, nAbiertas: abiertas.length, abiertaMonto: abiertaMonto,
+    saldo: saldo == null ? 0 : saldo,
+    interesTotal: interesTotal,
+    tna: wDen > 0 ? wTna / wDen : null,
+    interesUltMes: interesMes, nUltMes: nMes,
+    maxCaucion: maxC, promedio: nPares ? sumMonto / nPares : 0,
+    colocNeto: colocNeto,
+    desde: tomas.length ? tomas[0].fecha : null,
+    fechaFin: fechaFin
+  };
 }
 
 // ── PARSER GENÉRICO ────────────────────────────────────────
