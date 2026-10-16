@@ -6104,7 +6104,7 @@ function pfFetchSinglePrice(ticker, moneda, callback) {
   var called = false;
   var timer = setTimeout(function() {
     if (!called) { called = true; callback(null, null, 'timeout'); }
-  }, 12000); // 12s máximo — si ninguna fuente responde, desistir
+  }, 25000); // 25s máximo — el backend va primero; los proxies son fallback lento
 
   function cb(price, chgPct, source) {
     if (called) return;
@@ -6294,9 +6294,29 @@ function pfBuildSources(tk, moneda) {
     };
   }
 
+  // ── Backend propio (/quote, yfinance en server.py) ─────────
+  // Es la fuente más confiable: no depende de proxies CORS públicos.
+  function makeBackendSource(sym, isARS) {
+    return {
+      name: 'Backend/' + sym,
+      fetch: function(cb) {
+        var ctl = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(8000) : undefined;
+        fetch(API + '/quote?symbol=' + encodeURIComponent(sym), ctl ? { signal: ctl } : {})
+          .then(function(r){ if(!r.ok)throw 0; return r.json(); })
+          .then(function(d) {
+            var p = d && !d.error && parseFloat(d.price);
+            if (!p || p <= 0) { cb(null, null); return; }
+            if (isARS && p < 1) { cb(null, null); return; } // precio ARS implausible (probable USD)
+            cb(p, d.chgPct != null && !isNaN(d.chgPct) ? parseFloat(d.chgPct) : null);
+          }).catch(function(){ cb(null, null); });
+      }
+    };
+  }
+
   // ── Armar la lista de fuentes según moneda ──────────────
   if (moneda === 'ARS') {
     var yhBA = tk + '.BA';
+    sources.push(makeBackendSource(yhBA, true));
     // Yahoo v8 .BA × 3 proxies — con validación de moneda ARS
     PROXIES.forEach(function(pFn){ sources.push(makeYahooV8SourceARS(yhBA, pFn)); });
     // Yahoo v7 .BA — con validación de moneda ARS
@@ -6307,6 +6327,7 @@ function pfBuildSources(tk, moneda) {
     sources.push(makeRavaSource(tk));
     // NO usar Stooq para ARS ni Yahoo sin .BA — devuelven precios en USD
   } else {
+    sources.push(makeBackendSource(tk, false));
     // Yahoo v8 × 3 proxies
     PROXIES.forEach(function(pFn){ sources.push(makeYahooV8Source(tk, false, pFn)); });
     // Yahoo v7 quote
