@@ -1014,14 +1014,14 @@ def _pick_symbol_frame(df, sym, n_syms):
     return None
 
 
-def _download_many(symbols, period='1y', interval='1d'):
+def _download_many(symbols, period='1y', interval='1d', auto_adjust=True):
     """UNA sola llamada a Yahoo para muchos símbolos (mucho más rápido que N llamadas
     sueltas). Devuelve {symbol: DataFrame OHLCV}; los que no vengan quedan afuera."""
     out = {}
     if not symbols:
         return out
     try:
-        df = yf.download(tickers=symbols, period=period, interval=interval, auto_adjust=True,
+        df = yf.download(tickers=symbols, period=period, interval=interval, auto_adjust=auto_adjust,
                          group_by='ticker', threads=True, progress=False)
     except Exception:
         traceback.print_exc()
@@ -1516,7 +1516,10 @@ def rrg_route():
         trail = int(request.args.get('trail', 8))
     except ValueError:
         trail = 8
-    d = get_rrg(request.args.get('period', 'daily'), trail)
+    if request.args.get('market', 'us') == 'ar':
+        d = get_rrg_ar(request.args.get('period', 'daily'), trail)
+    else:
+        d = get_rrg(request.args.get('period', 'daily'), trail)
     if not d:
         return jsonify({'error': 'No se pudo calcular la rotación'}), 502
     return jsonify(d)
@@ -2040,6 +2043,546 @@ def admin_grant_trial():
             resultados.append({'email': email, 'status': 'error', 'detalle': str(e)})
 
     return jsonify({'resultados': resultados})
+
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  v2 — DÓLAR/RIESGO PAÍS, EARNINGS, NOTICIAS, OPCIONES, SHORT INTEREST,
+#       HISTORIAL DE PRECIOS (CARTERA) Y ROTACIÓN SECTORIAL DEL MERVAL
+# ═══════════════════════════════════════════════════════════════════════════
+DOLAR_TTL = int(os.environ.get('DOLAR_TTL', '60'))        # seg — dólares (MEP/CCL/oficial/blue)
+RIESGO_TTL = int(os.environ.get('RIESGO_TTL', '600'))     # seg — riesgo país
+EARN_TTL  = int(os.environ.get('EARN_TTL', str(6 * 3600)))  # seg — fechas/EPS esperado de earnings
+NEWS_TTL  = int(os.environ.get('NEWS_TTL', '600'))        # seg — noticias por ticker
+OPT_TTL   = int(os.environ.get('OPT_TTL', '300'))         # seg — cadena de opciones
+SI_TTL    = int(os.environ.get('SI_TTL', str(12 * 3600))) # seg — short interest (Yahoo lo actualiza 2 veces/mes)
+HIST_TTL  = int(os.environ.get('HIST_TTL', str(6 * 3600)))  # seg — cierres mensuales para la cartera
+
+_HTTP_HEADERS = {'User-Agent': 'Mozilla/5.0 (compatible; DUBZ-Monitor/2.0)'}
+_SYM_RE = re.compile(r'^[A-Z0-9.^=\-]{1,14}$')
+
+
+def _http_json(url, timeout=8):
+    r = requests.get(url, timeout=timeout, headers=_HTTP_HEADERS)
+    r.raise_for_status()
+    return r.json()
+
+
+def _clean_symbols(raw, limit):
+    out = []
+    for s in (raw or []):
+        s = str(s or '').upper().strip()
+        if s and _SYM_RE.match(s) and s not in out:
+            out.append(s)
+    return out[:limit]
+
+
+def _first_price(node):
+    """Busca el primer campo 'price' numérico dentro de un JSON anidado (para CriptoYa)."""
+    if isinstance(node, dict):
+        if 'price' in node:
+            return _num(node.get('price'))
+        for v in node.values():
+            p = _first_price(v)
+            if p:
+                return p
+    return None
+
+
+def _build_dolar():
+    """Cotizaciones del dólar. Fuente principal: dolarapi.com (agrega ámbito y otras casas).
+    Respaldo: CriptoYa (AL30). El frontend nunca pega contra estas APIs: lo hace el server,
+    así no hay problemas de CORS ni de límites por IP del navegador."""
+    out = {'asOf': datetime.utcnow().isoformat() + 'Z', 'casas': {}, 'fuentes': []}
+    cas = out['casas']
+    try:
+        for d in _http_json('https://dolarapi.com/v1/dolares'):
+            casa = d.get('casa')
+            if casa:
+                cas[casa] = {'compra': _num(d.get('compra')), 'venta': _num(d.get('venta')),
+                             'fecha': d.get('fechaActualizacion')}
+        out['fuentes'].append('dolarapi.com')
+    except Exception as e:
+        print('[dolar] dolarapi falló:', e)
+
+    def venta(casa):
+        c = cas.get(casa) or {}
+        return c.get('venta') or c.get('compra')
+
+    if not venta('bolsa') or not venta('contadoconliqui'):
+        try:
+            cy = _http_json('https://criptoya.com/api/dolar')
+            if not venta('bolsa'):
+                p = _first_price((cy.get('mep') or {}).get('al30')) or _first_price(cy.get('mep'))
+                if p:
+                    cas['bolsa'] = {'compra': p, 'venta': p, 'fecha': None}
+            if not venta('contadoconliqui'):
+                p = _first_price((cy.get('ccl') or {}).get('al30')) or _first_price(cy.get('ccl'))
+                if p:
+                    cas['contadoconliqui'] = {'compra': p, 'venta': p, 'fecha': None}
+            out['fuentes'].append('criptoya.com')
+        except Exception as e:
+            print('[dolar] criptoya falló:', e)
+
+    mep, ccl, ofi, blue = venta('bolsa'), venta('contadoconliqui'), venta('oficial'), venta('blue')
+    if not mep and not ccl and not ofi:
+        return None
+    out['mep'], out['ccl'], out['oficial'], out['blue'] = mep, ccl, ofi, blue
+    out['mayorista'] = venta('mayorista')
+
+    def brecha(a, b):
+        return round((a / b - 1) * 100, 2) if (a and b) else None
+    out['brechaCclMep'] = brecha(ccl, mep)
+    out['brechaMepOficial'] = brecha(mep, ofi)
+    out['brechaCclOficial'] = brecha(ccl, ofi)
+    out['brechaBlueOficial'] = brecha(blue, ofi)
+    return out
+
+
+def _dolar_hist(casa):
+    """Serie diaria [(fecha, venta)] de ArgentinaDatos (se cachea 1 hora)."""
+    def f():
+        data = _http_json('https://api.argentinadatos.com/v1/cotizaciones/dolares/' + casa, timeout=15)
+        pts = []
+        for d in data:
+            v = _num(d.get('venta') or d.get('compra'))
+            if v and d.get('fecha'):
+                pts.append((str(d['fecha'])[:10], v))
+        pts.sort()
+        return pts or None
+    return cached_call('dolarhist:' + casa, 3600, f) or []
+
+
+def get_dolar():
+    d = cached_call('dolar', DOLAR_TTL, _build_dolar)
+    return d
+
+
+def _build_riesgo():
+    try:
+        rp = _http_json('https://api.argentinadatos.com/v1/finanzas/indices/riesgo-pais', timeout=15)
+    except Exception as e:
+        print('[riesgo] serie falló:', e)
+        rp = None
+    if isinstance(rp, list) and len(rp) >= 2:
+        pts = [(str(x.get('fecha'))[:10], _num(x.get('valor'))) for x in rp if x.get('valor') is not None]
+        pts = [p for p in pts if p[1] is not None]
+        if len(pts) >= 2:
+            last, prev = pts[-1], pts[-2]
+            m1 = pts[-22] if len(pts) > 22 else pts[0]
+            return {'valor': last[1], 'fecha': last[0],
+                    'varDia': round(last[1] - prev[1], 1),
+                    'var1m': round(last[1] - m1[1], 1),
+                    'serie': [p[1] for p in pts[-90:]]}
+    try:
+        u = _http_json('https://api.argentinadatos.com/v1/finanzas/indices/riesgo-pais/ultimo')
+        return {'valor': _num(u.get('valor')), 'fecha': str(u.get('fecha'))[:10],
+                'varDia': None, 'var1m': None, 'serie': []}
+    except Exception as e:
+        print('[riesgo] ultimo falló:', e)
+        return None
+
+
+@app.route('/dolar', methods=['GET'])
+def dolar_route():
+    d = get_dolar()
+    if not d:
+        return jsonify({'error': 'No se pudo obtener el dólar'}), 502
+    out = dict(d)
+    out['riesgoPais'] = cached_call('riesgo', RIESGO_TTL, _build_riesgo)
+    # serie de brecha CCL/MEP (últimos 90 días hábiles) para el mini-gráfico
+    try:
+        b = dict(_dolar_hist('bolsa'))
+        c = dict(_dolar_hist('contadoconliqui'))
+        fechas = sorted(set(b) & set(c))[-90:]
+        out['serieBrechaCclMep'] = [round((c[f] / b[f] - 1) * 100, 2) for f in fechas]
+    except Exception:
+        out['serieBrechaCclMep'] = []
+    return jsonify(out)
+
+
+@app.route('/mep-historial', methods=['GET'])
+def mep_historial_route():
+    """MEP de fin de cada mes: {'2025-03': 1195.5, ...}. Lo usa la Cartera para valuar en
+    USD/ARS con el tipo de cambio de cada mes (y no con el MEP de hoy)."""
+    pts = _dolar_hist('bolsa')
+    if not pts:
+        return jsonify({'error': 'sin datos'}), 502
+    mm = {}
+    for f, v in pts:
+        mm[f[:7]] = v          # al estar ordenado por fecha, queda el último valor de cada mes
+    return jsonify({'meses': mm})
+
+
+# ─── EARNINGS ────────────────────────────────────────────────────────────────
+
+def _to_iso_date(x):
+    try:
+        return str(x)[:10]
+    except Exception:
+        return None
+
+
+def _fetch_earn_one(sym):
+    res = {'symbol': sym, 'date': None, 'dateEnd': None, 'estimated': False,
+           'epsEst': None, 'revEst': None}
+    today = datetime.utcnow().date().isoformat()
+    try:
+        t = yf.Ticker(sym)
+    except Exception:
+        return res
+    try:
+        cal = t.calendar
+        if isinstance(cal, dict) and cal:
+            fe = cal.get('Earnings Date')
+            lst = list(fe) if isinstance(fe, (list, tuple)) else ([fe] if fe else [])
+            ds = sorted(d for d in (_to_iso_date(x) for x in lst) if d and d >= today)
+            if ds:
+                res['date'] = ds[0]
+                if len(ds) > 1 and ds[-1] != ds[0]:   # Yahoo da un rango cuando la fecha no está confirmada
+                    res['dateEnd'] = ds[-1]
+                    res['estimated'] = True
+            res['epsEst'] = _num(cal.get('Earnings Average'))
+            res['revEst'] = _num(cal.get('Revenue Average'))
+    except Exception as e:
+        print('[earn] calendar', sym, e)
+    if not res['date']:
+        try:
+            ed = t.get_earnings_dates(limit=8)
+            if ed is not None and not ed.empty:
+                fut = []
+                for idx, row in ed.iterrows():
+                    d = _to_iso_date(idx)
+                    if d and d >= today:
+                        fut.append((d, _num(row.get('EPS Estimate'))))
+                if fut:
+                    fut.sort()
+                    res['date'], res['epsEst'] = fut[0][0], fut[0][1]
+                    res['estimated'] = True
+        except Exception as e:
+            print('[earn] dates', sym, e)
+    return res
+
+
+@app.route('/earnings', methods=['POST'])
+def earnings_route():
+    data = request.get_json(silent=True) or {}
+    symbols = _clean_symbols(data.get('symbols'), 60)
+    try:
+        days = max(1, min(120, int(data.get('days', 90))))
+    except (TypeError, ValueError):
+        days = 90
+    if not symbols:
+        return jsonify({'results': []})
+
+    def one(s):
+        return cached_call('earn:' + s, EARN_TTL, lambda: _fetch_earn_one(s))
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        rows = [r for r in ex.map(one, symbols) if r]
+    today = datetime.utcnow().date()
+    limit = (today + timedelta(days=days)).isoformat()
+    rows = [r for r in rows if r.get('date') and today.isoformat() <= r['date'] <= limit]
+    rows.sort(key=lambda r: (r['date'], r['symbol']))
+    return jsonify({'results': rows, 'asOf': datetime.utcnow().isoformat() + 'Z'})
+
+
+# ─── NOTICIAS ────────────────────────────────────────────────────────────────
+
+def _news_items(sym):
+    items = []
+    try:
+        for n in (yf.Ticker(sym).news or [])[:10]:
+            c = n.get('content') if isinstance(n.get('content'), dict) else None
+            if c:
+                url = ((c.get('canonicalUrl') or {}).get('url')) or ((c.get('clickThroughUrl') or {}).get('url'))
+                items.append({'symbol': sym, 'title': c.get('title'),
+                              'source': (c.get('provider') or {}).get('displayName'),
+                              'ts': c.get('pubDate'), 'url': url})
+            else:
+                ts = n.get('providerPublishTime')
+                items.append({'symbol': sym, 'title': n.get('title'), 'source': n.get('publisher'),
+                              'ts': datetime.utcfromtimestamp(ts).isoformat() + 'Z' if ts else None,
+                              'url': n.get('link')})
+    except Exception as e:
+        print('[news]', sym, e)
+    return [i for i in items if i.get('title')] or None
+
+
+@app.route('/news', methods=['POST'])
+def news_route():
+    data = request.get_json(silent=True) or {}
+    symbols = _clean_symbols(data.get('symbols'), 30)
+    try:
+        limit = max(1, min(60, int(data.get('limit', 30))))
+    except (TypeError, ValueError):
+        limit = 30
+    if not symbols:
+        return jsonify({'results': []})
+
+    def one(s):
+        return cached_call('news:' + s, NEWS_TTL, lambda: _news_items(s)) or []
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        lists = list(ex.map(one, symbols))
+    seen, merged = set(), []
+    for lst in lists:
+        for it in lst:
+            k = (it.get('title') or '').strip().lower()
+            if k and k not in seen:
+                seen.add(k)
+                merged.append(it)
+    merged.sort(key=lambda i: i.get('ts') or '', reverse=True)
+    return jsonify({'results': merged[:limit], 'asOf': datetime.utcnow().isoformat() + 'Z'})
+
+
+# ─── OPCIONES: PUT/CALL Y FLUJO INUSUAL ──────────────────────────────────────
+
+def _f(v, default=0.0):
+    try:
+        x = float(v)
+        return default if x != x else x
+    except Exception:
+        return default
+
+
+def _build_options(sym, max_days=45, max_exp=4):
+    t = yf.Ticker(sym)
+    exps = list(t.options or [])
+    if not exps:
+        return None
+    today = datetime.utcnow().date()
+    sel = []
+    for e in exps:
+        try:
+            dte = (datetime.strptime(e, '%Y-%m-%d').date() - today).days
+        except Exception:
+            continue
+        if dte < 0:
+            continue
+        if dte <= max_days or not sel:
+            sel.append((e, dte))
+        if len(sel) >= max_exp:
+            break
+    if not sel:
+        return None
+    price = None
+    try:
+        price = _num(t.fast_info.get('last_price'))
+    except Exception:
+        pass
+    if not price:
+        try:
+            h = t.history(period='5d')
+            price = _num(h['Close'].dropna().iloc[-1])
+        except Exception:
+            price = None
+
+    cv = pv = coi = poi = 0.0
+    by_exp, unusual, ivs = [], [], []
+    for e, dte in sel:
+        try:
+            ch = t.option_chain(e)
+        except Exception as ex_:
+            print('[options] chain', sym, e, ex_)
+            continue
+        e_cv = e_pv = e_coi = e_poi = 0.0
+        for side, df in (('C', ch.calls), ('P', ch.puts)):
+            if df is None or df.empty:
+                continue
+            for _, r in df.iterrows():
+                vol, oi, last = _f(r.get('volume')), _f(r.get('openInterest')), _f(r.get('lastPrice'))
+                strike = _f(r.get('strike'))
+                if side == 'C':
+                    e_cv += vol; e_coi += oi
+                else:
+                    e_pv += vol; e_poi += oi
+                prem = vol * last * 100
+                is_unusual = vol >= 500 and prem >= 50000 and ((oi > 0 and vol / oi >= 2) or (oi == 0 and vol >= 1000))
+                if is_unusual:
+                    unusual.append({'exp': e, 'dte': dte, 'strike': strike, 'side': side,
+                                    'vol': int(vol), 'oi': int(oi),
+                                    'volOi': round(vol / oi, 1) if oi > 0 else None,
+                                    'last': round(last, 2), 'premium': int(prem),
+                                    'itm': bool(r.get('inTheMoney')),
+                                    'iv': _num(r.get('impliedVolatility'))})
+                if price and dte <= 30 and abs(strike - price) / price <= 0.03:
+                    iv = _f(r.get('impliedVolatility'), None)
+                    if iv:
+                        ivs.append(iv)
+        cv += e_cv; pv += e_pv; coi += e_coi; poi += e_poi
+        by_exp.append({'exp': e, 'dte': dte, 'callVol': int(e_cv), 'putVol': int(e_pv),
+                       'pcVol': round(e_pv / e_cv, 2) if e_cv else None,
+                       'pcOi': round(e_poi / e_coi, 2) if e_coi else None})
+    if not by_exp:
+        return None
+    unusual.sort(key=lambda u: u['premium'], reverse=True)
+    pc_vol = round(pv / cv, 2) if cv else None
+    if pc_vol is None:
+        sentiment = None
+    elif pc_vol < 0.7:
+        sentiment = 'alcista'
+    elif pc_vol > 1.0:
+        sentiment = 'bajista'
+    else:
+        sentiment = 'neutral'
+    return {'symbol': sym, 'price': price, 'asOf': datetime.utcnow().isoformat() + 'Z',
+            'expirations': [e for e, _ in sel],
+            'callVol': int(cv), 'putVol': int(pv), 'callOi': int(coi), 'putOi': int(poi),
+            'pcVol': pc_vol, 'pcOi': round(poi / coi, 2) if coi else None,
+            'ivAtm': round(sum(ivs) / len(ivs) * 100, 1) if ivs else None,
+            'sentiment': sentiment, 'byExp': by_exp, 'unusual': unusual[:12]}
+
+
+@app.route('/options', methods=['GET'])
+def options_route():
+    sym = request.args.get('symbol', '').upper().strip()
+    if not sym or not _SYM_RE.match(sym):
+        return jsonify({'error': 'símbolo inválido'}), 400
+    d = cached_call('opt:' + sym, OPT_TTL, lambda: _build_options(sym))
+    if not d:
+        return jsonify({'error': 'Sin opciones listadas para ' + sym}), 404
+    return jsonify(d)
+
+
+# ─── SHORT INTEREST ──────────────────────────────────────────────────────────
+
+def _fetch_si(sym):
+    info = yf.Ticker(sym).info or {}
+    spf = info.get('shortPercentOfFloat')
+    ss = info.get('sharesShort')
+    if spf is None and ss is None:
+        return None
+    prior = info.get('sharesShortPriorMonth')
+    chg = round((ss / prior - 1) * 100, 1) if (ss and prior) else None
+    dt = info.get('dateShortInterest')
+    try:
+        dstr = datetime.utcfromtimestamp(dt).strftime('%Y-%m-%d') if dt else None
+    except Exception:
+        dstr = None
+    return {'symbol': sym, 'name': info.get('shortName'),
+            'pctFloat': round(float(spf) * 100, 2) if spf is not None else None,
+            'daysToCover': _num(info.get('shortRatio')),
+            'sharesShort': int(ss) if ss else None,
+            'chgMonthPct': chg, 'asOfDate': dstr}
+
+
+@app.route('/shortint', methods=['POST'])
+def shortint_route():
+    data = request.get_json(silent=True) or {}
+    symbols = _clean_symbols(data.get('symbols'), 40)
+    if not symbols:
+        return jsonify({'results': []})
+
+    def one(s):
+        return cached_call('si:' + s, SI_TTL, lambda: _fetch_si(s))
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        rows = [r for r in ex.map(one, symbols) if r]
+    return jsonify({'results': rows})
+
+
+# ─── HISTORIAL MENSUAL (evolución de la cartera) ─────────────────────────────
+
+@app.route('/history', methods=['POST'])
+def history_route():
+    """Cierres de fin de mes SIN ajustar por dividendos (el valor real del precio ese día)."""
+    data = request.get_json(silent=True) or {}
+    symbols = _clean_symbols(data.get('symbols'), 40)
+    period = data.get('period') if data.get('period') in ('1y', '2y', '5y', '10y', 'max') else '5y'
+    if not symbols:
+        return jsonify({'results': {}})
+
+    def build():
+        out = {}
+        for s, h in _download_many(symbols, period=period, interval='1mo', auto_adjust=False).items():
+            try:
+                ser = h['Close'].dropna().astype(float)
+                m = {}
+                for d, v in ser.items():
+                    m[d.strftime('%Y-%m')] = round(float(v), 4)
+                if m:
+                    out[s] = m
+            except Exception:
+                continue
+        return out or None
+    key = 'hist:%s:%s' % (period, ','.join(sorted(symbols)))
+    res = cached_call(key, HIST_TTL, build) or {}
+    return jsonify({'results': res, 'period': period})
+
+
+# ─── ROTACIÓN SECTORIAL DEL MERVAL (canastas equiponderadas vs ^MERV) ────────
+
+AR_SECTORS = [
+    ('BANC', 'Bancos y Finanzas',       ['GGAL.BA', 'BMA.BA', 'SUPV.BA', 'BBAR.BA', 'BYMA.BA']),
+    ('PYG',  'Petróleo y Gas',          ['YPFD.BA', 'VIST.BA', 'TGSU2.BA', 'TGNO4.BA']),
+    ('ELEC', 'Energía eléctrica',       ['PAMP.BA', 'CEPU.BA', 'EDN.BA', 'TRAN.BA']),
+    ('MAT',  'Materiales e Industria',  ['TXAR.BA', 'ALUA.BA', 'LOMA.BA']),
+    ('CONS', 'Consumo, Agro y Otros',   ['CRES.BA', 'MIRG.BA', 'COME.BA', 'TECO2.BA']),
+]
+
+
+def _build_rrg_ar(period, trail):
+    bench = '^MERV'
+    syms = [bench] + sorted({m for _, _, ms in AR_SECTORS for m in ms})
+    frames = _download_many(syms, period='2y')
+    if bench not in frames:
+        return None
+    raw = pd.DataFrame({s: f['Close'].astype(float) for s, f in frames.items()})
+    idx = pd.to_datetime(raw.index)
+    raw.index = (idx.tz_localize(None) if getattr(idx, 'tz', None) is not None else idx).normalize()
+    raw = raw[~raw.index.duplicated(keep='last')].sort_index()
+    raw = raw.dropna(subset=[bench]).ffill()
+    rets = raw.pct_change()
+    closes = pd.DataFrame({bench: raw[bench]})
+    members_ok = {}
+    for code, name, members in AR_SECTORS:
+        cols = [m for m in members if m in rets.columns and rets[m].notna().sum() > 60]
+        if not cols:
+            continue
+        sector_ret = rets[cols].mean(axis=1, skipna=True).fillna(0.0)
+        closes[code] = 100 * (1 + sector_ret).cumprod()
+        members_ok[code] = [m[:-3] for m in cols]
+    if len(closes.columns) < 2:
+        return None
+    if period == 'weekly':
+        closes = closes.resample('W-FRI').last().dropna(subset=[bench])
+        w, k = 26, 4
+    else:
+        w, k = 60, 5
+    sectors = []
+    for code, name, _ in AR_SECTORS:
+        if code not in closes.columns:
+            continue
+        c = closes[code]
+        rs = 100 * c / closes[bench]
+        ratio = 100 + (rs - rs.rolling(w).mean()) / rs.rolling(w).std(ddof=0)
+        roc = ratio.diff(k)
+        mom = 100 + roc / roc.rolling(w).std(ddof=0)
+        df = pd.DataFrame({'x': ratio, 'y': mom}).replace([np.inf, -np.inf], np.nan).dropna()
+        if len(df) < 2:
+            continue
+        tail = df.tail(trail)
+        cl = c.dropna()
+
+        def ret(n, cl=cl):
+            return round((cl.iloc[-1] / cl.iloc[-1 - n] - 1) * 100, 2) if len(cl) > n else None
+        x, y = float(df['x'].iloc[-1]), float(df['y'].iloc[-1])
+        sectors.append({
+            'symbol': code, 'name': name, 'members': members_ok.get(code, []),
+            'ratio': round(x, 2), 'momentum': round(y, 2), 'quadrant': _quadrant(x, y),
+            'trail': [{'x': round(float(a), 2), 'y': round(float(b), 2), 'd': d.strftime('%Y-%m-%d')}
+                      for d, a, b in zip(tail.index, tail['x'], tail['y'])],
+            'chg1d': ret(1), 'chg1w': ret(5), 'chg1m': ret(21), 'chg3m': ret(63),
+        })
+    if not sectors:
+        return None
+    return {'market': 'ar', 'period': period, 'benchmark': 'MERVAL', 'asOf': closes.index[-1].strftime('%Y-%m-%d'),
+            'sectors': sectors, 'params': {'window': w, 'rocPeriod': k, 'trail': trail}}
+
+
+def get_rrg_ar(period='daily', trail=8):
+    period = 'weekly' if period == 'weekly' else 'daily'
+    trail = max(3, min(16, int(trail)))
+    return cached_call('rrg:ar:%s:%d' % (period, trail), RRG_TTL, lambda: _build_rrg_ar(period, trail))
+
 
 
 @app.route('/health', methods=['GET'])
