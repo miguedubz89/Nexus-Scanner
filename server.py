@@ -2,7 +2,7 @@
 NEXUS SCANNER — Servidor Proxy Local
 =====================================
 Instalación (una sola vez):
-    pip install yfinance flask flask-cors pandas numpy requests firebase-admin
+    pip install yfinance flask flask-cors pandas numpy requests firebase-admin flask-compress
 
 Uso:
     python server.py
@@ -23,10 +23,75 @@ import pandas as pd
 import numpy as np
 import traceback
 import time
+import threading
 from concurrent.futures import ThreadPoolExecutor
 
 app = Flask(__name__)
 CORS(app)  # Permite que el HTML local llame al servidor
+try:
+    from flask_compress import Compress   # opcional: pip install flask-compress (JSON ~5x más chico)
+    Compress(app)
+except Exception:
+    pass
+
+# ─── CACHE EN MEMORIA (TTL + "single-flight") ────────────────────────────────
+# Yahoo es el cuello de botella de todo el scanner. Estos TTL evitan pedir lo
+# mismo dos veces: los fundamentals (balances, EPS, ROE...) cambian una vez por
+# trimestre, así que se cachean horas; el historial técnico, minutos.
+# "Single-flight": si 5 requests piden el mismo ticker a la vez, solo uno va a
+# Yahoo y los otros esperan ese resultado (antes cada uno hacía su propio pedido).
+TECH_TTL     = int(os.environ.get('TECH_TTL', '120'))        # seg — historial + indicadores
+FUND_TTL     = int(os.environ.get('FUND_TTL', str(6*3600)))  # seg — fundamentals (EPS, ROE, institucional)
+MARKET_TTL   = int(os.environ.get('MARKET_TTL', '300'))      # seg — SPY/QQQ/VIX/Merval/macro
+FG_TTL       = int(os.environ.get('FG_TTL', '600'))          # seg — Fear & Greed
+RRG_TTL      = int(os.environ.get('RRG_TTL', '900'))         # seg — rotación sectorial
+PRECIO_TTL   = int(os.environ.get('PRECIO_TTL', '15'))       # seg — /precio (auto-refresh)
+
+_CACHE = {}
+_CACHE_LOCK = threading.Lock()
+_KEY_LOCKS = {}
+
+def cache_get(key, ttl):
+    with _CACHE_LOCK:
+        v = _CACHE.get(key)
+    if v and (time.time() - v[0]) < ttl:
+        return v[1]
+    return None
+
+def cache_get_stale(key):
+    with _CACHE_LOCK:
+        v = _CACHE.get(key)
+    return v[1] if v else None
+
+def cache_set(key, val):
+    with _CACHE_LOCK:
+        _CACHE[key] = (time.time(), val)
+        if len(_CACHE) > 5000:   # límite simple de memoria: borra las 800 más viejas
+            for k, _ in sorted(_CACHE.items(), key=lambda kv: kv[1][0])[:800]:
+                _CACHE.pop(k, None)
+    return val
+
+def cached_call(key, ttl, fn):
+    """Devuelve el valor cacheado si está fresco; si no, lo calcula UNA sola vez
+    (aunque lleguen varios requests juntos). Si Yahoo falla, devuelve el último
+    valor viejo que haya en vez de un error."""
+    v = cache_get(key, ttl)
+    if v is not None:
+        return v
+    with _CACHE_LOCK:
+        lock = _KEY_LOCKS.setdefault(key, threading.Lock())
+    with lock:
+        v = cache_get(key, ttl)
+        if v is not None:
+            return v
+        try:
+            val = fn()
+        except Exception:
+            traceback.print_exc()
+            val = None
+        if val is not None:
+            return cache_set(key, val)
+        return cache_get_stale(key)
 
 # ─── MONETIZACIÓN: MERCADO PAGO + FIREBASE ADMIN ──────────────────────────────
 # Variables de entorno necesarias (configurar en Railway → Variables):
@@ -274,6 +339,20 @@ def fetch_market_pack(ticker):
     if not base:
         return None
     pack = dict(base)
+    # Mismos números que ve el usuario en el scanner (técnicos + CANSLIM), desde el cache
+    try:
+        _tc = cached_call('tech:' + ticker, TECH_TTL, lambda: _fetch_tech(ticker))
+        _fd = cached_call('fund:' + ticker, FUND_TTL, lambda: _fetch_fund(ticker))
+        if _tc:
+            pack['scanner_tecnico'] = {k: _tc.get(k) for k in (
+                'rsi', 'adx', 'distEma50', 'distEma200', 'mom3m', 'mom6m', 'mom12m', 'rsScore',
+                'distFromHigh', 'yearHigh', 'yearLow', 'upDownVolRatio', 'sqzOn', 'sqzOff', 'sqzMom', 'volAnnualized', 'betaCalc')}
+        if _fd:
+            pack['scanner_canslim'] = {k: _fd.get(k) for k in (
+                'epsGrowthQ', 'epsGrowthQPrev', 'epsAccel', 'epsGrowthA', 'epsCagr3', 'epsSource', 'revGrowthQ',
+                'roe', 'profitMargin', 'heldPctInstitutions', 'floatShares')}
+    except Exception as e:
+        print('[Rendi AI] datos de scanner no disponibles para', ticker, ':', e)
     try:
         t = yf.Ticker(ticker)
         ex = ThreadPoolExecutor(max_workers=3)
@@ -315,9 +394,58 @@ AI_TOOLS = [{
 }]
 
 AI_WEB_TOOL = {'type': 'web_search_20250305', 'name': 'web_search', 'max_uses': AI_WEB_MAX_USES}
+AI_TOOLS.append({
+    'name': 'mercado_hoy',
+    'description': ('Panorama del mercado AHORA (instantáneo, sin costo de búsqueda): índice Fear & Greed de CNN, '
+                    'dirección de S&P 500 / Nasdaq / Russell / Merval con días de distribución, VIX, bono 10A, DXY, '
+                    'oro, petróleo, Bitcoin y rotación sectorial (Líder/Mejorando/Debilitándose/Rezagado). '
+                    'Usala para preguntas sobre sentimiento, si el mercado está para comprar, qué sectores lideran, etc.'),
+    'input_schema': {'type': 'object', 'properties': {}},
+})
+
+
+def market_snapshot_text():
+    """Resumen compacto (todo sale de caches de 5-15 min) del estado del mercado para la IA:
+    Fear & Greed, dirección de índices (la 'M' de CANSLIM), macro y rotación sectorial."""
+    lines = []
+    try:
+        fg = get_fear_greed()
+        if fg:
+            s = 'Fear & Greed (%s): %s = %s' % (fg.get('source'), fg.get('score'), fg.get('rating'))
+            if fg.get('previousClose') is not None:
+                s += ' | cierre previo %s, hace 1 semana %s, hace 1 mes %s' % (fg.get('previousClose'), fg.get('week'), fg.get('month'))
+            lines.append(s)
+    except Exception:
+        pass
+    try:
+        mk = get_market_data()
+        if mk:
+            lines.append('Índices: ' + '; '.join(
+                '%s %+.2f%% hoy, %s (vs EMA200 %s%%%s)' % (
+                    i['name'], i['chgPct'], i['status'] or 's/d',
+                    ('%+.1f' % i['distEma200']) if i['distEma200'] is not None else '--',
+                    (', %d días distribución' % i['distDays']) if i.get('distDays') is not None else '')
+                for i in mk['indexes']))
+            if mk.get('macro'):
+                lines.append('Macro: ' + '; '.join('%s %s (%+.2f%% hoy)' % (m['name'], m['price'], m['chgPct']) for m in mk['macro']))
+    except Exception:
+        pass
+    try:
+        rr = get_rrg('daily', 8)
+        if rr:
+            by = {}
+            for s in rr['sectors']:
+                by.setdefault(s['quadrant'], []).append('%s (%s)' % (s['name'], s['symbol']))
+            lines.append('Rotación sectorial (RRG diario vs SPY, ETFs SPDR): ' + ' | '.join(
+                '%s: %s' % (q, ', '.join(by[q])) for q in ('Líder', 'Mejorando', 'Debilitándose', 'Rezagado') if q in by))
+    except Exception:
+        pass
+    return '\n'.join(lines)
 
 
 def run_ai_tool(name, inp):
+    if name == 'mercado_hoy':
+        return market_snapshot_text() or 'No hay datos de mercado disponibles en este momento.'
     if name == 'datos_ticker':
         tk = str((inp or {}).get('ticker') or '').strip().upper()
         pack = fetch_market_pack(tk)
@@ -525,7 +653,7 @@ def pct_dist(price, ref):
 def momentum(closes, days):
     if len(closes) < days + 1:
         return None
-    return round((closes[-1] / closes[-days] - 1) * 100, 2)
+    return round((closes[-1] / closes[-days - 1] - 1) * 100, 2)
 
 def calc_adx(hist, period=14):
     """
@@ -577,12 +705,12 @@ def calc_adx(hist, period=14):
             apdm[i] = apdm[i-1] - apdm[i-1]/period + pdm[i]
             andm[i] = andm[i-1] - andm[i-1]/period + ndm[i]
 
-        # +DI / -DI
-        pdi = np.where(atr > 0, 100 * apdm / atr, 0.0)
-        ndi = np.where(atr > 0, 100 * andm / atr, 0.0)
-
-        # DX
-        dx = np.where((pdi + ndi) > 0, 100 * np.abs(pdi - ndi) / (pdi + ndi), 0.0)
+        # +DI / -DI  (errstate: las primeras posiciones tienen atr=0 y generaban warnings en el log)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            pdi = np.where(atr > 0, 100 * apdm / atr, 0.0)
+            ndi = np.where(atr > 0, 100 * andm / atr, 0.0)
+            # DX
+            dx = np.where((pdi + ndi) > 0, 100 * np.abs(pdi - ndi) / (pdi + ndi), 0.0)
 
         # ADX = Wilder smooth de DX
         adx_arr = np.zeros(n)
@@ -646,19 +774,20 @@ _BENCH_CACHE = {}
 _BENCH_TTL_SECONDS = 600  # 10 minutos
 
 def _get_benchmark_closes(bench_symbol, period='1y'):
-    now = datetime.now().timestamp()
-    cached = _BENCH_CACHE.get(bench_symbol)
-    if cached and (now - cached[0]) < _BENCH_TTL_SECONDS:
-        return cached[1]
-    try:
+    def _f():
         bh = yf.Ticker(bench_symbol).history(period=period, interval='1d', auto_adjust=True)
         bclose = bh['Close'].dropna()
-        if bclose.empty:
-            return cached[1] if cached else None
-        _BENCH_CACHE[bench_symbol] = (now, bclose)
-        return bclose
-    except Exception:
-        return cached[1] if cached else None
+        return bclose if not bclose.empty else None
+    return cached_call('bench:' + bench_symbol, _BENCH_TTL_SECONDS, _f)
+
+def _naive_dates(s):
+    """Serie con índice de fechas sin zona horaria (alinea tickers de distintas bolsas)."""
+    idx = pd.to_datetime(s.index)
+    if getattr(idx, 'tz', None) is not None:
+        idx = idx.tz_localize(None)
+    s = s.copy()
+    s.index = idx.normalize()
+    return s[~s.index.duplicated(keep='last')]
 
 def calc_beta_local(close_series, symbol):
     """Beta propio = cov(retornos del activo, retornos del índice) / var(retornos
@@ -669,7 +798,7 @@ def calc_beta_local(close_series, symbol):
         bench_closes = _get_benchmark_closes(bench_symbol)
         if bench_closes is None or len(bench_closes) < 30:
             return None
-        df = pd.DataFrame({'a': close_series, 'b': bench_closes}).dropna()
+        df = pd.DataFrame({'a': _naive_dates(close_series), 'b': _naive_dates(bench_closes)}).dropna()
         if len(df) < 30:
             return None
         ra = df['a'].pct_change().dropna()
@@ -690,312 +819,707 @@ def calc_beta_local(close_series, symbol):
 
 def calc_squeeze_momentum(hist, length=20, mult_bb=2.0, mult_kc=1.5):
     """
-    TTM Squeeze Momentum — LazyBear method.
+    TTM Squeeze Momentum — LazyBear. Versión vectorizada (pandas rolling): mismo
+    resultado que la anterior pero sin loops de Python por vela; la regresión
+    lineal solo se calcula en las 2 últimas velas, que son las únicas que se usan.
     Devuelve: { sqzOn, sqzOff, sqzMom, sqzMomPrev }
-      sqzOn   = True  → squeeze activo (Bollinger dentro de Keltner = compresión)
-      sqzOff  = True  → squeeze se acaba de liberar (potencial ruptura)
-      sqzMom  = valor del momentum (positivo = alcista, negativo = bajista)
-      sqzMomPrev = momentum de la vela anterior (para detectar dirección)
     """
     try:
         if len(hist) < length + 5:
             return None
+        close = hist['Close'].astype(float)
+        high  = hist['High'].astype(float)
+        low   = hist['Low'].astype(float)
 
-        close = hist['Close'].values.astype(float)
-        high  = hist['High'].values.astype(float)
-        low   = hist['Low'].values.astype(float)
-        n     = len(close)
-
-        # ── Bollinger Bands ──────────────────────────────
-        def sma(arr, p):
-            return np.array([np.mean(arr[max(0,i-p+1):i+1]) if i >= p-1 else np.nan for i in range(len(arr))])
-
-        def stdev(arr, p):
-            return np.array([np.std(arr[max(0,i-p+1):i+1], ddof=0) if i >= p-1 else np.nan for i in range(len(arr))])
-
-        basis = sma(close, length)
-        dev   = stdev(close, length)
+        basis    = close.rolling(length).mean()
+        dev      = close.rolling(length).std(ddof=0)
         bb_upper = basis + mult_bb * dev
         bb_lower = basis - mult_bb * dev
 
-        # ── Keltner Channels ─────────────────────────────
-        # True Range para ATR
-        tr = np.zeros(n)
-        for i in range(1, n):
-            tr[i] = max(high[i]-low[i], abs(high[i]-close[i-1]), abs(low[i]-close[i-1]))
-        tr[0] = high[0] - low[0]
-        atr_kc = sma(tr, length)
+        prev_close = close.shift(1)
+        tr = pd.concat([high - low, (high - prev_close).abs(), (low - prev_close).abs()], axis=1).max(axis=1)
+        atr_kc   = tr.rolling(length).mean()
         kc_upper = basis + mult_kc * atr_kc
         kc_lower = basis - mult_kc * atr_kc
 
-        # ── Squeeze detection ────────────────────────────
-        sqz_on  = (bb_lower > kc_lower) & (bb_upper < kc_upper)
-        sqz_off = (bb_lower < kc_lower) & (bb_upper > kc_upper)
+        sqz_on  = bool(((bb_lower > kc_lower) & (bb_upper < kc_upper)).iloc[-1])
+        sqz_off = bool(((bb_lower < kc_lower) & (bb_upper > kc_upper)).iloc[-1])
 
-        # ── Momentum (delta de precio vs media) ──────────
-        def highest(arr, p):
-            return np.array([np.max(arr[max(0,i-p+1):i+1]) if i >= p-1 else np.nan for i in range(len(arr))])
-        def lowest(arr, p):
-            return np.array([np.min(arr[max(0,i-p+1):i+1]) if i >= p-1 else np.nan for i in range(len(arr))])
+        mid   = (high.rolling(length).max() + low.rolling(length).min()) / 2
+        delta = (close - (mid + basis) / 2).values
+        x  = np.arange(length, dtype=float)
+        xm = x.mean()
+        denom = float(np.sum((x - xm) ** 2))
 
-        mid   = (highest(high, length) + lowest(low, length)) / 2
-        delta = close - (mid + basis) / 2
+        def mom_at(idx):
+            if idx < length - 1:
+                return float('nan')
+            y = delta[idx - length + 1: idx + 1]
+            if len(y) < length or np.isnan(y).any():
+                return float('nan')
+            ym = y.mean()
+            slope = float(np.sum((x - xm) * (y - ym)) / denom) if denom else 0.0
+            return slope * (length - 1) + (ym - slope * xm)
 
-        # Regresión lineal del delta (length períodos)
-        mom = np.full(n, np.nan)
-        for i in range(length - 1, n):
-            y  = delta[i-length+1:i+1]
-            x  = np.arange(length, dtype=float)
-            if np.any(np.isnan(y)):
-                continue
-            xm = x.mean(); ym = y.mean()
-            denom = np.sum((x - xm) ** 2)
-            if denom == 0:
-                mom[i] = 0.0
-                continue
-            slope  = np.sum((x - xm) * (y - ym)) / denom
-            intercept = ym - slope * xm
-            mom[i] = slope * (length - 1) + intercept
-
-        if np.isnan(mom[-1]):
+        n = len(delta)
+        m_last, m_prev = mom_at(n - 1), mom_at(n - 2)
+        if np.isnan(m_last):
             return None
-
         return {
-            'sqzOn':      bool(sqz_on[-1]),
-            'sqzOff':     bool(sqz_off[-1]),
-            'sqzMom':     round(float(mom[-1]), 4),
-            'sqzMomPrev': round(float(mom[-2]), 4) if not np.isnan(mom[-2]) else None,
+            'sqzOn':      sqz_on,
+            'sqzOff':     sqz_off,
+            'sqzMom':     round(float(m_last), 4),
+            'sqzMomPrev': round(float(m_prev), 4) if not np.isnan(m_prev) else None,
         }
     except Exception:
         return None
 
-@app.route('/quote', methods=['GET'])
-def get_quote():
+
+# ─── SCORE DE FUERZA RELATIVA (estilo IBD) + VOLUMEN COMPRA/VENTA ─────────────
+
+def calc_rs_score(closes):
+    """Fuerza relativa de precio estilo IBD: 40% del retorno del último trimestre +
+    20% de cada uno de los 3 trimestres anteriores (los últimos 3 meses pesan el doble).
+    Es la base del ranking 'L' (Leader) de CANSLIM. Si hay menos de 12 meses de
+    historial, usa los trimestres disponibles y reescala los pesos."""
+    n = len(closes)
+    num = den = 0.0
+    for i, w in enumerate((0.4, 0.2, 0.2, 0.2)):
+        a, b = 63 * i, 63 * (i + 1)
+        if n <= b:
+            break
+        p_new, p_old = closes[-1 - a], closes[-1 - b]
+        if p_old and p_old > 0:
+            num += w * (p_new / p_old - 1)
+            den += w
+    if den < 0.4:
+        return None
+    return round(num / den * 100, 2)
+
+
+def calc_updown_ratio(closes, volumes, n=50):
+    """Volumen acumulado en ruedas de suba / en ruedas de baja (últimas n ruedas).
+    >1 = acumulación (más volumen cuando sube que cuando baja). O'Neil usa 50 ruedas."""
+    try:
+        n = min(n, len(closes) - 1)
+        if n < 10:
+            return None
+        up = down = 0.0
+        for i in range(len(closes) - n, len(closes)):
+            if closes[i] > closes[i - 1]:
+                up += volumes[i]
+            elif closes[i] < closes[i - 1]:
+                down += volumes[i]
+        if down <= 0:
+            return None
+        return round(up / down, 2)
+    except Exception:
+        return None
+
+
+# ─── TÉCNICOS: todo lo que sale del historial diario (sin llamar a info/financials) ───
+
+def _tech_from_hist(symbol, hist):
+    hist = hist.dropna(subset=['Close'])
+    if hist.empty or len(hist) < 5:
+        return None
+    close_series = hist['Close'].astype(float)
+    closes  = close_series.values.tolist()
+    volumes = hist['Volume'].fillna(0).astype(float).values.tolist()
+
+    price      = round(closes[-1], 4)
+    prev_close = round(closes[-2], 4) if len(closes) >= 2 else price
+    chg_pct    = round((price - prev_close) / prev_close * 100, 2) if prev_close else 0
+
+    ema50, ema200 = calc_ema(closes, 50), calc_ema(closes, 200)
+    mom3, mom6 = momentum(closes, 63), momentum(closes, 126)
+    mom12 = momentum(closes, 252) if len(closes) >= 253 else mom6
+
+    vol_today = int(volumes[-1]) if volumes else 0
+    avg_vol20 = int(np.mean(volumes[-20:])) if len(volumes) >= 20 else vol_today
+    vol_week, avg_vol_week = calc_weekly_volume(hist)
+
+    highs = hist['High'].replace(0, np.nan).astype(float)
+    lows  = hist['Low'].replace(0, np.nan).astype(float)
+    high52 = float(highs.max()) if highs.notna().any() else float(max(closes))
+    low52  = float(lows.min())  if lows.notna().any()  else float(min(closes))
+    day_high = float(highs.iloc[-1]) if pd.notna(highs.iloc[-1]) else None
+    day_low  = float(lows.iloc[-1])  if pd.notna(lows.iloc[-1])  else None
+    high52, low52 = round(high52, 4), round(low52, 4)
+
+    sqz = calc_squeeze_momentum(hist) or {}
+
+    return {
+        'symbol':        symbol,
+        'shortName':     symbol,
+        'currency':      'ARS' if symbol.endswith('.BA') else 'USD',
+        'price':         price,
+        'prevClose':     prev_close,
+        'chgPct':        chg_pct,
+        'rsi':           calc_rsi(closes),
+        'adx':           calc_adx(hist),
+        'ema50':         ema50,
+        'ema200':        ema200,
+        'sma50':         calc_sma(closes, 50),
+        'sma200':        calc_sma(closes, 200),
+        'distEma50':     pct_dist(price, ema50),
+        'distEma200':    pct_dist(price, ema200),
+        'mom3m':         mom3,
+        'mom6m':         mom6,
+        'mom12m':        mom12,
+        'rsScore':       calc_rs_score(closes),
+        'volume':        vol_today,
+        'avgVol20':      avg_vol20,
+        'volWeek':       vol_week,
+        'avgVolWeek':    avg_vol_week,
+        'volAnnualized': calc_volatility_annualized(closes, period=20),
+        # Máx/Mín reales (intradiarios) → el frontend ya no necesita los proxies CORS
+        'high52':        high52,
+        'low52':         low52,
+        'yearHigh':      high52,
+        'yearLow':       low52,
+        'dayHigh':       round(day_high, 4) if day_high is not None else None,
+        'dayLow':        round(day_low, 4) if day_low is not None else None,
+        'distFromHigh':  pct_dist(price, high52),
+        'distFromLow':   pct_dist(price, low52),
+        'betaCalc':      calc_beta_local(close_series, symbol),
+        'upDownVolRatio': calc_updown_ratio(closes, volumes, 50),   # 50 ruedas (O'Neil)
+        'upDownVol20':    calc_updown_ratio(closes, volumes, 20),
+        'spark':         [round(c, 2) for c in closes[-20:]],
+        'sqzOn':         sqz.get('sqzOn'),
+        'sqzOff':        sqz.get('sqzOff'),
+        'sqzMom':        sqz.get('sqzMom'),
+        'sqzMomPrev':    sqz.get('sqzMomPrev'),
+    }
+
+
+def _fetch_tech(symbol):
+    hist = yf.Ticker(symbol).history(period='1y', interval='1d', auto_adjust=True)
+    if hist is None or hist.empty:
+        return None
+    return _tech_from_hist(symbol, hist)
+
+
+def _pick_symbol_frame(df, sym, n_syms):
+    """Saca el DataFrame de UN símbolo de un yf.download (maneja las distintas
+    formas de columnas que devuelven las versiones de yfinance)."""
+    if not isinstance(df.columns, pd.MultiIndex):
+        return df if n_syms == 1 else None
+    lv0 = df.columns.get_level_values(0)
+    lv1 = df.columns.get_level_values(1)
+    if sym in lv0:
+        return df[sym]
+    if sym in lv1:
+        return df.xs(sym, axis=1, level=1)
+    return None
+
+
+def _download_many(symbols, period='1y', interval='1d'):
+    """UNA sola llamada a Yahoo para muchos símbolos (mucho más rápido que N llamadas
+    sueltas). Devuelve {symbol: DataFrame OHLCV}; los que no vengan quedan afuera."""
+    out = {}
+    if not symbols:
+        return out
+    try:
+        df = yf.download(tickers=symbols, period=period, interval=interval, auto_adjust=True,
+                         group_by='ticker', threads=True, progress=False)
+    except Exception:
+        traceback.print_exc()
+        return out
+    if df is None or df.empty:
+        return out
+    for s in symbols:
+        try:
+            sub = _pick_symbol_frame(df, s, len(symbols))
+            if sub is None:
+                continue
+            sub = sub.dropna(how='all')
+            if 'Close' in sub.columns and sub['Close'].notna().sum() >= 5:
+                out[s] = sub
+        except Exception:
+            continue
+    return out
+
+
+@app.route('/techbatch', methods=['POST'])
+def get_tech_batch():
+    """Indicadores técnicos de MUCHOS tickers en un solo request (y una sola
+    descarga a Yahoo). Es la carga rápida del scanner: precio, RSI, ADX, EMAs,
+    volumen, momentum, Máx/Mín 52s, fuerza relativa... Los fundamentals de CANSLIM
+    (EPS, ROE, institucional) llegan aparte por /fundamentals, cacheados."""
+    data = request.get_json(silent=True) or {}
+    symbols = []
+    for s in (data.get('symbols') or []):
+        s = str(s or '').upper().strip()
+        if s and re.match(r'^[A-Z0-9.^=\-]{1,14}$', s) and s not in symbols:
+            symbols.append(s)
+    symbols = symbols[:80]
+    results = {}
+    missing = []
+    for s in symbols:
+        c = cache_get('tech:' + s, TECH_TTL)
+        if c is not None:
+            results[s] = c
+        else:
+            missing.append(s)
+
+    if missing:
+        frames = _download_many(missing)
+        for s, hist in frames.items():
+            try:
+                t = _tech_from_hist(s, hist)
+                if t:
+                    cache_set('tech:' + s, t)
+                    results[s] = t
+            except Exception:
+                traceback.print_exc()
+        # Los que la descarga masiva no trajo: pedido individual en paralelo (red de seguridad)
+        still = [s for s in missing if s not in results]
+        if still:
+            with ThreadPoolExecutor(max_workers=min(8, len(still))) as ex:
+                for s, t in zip(still, ex.map(lambda x: cached_call('tech:' + x, TECH_TTL, lambda: _fetch_tech(x)), still)):
+                    if t:
+                        results[s] = t
+    out = {s: (results.get(s) or {'symbol': s, 'error': 'No data'}) for s in symbols}
+    return jsonify({'results': out})
+
+
+# ─── FUNDAMENTALS (CANSLIM: C, A, I, S) — cacheados horas ─────────────────────
+
+def _row_series(df, names):
+    """Fila de un estado financiero como Serie ordenada de más reciente a más vieja."""
+    if df is None or getattr(df, 'empty', True):
+        return None, None
+    for n in names:
+        if n in df.index:
+            s = df.loc[n].dropna()
+            try:
+                s = s.astype(float)
+            except Exception:
+                continue
+            if len(s):
+                s.index = pd.to_datetime(s.index)
+                return s.sort_index(ascending=False), n
+    return None, None
+
+
+def _yoy_growths(s):
+    """Crecimiento interanual de cada trimestre vs. el trimestre de ~1 año atrás,
+    emparejado por FECHA (no por posición: si falta un trimestre en Yahoo, el
+    emparejamiento por posición compara contra el trimestre equivocado).
+    Base <= 0 → no hay % con sentido: devuelve None para ese trimestre."""
+    out = []
+    dates = list(s.index)
+    vals = list(s.values)
+    for i, d in enumerate(dates):
+        g = None
+        for j in range(i + 1, len(dates)):
+            gap = (d - dates[j]).days
+            if 320 <= gap <= 410:
+                base = vals[j]
+                if base > 0:
+                    g = round((vals[i] - base) / base * 100, 1)
+                break
+        out.append(g)
+    return out
+
+
+def _fetch_fund(symbol):
+    t = yf.Ticker(symbol)
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        f_info = ex.submit(lambda: t.info or {})
+        f_q    = ex.submit(lambda: t.quarterly_financials)
+        f_a    = ex.submit(lambda: t.financials)
+        try:    info = f_info.result(timeout=25)
+        except Exception: info = {}
+        try:    qf = f_q.result(timeout=25)
+        except Exception: qf = None
+        try:    af = f_a.result(timeout=25)
+        except Exception: af = None
+
+    def safe(key, default=None):
+        v = info.get(key, default)
+        return v if v not in (None, 'None', '', 'N/A') else default
+
+    # C — EPS por acción (Diluted EPS) en vez de Net Income: el EPS descuenta recompras
+    # y dilución, que es lo que CANSLIM mira. Si Yahoo no lo trae, cae a Net Income.
+    eps_q, eps_src = _row_series(qf, ['Diluted EPS', 'Basic EPS', 'Net Income'])
+    rev_q, _ = _row_series(qf, ['Total Revenue', 'Operating Revenue'])
+    eps_growth_q = eps_growth_prev = eps_accel = None
+    if eps_q is not None:
+        g = _yoy_growths(eps_q)
+        eps_growth_q    = g[0] if len(g) > 0 else None
+        eps_growth_prev = g[1] if len(g) > 1 else None
+        if eps_growth_q is not None and eps_growth_prev is not None:
+            eps_accel = round(eps_growth_q - eps_growth_prev, 1)
+    rev_growth_q = None
+    if rev_q is not None:
+        g = _yoy_growths(rev_q)
+        rev_growth_q = g[0] if g else None
+
+    # A — crecimiento anual: último año + CAGR a 3 años (O'Neil pide ~25% sostenido, no un año suelto)
+    eps_a, _ = _row_series(af, ['Diluted EPS', 'Basic EPS', 'Net Income'])
+    eps_growth_a = eps_cagr3 = None
+    if eps_a is not None and len(eps_a) >= 2:
+        v = list(eps_a.values)
+        if v[1] > 0:
+            eps_growth_a = round((v[0] - v[1]) / v[1] * 100, 1)
+        if len(v) >= 4 and v[3] > 0 and v[0] > 0:
+            eps_cagr3 = round(((v[0] / v[3]) ** (1 / 3) - 1) * 100, 1)
+
+    def pct(key, nd=1):
+        x = safe(key)
+        try:
+            return round(float(x) * 100, nd) if x is not None else None
+        except Exception:
+            return None
+
+    pe = safe('trailingPE') or safe('forwardPE')
+    beta = safe('beta')
+    div_rate = safe('dividendRate')
+    px_ref = safe('currentPrice') or safe('regularMarketPrice') or safe('previousClose')
+    div_y = round(float(div_rate) / float(px_ref) * 100, 2) if (div_rate and px_ref) else None
+    return {
+        'fundTs':        int(time.time()),
+        'shortName':     safe('shortName', symbol),
+        'currency':      safe('currency', 'ARS' if symbol.endswith('.BA') else 'USD'),
+        'marketCap':     safe('marketCap'),
+        'pe':            round(pe, 2) if pe else None,
+        'beta':          round(beta, 3) if beta else None,
+        'divYield':      div_y,
+        'epsGrowthQ':    eps_growth_q,
+        'epsGrowthQPrev': eps_growth_prev,
+        'epsAccel':      eps_accel,
+        'epsGrowthA':    eps_growth_a,
+        'epsCagr3':      eps_cagr3,
+        'epsSource':     'EPS' if (eps_src and 'EPS' in eps_src) else ('Net Income' if eps_src else None),
+        'revGrowthQ':    rev_growth_q,
+        'roe':           pct('returnOnEquity'),
+        'profitMargin':  pct('profitMargins'),
+        'floatShares':   safe('floatShares'),
+        'sharesOutstanding': safe('sharesOutstanding'),
+        'heldPctInstitutions': pct('heldPercentInstitutions'),
+    }
+
+
+@app.route('/fundamentals', methods=['GET'])
+def get_fundamentals():
     symbol = request.args.get('symbol', '').upper().strip()
     if not symbol:
         return jsonify({'error': 'No symbol provided'}), 400
+    f = cached_call('fund:' + symbol, FUND_TTL, lambda: _fetch_fund(symbol))
+    if not f:
+        return jsonify({'error': 'No fundamentals for ' + symbol}), 404
+    out = dict(f)
+    out['symbol'] = symbol
+    return jsonify(out)
 
+
+@app.route('/quote', methods=['GET'])
+def get_quote():
+    """Cotización + indicadores de UN ticker. ?fast=1 → solo técnicos (sin fundamentals).
+    Sin fast, técnicos y fundamentals se piden EN PARALELO y ambos salen del cache si están frescos."""
+    symbol = request.args.get('symbol', '').upper().strip()
+    if not symbol:
+        return jsonify({'error': 'No symbol provided'}), 400
+    fast = request.args.get('fast') == '1'
     try:
-        ticker = yf.Ticker(symbol)
-
-        # Historial 1 año (necesario para EMA200, momentums)
-        hist = ticker.history(period='1y', interval='1d', auto_adjust=True)
-
-        if hist.empty or len(hist) < 5:
-            return jsonify({'error': f'No data for {symbol}'}), 404
-
-        close_series = hist['Close'].dropna()
-        closes = close_series.values.tolist()
-        volumes = hist['Volume'].dropna().values.tolist()
-
-        price = round(closes[-1], 4)
-        prev_close = round(closes[-2], 4) if len(closes) >= 2 else price
-        chg_pct = round((price - prev_close) / prev_close * 100, 2) if prev_close else 0
-
-        # Indicadores técnicos
-        rsi    = calc_rsi(closes)
-        adx    = calc_adx(hist)
-        ema50  = calc_ema(closes, 50)
-        ema200 = calc_ema(closes, 200)
-        sma50  = calc_sma(closes, 50)
-        sma200 = calc_sma(closes, 200)
-        dist_ema50  = pct_dist(price, ema50)
-        dist_ema200 = pct_dist(price, ema200)
-        mom3 = momentum(closes, 63)   # ~3 meses
-        mom6 = momentum(closes, 126)  # ~6 meses
-
-        # Squeeze Momentum (TTM LazyBear)
-        sqz = calc_squeeze_momentum(hist) or {}
-
-        # Volúmenes
-        vol_today = int(volumes[-1]) if volumes else 0
-        avg_vol20 = int(np.mean(volumes[-20:])) if len(volumes) >= 20 else vol_today
-        vol_week, avg_vol_week = calc_weekly_volume(hist)
-        vol_annualized = calc_volatility_annualized(closes, period=20)
-
-        # 52w high
-        high52 = round(float(max(closes)), 4)
-        dist_from_high = pct_dist(price, high52)
-
-        # Sparkline últimos 20 cierres (redondeados)
-        spark = [round(c, 2) for c in closes[-20:]]
-
-        # Fundamentals via info (puede fallar en algunos tickers)
-        info = {}
-        try:
-            info = ticker.info or {}
-        except Exception:
-            pass
-
-        def safe(key, default=None):
-            v = info.get(key, default)
-            return v if v not in (None, 'None', '', 'N/A') else default
-
-        market_cap  = safe('marketCap')
-        pe_ratio    = safe('trailingPE') or safe('forwardPE')
-        beta        = safe('beta')
-        beta_calc   = calc_beta_local(close_series, symbol)
-        div_yield   = safe('dividendYield')
-        if div_yield is not None:
-            div_yield = round(div_yield * 100, 4)
-
-        currency    = safe('currency', 'USD')
-        short_name  = safe('shortName', symbol)
-
-        # ── CANSLIM FUNDAMENTALS ──────────────────────────────────────────────
-        # C — Current quarterly earnings growth (YoY)
-        eps_growth_q = None
-        try:
-            qf = ticker.quarterly_financials
-            if qf is not None and not qf.empty and 'Net Income' in qf.index:
-                ni = qf.loc['Net Income'].dropna()
-                if len(ni) >= 5:
-                    # Crecimiento YoY del trimestre más reciente vs mismo trimestre año anterior
-                    eps_growth_q = round((ni.iloc[0] / ni.iloc[4] - 1) * 100, 1) if ni.iloc[4] != 0 else None
-        except Exception:
-            pass
-
-        # A — Annual earnings growth (últimos 2 años)
-        eps_growth_a = None
-        try:
-            af = ticker.financials  # anual
-            if af is not None and not af.empty and 'Net Income' in af.index:
-                ni_a = af.loc['Net Income'].dropna()
-                if len(ni_a) >= 2:
-                    eps_growth_a = round((ni_a.iloc[0] / ni_a.iloc[1] - 1) * 100, 1) if ni_a.iloc[1] != 0 else None
-        except Exception:
-            pass
-
-        # ROE — Return on Equity (para L de CANSLIM)
-        roe = None
-        try:
-            roe_raw = safe('returnOnEquity')
-            if roe_raw is not None:
-                roe = round(float(roe_raw) * 100, 1)
-        except Exception:
-            pass
-
-        # Revenue growth trimestral YoY
-        rev_growth_q = None
-        try:
-            qf2 = ticker.quarterly_financials
-            if qf2 is not None and not qf2.empty and 'Total Revenue' in qf2.index:
-                rv = qf2.loc['Total Revenue'].dropna()
-                if len(rv) >= 5:
-                    rev_growth_q = round((rv.iloc[0] / rv.iloc[4] - 1) * 100, 1) if rv.iloc[4] != 0 else None
-        except Exception:
-            pass
-
-        # EPS aceleración: trimestre más reciente vs trimestre anterior (ambos YoY)
-        eps_accel = None
-        try:
-            qf3 = ticker.quarterly_financials
-            if qf3 is not None and not qf3.empty and 'Net Income' in qf3.index:
-                ni3 = qf3.loc['Net Income'].dropna()
-                if len(ni3) >= 6:
-                    g_recent = (ni3.iloc[0] / ni3.iloc[4] - 1) * 100 if ni3.iloc[4] != 0 else None
-                    g_prev   = (ni3.iloc[1] / ni3.iloc[5] - 1) * 100 if ni3.iloc[5] != 0 else None
-                    if g_recent is not None and g_prev is not None:
-                        eps_accel = round(g_recent - g_prev, 1)  # positivo = aceleración
-        except Exception:
-            pass
-
-        # Profit margin
-        profit_margin = None
-        try:
-            pm = safe('profitMargins')
-            if pm is not None:
-                profit_margin = round(float(pm) * 100, 1)
-        except Exception:
-            pass
-
-        # ── S de CANSLIM: Supply & Demand ──────────────────────────────────
-        # Float / acciones en circulación (poca oferta = movimientos de precio más marcados)
-        float_shares = safe('floatShares')
-        shares_outstanding = safe('sharesOutstanding')
-
-        # Volumen en días de suba vs. días de baja (accumulation/distribution),
-        # sobre las últimas 20 ruedas — más fiel a "demanda" que el volumen promedio solo.
-        up_down_vol_ratio = None
-        try:
-            n = min(20, len(closes) - 1)
-            if n > 5:
-                up_vol, down_vol = 0.0, 0.0
-                for i in range(len(closes) - n, len(closes)):
-                    if closes[i] > closes[i - 1]:
-                        up_vol += volumes[i]
-                    elif closes[i] < closes[i - 1]:
-                        down_vol += volumes[i]
-                if down_vol > 0:
-                    up_down_vol_ratio = round(up_vol / down_vol, 2)
-        except Exception:
-            pass
-
-        # ── I de CANSLIM: Institutional Sponsorship ────────────────────────
-        held_pct_institutions = None
-        try:
-            hpi = safe('heldPercentInstitutions')
-            if hpi is not None:
-                held_pct_institutions = round(float(hpi) * 100, 1)
-        except Exception:
-            pass
-
-        # Mom 12M (calculado con historial, más preciso que solo 252 días)
-        mom12 = momentum(closes, 252) if len(closes) >= 253 else mom6
-
-        result = {
-            'symbol':        symbol,
-            'shortName':     short_name,
-            'currency':      currency,
-            'price':         price,
-            'prevClose':     prev_close,
-            'chgPct':        chg_pct,
-            'rsi':           rsi,
-            'adx':           adx,
-            'ema50':         ema50,
-            'ema200':        ema200,
-            'sma50':         sma50,
-            'sma200':        sma200,
-            'distEma50':     dist_ema50,
-            'distEma200':    dist_ema200,
-            'mom3m':         mom3,
-            'mom6m':         mom6,
-            'mom12m':        mom12,
-            'volume':        vol_today,
-            'avgVol20':      avg_vol20,
-            'volWeek':       vol_week,
-            'avgVolWeek':    avg_vol_week,
-            'volAnnualized': vol_annualized,
-            'high52':        high52,
-            'distFromHigh':  dist_from_high,
-            'marketCap':     market_cap,
-            'pe':            round(pe_ratio, 2) if pe_ratio else None,
-            'beta':          round(beta, 3) if beta else None,
-            'betaCalc':      beta_calc,
-            'divYield':      div_yield,
-            'spark':         spark,
-            # CANSLIM fundamentals
-            'epsGrowthQ':    eps_growth_q,
-            'epsGrowthA':    eps_growth_a,
-            'epsAccel':      eps_accel,
-            'revGrowthQ':    rev_growth_q,
-            'roe':           roe,
-            'profitMargin':  profit_margin,
-            'floatShares':      float_shares,
-            'sharesOutstanding': shares_outstanding,
-            'upDownVolRatio':   up_down_vol_ratio,
-            'heldPctInstitutions': held_pct_institutions,
-            # Squeeze Momentum (TTM LazyBear)
-            'sqzOn':         sqz.get('sqzOn'),
-            'sqzOff':        sqz.get('sqzOff'),
-            'sqzMom':        sqz.get('sqzMom'),
-            'sqzMomPrev':    sqz.get('sqzMomPrev'),
-        }
+        if fast:
+            tech = cached_call('tech:' + symbol, TECH_TTL, lambda: _fetch_tech(symbol))
+            fund = None
+        else:
+            with ThreadPoolExecutor(max_workers=2) as ex:
+                ft = ex.submit(cached_call, 'tech:' + symbol, TECH_TTL, lambda: _fetch_tech(symbol))
+                ff = ex.submit(cached_call, 'fund:' + symbol, FUND_TTL, lambda: _fetch_fund(symbol))
+                tech, fund = ft.result(), ff.result()
+        if not tech:
+            return jsonify({'error': 'No data for ' + symbol}), 404
+        result = dict(tech)
+        if fund:
+            result.update(fund)
         return jsonify(result)
-
     except Exception as e:
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+
+# ─── MERCADO: dirección (M de CANSLIM), VIX, macro ────────────────────────────
+
+MARKET_INDEXES = [('SPY', 'S&P 500'), ('QQQ', 'Nasdaq 100'), ('IWM', 'Russell 2000'), ('^MERV', 'Merval')]
+MARKET_MACRO   = [('^VIX', 'VIX'), ('^TNX', 'Bono EEUU 10A (%)'), ('DX-Y.NYB', 'Dólar DXY'),
+                  ('GC=F', 'Oro'), ('CL=F', 'Petróleo WTI'), ('BTC-USD', 'Bitcoin')]
+
+
+def _dist_days(hist, lookback=25):
+    """Días de distribución (O'Neil): ruedas con caída >= 0,2% y volumen mayor al de
+    la rueda anterior, en las últimas 25. 5 o más = presión vendedora institucional."""
+    try:
+        c = hist['Close'].astype(float).values
+        v = hist['Volume'].fillna(0).astype(float).values
+        if v[-lookback:].sum() <= 0:
+            return None   # índices sin volumen (ej. Merval en Yahoo)
+        n = 0
+        for i in range(max(1, len(c) - lookback), len(c)):
+            if c[i] / c[i - 1] - 1 <= -0.002 and v[i] > v[i - 1]:
+                n += 1
+        return n
+    except Exception:
+        return None
+
+
+def _index_state(sym, name, hist):
+    closes = hist['Close'].astype(float).dropna().values.tolist()
+    if len(closes) < 30:
+        return None
+    price, prev = closes[-1], closes[-2]
+    ema50, ema200 = calc_ema(closes, 50), calc_ema(closes, 200)
+    d50, d200 = pct_dist(price, ema50), pct_dist(price, ema200)
+    dd = _dist_days(hist)
+    if d200 is not None and d50 is not None:
+        if d50 > 0 and d200 > 0:
+            status = 'alcista'
+        elif d200 > 0:
+            status = 'presión'
+        elif d50 > 0:
+            status = 'recuperación'
+        else:
+            status = 'bajista'
+        if status == 'alcista' and dd is not None and dd >= 5:
+            status = 'presión'
+    else:
+        status = None
+    return {
+        'symbol': sym, 'name': name, 'price': round(price, 2),
+        'chgPct': round((price / prev - 1) * 100, 2),
+        'mom1m': momentum(closes, 21), 'mom3m': momentum(closes, 63),
+        'distEma50': d50, 'distEma200': d200, 'distDays': dd, 'status': status,
+        'ok': status == 'alcista',
+    }
+
+
+def _build_market():
+    syms = [s for s, _ in MARKET_INDEXES] + [s for s, _ in MARKET_MACRO]
+    frames = _download_many(syms, period='1y')
+    idx, macro = [], []
+    for s, name in MARKET_INDEXES:
+        if s in frames:
+            st = _index_state(s, name, frames[s])
+            if st:
+                idx.append(st)
+    for s, name in MARKET_MACRO:
+        if s in frames:
+            cl = frames[s]['Close'].astype(float).dropna().values.tolist()
+            if len(cl) >= 2:
+                macro.append({'symbol': s, 'name': name, 'price': round(cl[-1], 2),
+                              'chgPct': round((cl[-1] / cl[-2] - 1) * 100, 2),
+                              'mom1m': momentum(cl, 21)})
+    if not idx and not macro:
+        return None
+    by = {i['symbol']: i for i in idx}
+    def m_for(sym, label):
+        s = by.get(sym)
+        if not s:
+            return None
+        tip = '%s: %s | vs EMA50 %s%% | vs EMA200 %s%%' % (
+            label, s['status'] or 's/d',
+            ('%+.1f' % s['distEma50']) if s['distEma50'] is not None else '--',
+            ('%+.1f' % s['distEma200']) if s['distEma200'] is not None else '--')
+        if s['distDays'] is not None:
+            tip += ' | %d días de distribución (25 ruedas)' % s['distDays']
+        return {'ok': s['ok'], 'tip': tip}
+    return {'asOf': datetime.utcnow().isoformat() + 'Z', 'indexes': idx, 'macro': macro,
+            'm': {'us': m_for('SPY', 'S&P 500 (SPY)'), 'ar': m_for('^MERV', 'Merval')}}
+
+
+def get_market_data():
+    return cached_call('market', MARKET_TTL, _build_market)
+
+
+@app.route('/market', methods=['GET'])
+def market_route():
+    d = get_market_data()
+    if not d:
+        return jsonify({'error': 'No se pudo obtener el mercado'}), 502
+    return jsonify(d)
+
+
+# ─── FEAR & GREED (CNN) con respaldo propio ───────────────────────────────────
+
+CNN_FG_URL = 'https://production.dataviz.cnn.io/index/fearandgreed/graphdata'
+FG_INDICATORS = {
+    'market_momentum_sp500': 'Momentum del S&P 500 (vs media 125d)',
+    'stock_price_strength':  'Fortaleza de precios (nuevos máx vs mín 52s)',
+    'stock_price_breadth':   'Amplitud (volumen de subas vs bajas)',
+    'put_call_options':      'Opciones put/call',
+    'market_volatility_vix': 'Volatilidad (VIX vs media 50d)',
+    'junk_bond_demand':      'Demanda de bonos basura',
+    'safe_haven_demand':     'Refugio seguro (bonos vs acciones)',
+}
+
+def _fg_label(score):
+    if score is None: return None
+    if score < 25: return 'Miedo extremo'
+    if score < 45: return 'Miedo'
+    if score < 55: return 'Neutral'
+    if score < 75: return 'Codicia'
+    return 'Codicia extrema'
+
+def _fetch_cnn_fg():
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Origin': 'https://edition.cnn.com',
+        'Referer': 'https://edition.cnn.com/',
+    }
+    r = requests.get(CNN_FG_URL, headers=headers, timeout=8)
+    r.raise_for_status()
+    j = r.json()
+    fg = j.get('fear_and_greed') or {}
+    score = fg.get('score')
+    if score is None:
+        return None
+    def f1(x):
+        try: return round(float(x), 1)
+        except Exception: return None
+    inds = []
+    for key, label in FG_INDICATORS.items():
+        o = j.get(key) or {}
+        sc = f1(o.get('score'))
+        if sc is not None:
+            inds.append({'key': key, 'label': label, 'score': sc, 'rating': _fg_label(sc)})
+    pts = (j.get('fear_and_greed_historical') or {}).get('data') or []
+    hist = [f1(p.get('y')) for p in pts[-130:] if p.get('y') is not None]
+    return {
+        'source': 'CNN', 'estimated': False,
+        'score': f1(score), 'rating': _fg_label(float(score)),
+        'previousClose': f1(fg.get('previous_close')), 'week': f1(fg.get('previous_1_week')),
+        'month': f1(fg.get('previous_1_month')), 'year': f1(fg.get('previous_1_year')),
+        'indicators': inds, 'history': hist,
+        'asOf': fg.get('timestamp'),
+    }
+
+def _estimate_fg():
+    """Respaldo si CNN no responde: índice ESTIMADO con VIX (50%) + momentum del SPY vs su
+    media de 125 ruedas (50%). No es el índice de CNN: se marca como estimado."""
+    frames = _download_many(['SPY', '^VIX'], period='1y')
+    spy, vix = frames.get('SPY'), frames.get('^VIX')
+    if spy is None or vix is None:
+        return None
+    sc = spy['Close'].astype(float).dropna()
+    vc = vix['Close'].astype(float).dropna()
+    if len(sc) < 130 or len(vc) < 5:
+        return None
+    mom = (sc.iloc[-1] / sc.rolling(125).mean().iloc[-1] - 1) * 100
+    s_mom = max(0.0, min(100.0, (mom + 8) / 16 * 100))
+    s_vix = max(0.0, min(100.0, (35 - float(vc.iloc[-1])) / (35 - 12) * 100))
+    score = round((s_mom + s_vix) / 2, 1)
+    return {
+        'source': 'Estimado (VIX + momentum SPY)', 'estimated': True,
+        'score': score, 'rating': _fg_label(score),
+        'previousClose': None, 'week': None, 'month': None, 'year': None,
+        'indicators': [
+            {'key': 'vix', 'label': 'VIX actual: %.1f' % float(vc.iloc[-1]), 'score': round(s_vix, 1), 'rating': _fg_label(s_vix)},
+            {'key': 'mom', 'label': 'SPY vs media 125d: %+.1f%%' % mom, 'score': round(s_mom, 1), 'rating': _fg_label(s_mom)},
+        ],
+        'history': [], 'asOf': datetime.utcnow().isoformat() + 'Z',
+    }
+
+def _build_fg():
+    try:
+        d = _fetch_cnn_fg()
+        if d:
+            return d
+    except Exception as e:
+        print('[Fear&Greed] CNN falló:', e)
+    return _estimate_fg()
+
+def get_fear_greed():
+    return cached_call('feargreed', FG_TTL, _build_fg)
+
+@app.route('/feargreed', methods=['GET'])
+def feargreed_route():
+    d = get_fear_greed()
+    if not d:
+        return jsonify({'error': 'No se pudo obtener el Fear & Greed'}), 502
+    return jsonify(d)
+
+
+# ─── ROTACIÓN SECTORIAL (RRG) con ETFs sectoriales SPDR vs SPY ────────────────
+# Aproximación al Relative Rotation Graph (JdK) de Bloomberg/StockCharts, NO idéntica:
+#   RS        = precio del sector / precio de SPY
+#   RS-Ratio  = 100 + z-score de RS contra su propia media móvil (fuerza relativa normalizada)
+#   RS-Mom    = 100 + cambio de RS-Ratio en k períodos, normalizado por su desvío
+# >100 en ambos ejes = Líder; Ratio>100 y Mom<100 = Debilitándose; ambos <100 = Rezagado;
+# Ratio<100 y Mom>100 = Mejorando. Sirve para ver HACIA DÓNDE rota el dinero entre sectores.
+
+SECTOR_ETFS = [('XLK', 'Tecnología'), ('XLF', 'Financiero'), ('XLE', 'Energía'), ('XLV', 'Salud'),
+               ('XLI', 'Industriales'), ('XLY', 'Cons. Discrecional'), ('XLP', 'Cons. Básico'),
+               ('XLU', 'Utilities'), ('XLB', 'Materiales'), ('XLRE', 'Inmobiliario'), ('XLC', 'Comunicación')]
+
+def _quadrant(ratio, mom):
+    if ratio >= 100 and mom >= 100: return 'Líder'
+    if ratio >= 100:                return 'Debilitándose'
+    if mom >= 100:                  return 'Mejorando'
+    return 'Rezagado'
+
+def _build_rrg(period, trail):
+    syms = ['SPY'] + [s for s, _ in SECTOR_ETFS]
+    frames = _download_many(syms, period='2y')
+    if 'SPY' not in frames:
+        return None
+    closes = pd.DataFrame({s: f['Close'].astype(float) for s, f in frames.items()})
+    closes.index = pd.to_datetime(closes.index).tz_localize(None).normalize() if getattr(closes.index, 'tz', None) is not None else pd.to_datetime(closes.index).normalize()
+    closes = closes.dropna(subset=['SPY']).ffill()
+    if period == 'weekly':
+        closes = closes.resample('W-FRI').last().dropna(subset=['SPY'])
+        w, k = 26, 4
+    else:
+        w, k = 60, 5
+    bench = closes['SPY']
+    sectors = []
+    for sym, name in SECTOR_ETFS:
+        if sym not in closes.columns:
+            continue
+        c = closes[sym]
+        rs = 100 * c / bench
+        ratio = 100 + (rs - rs.rolling(w).mean()) / rs.rolling(w).std(ddof=0)
+        roc = ratio.diff(k)
+        mom = 100 + roc / roc.rolling(w).std(ddof=0)
+        df = pd.DataFrame({'x': ratio, 'y': mom}).replace([np.inf, -np.inf], np.nan).dropna()
+        if len(df) < 2:
+            continue
+        tail = df.tail(trail)
+        cl = c.dropna()
+        def ret(n):
+            return round((cl.iloc[-1] / cl.iloc[-1 - n] - 1) * 100, 2) if len(cl) > n else None
+        x, y = float(df['x'].iloc[-1]), float(df['y'].iloc[-1])
+        sectors.append({
+            'symbol': sym, 'name': name, 'ratio': round(x, 2), 'momentum': round(y, 2),
+            'quadrant': _quadrant(x, y),
+            'trail': [{'x': round(float(a), 2), 'y': round(float(b), 2),
+                       'd': d.strftime('%Y-%m-%d')} for d, a, b in zip(tail.index, tail['x'], tail['y'])],
+            'chg1d': ret(1), 'chg1w': ret(5), 'chg1m': ret(21), 'chg3m': ret(63),
+        })
+    if not sectors:
+        return None
+    return {'period': period, 'benchmark': 'SPY', 'asOf': closes.index[-1].strftime('%Y-%m-%d'),
+            'sectors': sectors, 'params': {'window': w, 'rocPeriod': k, 'trail': trail}}
+
+def get_rrg(period='daily', trail=8):
+    period = 'weekly' if period == 'weekly' else 'daily'
+    trail = max(3, min(16, int(trail)))
+    return cached_call('rrg:%s:%d' % (period, trail), RRG_TTL, lambda: _build_rrg(period, trail))
+
+@app.route('/rrg', methods=['GET'])
+def rrg_route():
+    try:
+        trail = int(request.args.get('trail', 8))
+    except ValueError:
+        trail = 8
+    d = get_rrg(request.args.get('period', 'daily'), trail)
+    if not d:
+        return jsonify({'error': 'No se pudo calcular la rotación'}), 502
+    return jsonify(d)
 
 
 @app.route('/squeeze1h', methods=['GET'])
@@ -1011,24 +1535,49 @@ def get_squeeze_1h():
     if not symbol:
         return jsonify({'error': 'No symbol provided'}), 400
     try:
-        ticker = yf.Ticker(symbol)
-        # 10d de velas de 1h ≈ 60-70 velas en mercados US (6.5h/día) — de sobra
-        # para el largo=20 que usa calc_squeeze_momentum. Para tickers .BA con
-        # menos horas de rueda, igual alcanza.
-        hist = ticker.history(period='10d', interval='60m', auto_adjust=True)
-        if hist.empty or len(hist) < 25:
+        def _calc1h():
+            h = yf.Ticker(symbol).history(period='10d', interval='60m', auto_adjust=True)
+            if h.empty or len(h) < 25:
+                return None
+            return calc_squeeze_momentum(h) or None
+        sqz = cached_call('sqz1h:' + symbol, 300, _calc1h)
+        if not sqz:
             return jsonify({'error': 'No data'}), 404
-
-        sqz = calc_squeeze_momentum(hist) or {}
-        return jsonify({
-            'symbol':     symbol,
-            'sqzOn':      sqz.get('sqzOn'),
-            'sqzOff':     sqz.get('sqzOff'),
-            'sqzMom':     sqz.get('sqzMom'),
-            'sqzMomPrev': sqz.get('sqzMomPrev'),
-        })
+        return jsonify({'symbol': symbol, 'sqzOn': sqz.get('sqzOn'), 'sqzOff': sqz.get('sqzOff'),
+                        'sqzMom': sqz.get('sqzMom'), 'sqzMomPrev': sqz.get('sqzMomPrev')})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/squeeze1hbatch', methods=['POST'])
+def get_squeeze_1h_batch():
+    """Squeeze en velas de 1h para MUCHOS tickers con una sola descarga a Yahoo
+    (antes: un request y un pedido a Yahoo por ticker)."""
+    data = request.get_json(silent=True) or {}
+    symbols = []
+    for s in (data.get('symbols') or []):
+        s = str(s or '').upper().strip()
+        if s and re.match(r'^[A-Z0-9.^=\-]{1,14}$', s) and s not in symbols:
+            symbols.append(s)
+    symbols = symbols[:80]
+    out, missing = {}, []
+    for s in symbols:
+        c = cache_get('sqz1h:' + s, 300)
+        if c:
+            out[s] = dict(c, symbol=s)
+        else:
+            missing.append(s)
+    if missing:
+        for s, h in _download_many(missing, period='10d', interval='60m').items():
+            try:
+                if len(h) >= 25:
+                    r = calc_squeeze_momentum(h)
+                    if r:
+                        cache_set('sqz1h:' + s, r)
+                        out[s] = dict(r, symbol=s)
+            except Exception:
+                pass
+    return jsonify({'results': out})
 
 
 @app.route('/squeezeD', methods=['GET'])
@@ -1046,6 +1595,11 @@ def get_squeeze_daily():
     if not symbol:
         return jsonify({'error': 'No symbol provided'}), 400
     try:
+        # Reusa el historial técnico ya cacheado si existe (evita otro pedido a Yahoo)
+        t = cache_get('tech:' + symbol, TECH_TTL)
+        if t and t.get('sqzMom') is not None:
+            return jsonify({'symbol': symbol, 'sqzOn': t.get('sqzOn'), 'sqzOff': t.get('sqzOff'),
+                            'sqzMom': t.get('sqzMom'), 'sqzMomPrev': t.get('sqzMomPrev')})
         ticker = yf.Ticker(symbol)
         hist = ticker.history(period='6mo', interval='1d', auto_adjust=True)
         if hist.empty or len(hist) < 25:
@@ -1065,23 +1619,56 @@ def get_squeeze_daily():
 
 @app.route('/quotes', methods=['POST'])
 def get_quotes():
-    """Recibe lista de symbols y devuelve todos en paralelo."""
-    data = request.get_json()
-    symbols = data.get('symbols', [])
+    """Recibe lista de symbols y devuelve todos (en paralelo, con cache)."""
+    data = request.get_json(silent=True) or {}
+    symbols = [str(s).upper().strip() for s in (data.get('symbols') or []) if s][:60]
     if not symbols:
         return jsonify([])
-
-    results = []
-    for sym in symbols:
+    def one(sym):
         try:
-            r = app.test_client().get(f'/quote?symbol={sym}')
-            import json
-            results.append(json.loads(r.data))
+            with app.test_request_context('/quote?symbol=' + sym):
+                r = get_quote()
+            resp = r[0] if isinstance(r, tuple) else r
+            return json.loads(resp.get_data(as_text=True))
         except Exception as e:
-            results.append({'symbol': sym, 'error': str(e)})
+            return {'symbol': sym, 'error': str(e)}
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        return jsonify(list(ex.map(one, symbols)))
 
-    return jsonify(results)
 
+@app.route('/preciobatch', methods=['POST'])
+def get_precio_batch():
+    """Auto-refresh de precios: precio, cambio % y volumen de MUCHOS tickers con una sola
+    descarga (5 días) a Yahoo, en vez de un request por ticker."""
+    data = request.get_json(silent=True) or {}
+    symbols = []
+    for s in (data.get('symbols') or []):
+        s = str(s or '').upper().strip()
+        if s and re.match(r'^[A-Z0-9.^=\-]{1,14}$', s) and s not in symbols:
+            symbols.append(s)
+    symbols = symbols[:80]
+    out, missing = {}, []
+    for s in symbols:
+        c = cache_get('precio:' + s, PRECIO_TTL)
+        if c:
+            out[s] = c
+        else:
+            missing.append(s)
+    if missing:
+        for s, h in _download_many(missing, period='5d').items():
+            try:
+                cl = h['Close'].dropna().astype(float).values.tolist()
+                if len(cl) < 2:
+                    continue
+                vol = h['Volume'].fillna(0).values.tolist()
+                r = {'symbol': s, 'price': round(cl[-1], 4), 'prevClose': round(cl[-2], 4),
+                     'chgPct': round((cl[-1] - cl[-2]) / cl[-2] * 100, 2) if cl[-2] else 0,
+                     'volume': int(vol[-1]) if vol else 0}
+                cache_set('precio:' + s, r)
+                out[s] = r
+            except Exception:
+                pass
+    return jsonify({'results': out})
 
 
 @app.route('/precio', methods=['GET'])
@@ -1092,6 +1679,9 @@ def get_precio():
     if not symbol:
         return jsonify({'error': 'No symbol'}), 400
     try:
+        cp = cache_get('precio:' + symbol, PRECIO_TTL)
+        if cp:
+            return jsonify(cp)
         ticker = yf.Ticker(symbol)
         # period=5d es suficiente para precio actual y prevClose
         hist = ticker.history(period='5d', interval='1d', auto_adjust=True)
@@ -1103,13 +1693,15 @@ def get_precio():
         prev_close = round(closes[-2], 4)
         chg_pct    = round((price - prev_close) / prev_close * 100, 2) if prev_close else 0
         volume     = int(volumes[-1]) if volumes else 0
-        return jsonify({
+        out = {
             'symbol':    symbol,
             'price':     price,
             'prevClose': prev_close,
             'chgPct':    chg_pct,
             'volume':    volume,
-        })
+        }
+        cache_set('precio:' + symbol, out)
+        return jsonify(out)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1277,6 +1869,10 @@ def ai_chat():
             candidatos.append(tk)
     candidatos = candidatos[:3]
 
+    # Panorama de mercado (cacheado) en paralelo con la pre-carga de tickers
+    _mex = ThreadPoolExecutor(max_workers=1)
+    _mfut = _mex.submit(market_snapshot_text)
+
     # Pre-cargar en paralelo el paquete completo (precio, fundamentals, balances, noticias, analistas)
     fundamentales_txt = ''
     if candidatos:
@@ -1290,6 +1886,12 @@ def ai_chat():
             except Exception as e:
                 print('[Rendi AI] pre-carga falló para', tk, ':', e)
         ex.shutdown(wait=False)
+
+    try:
+        mercado_txt = _mfut.result(timeout=8)
+    except Exception:
+        mercado_txt = ''
+    _mex.shutdown(wait=False)
 
     fecha = (data.get('fecha') or datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC'))
 
@@ -1308,8 +1910,14 @@ def ai_chat():
         "3. Herramienta web_search: para todo lo reciente o que no está en las otras fuentes: resultados o balances "
         "recién publicados, guidance, conference call, noticias del día, datos macro (dólar, inflación, tasas, "
         "riesgo país, Fed, BCRA). Si preguntan por algo de hoy o de las últimas horas, buscá en la web antes de responder.\n"
-        "4. Tu conocimiento general, solo para contexto (qué hace la empresa, cómo leer un indicador). Nunca para "
-        "cifras actuales.\n\n"
+        "4. Herramienta mercado_hoy: sentimiento (Fear & Greed), dirección de índices, VIX, macro y rotación sectorial "
+        "al instante. Ya viene un resumen abajo en 'Estado del mercado'; llamala solo si necesitás el detalle.\n"
+        "5. Tu conocimiento general, solo para contexto (qué hace la empresa, cómo leer un indicador). Nunca para "
+        "cifras actuales.\n"
+        "Para ahorrar tiempo: si los datos pre-cargados ya responden la pregunta, NO uses web_search. Los campos "
+        "scanner_tecnico y scanner_canslim son los mismos números que el usuario ve en su scanner (CANSLIM: C = EPS "
+        "trimestral YoY y aceleración, A = EPS anual y CAGR 3 años, N = cerca de máximos 52s, S = volumen compra/venta, "
+        "L = fuerza relativa vs. su universo, I = tenencia institucional, M = dirección del mercado).\n\n"
         "REGLAS:\n"
         "- Nunca digas que no tenés datos en vivo sin haber probado antes las herramientas. Si aun así falta algo, "
         "decí exactamente qué falta.\n"
@@ -1337,6 +1945,7 @@ def ai_chat():
         "antes ni después y sin markdown fuera del campo texto (los saltos de línea dentro de texto van como \\n):\n"
         '{"tipo":"respuesta","texto":"tu respuesta acá"}\n\n'
         "Contexto del usuario (cartera, scanner y mercado, enviado por la app):\n" + contexto + "\n\n" +
+        "Estado del mercado ahora:\n" + (mercado_txt or "(no disponible; usá mercado_hoy)") + "\n\n" +
         "Datos en vivo pre-cargados:\n" + (fundamentales_txt or "(ninguno; usá la herramienta datos_ticker si hace falta)")
     )
 
