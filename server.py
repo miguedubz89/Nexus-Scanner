@@ -15,7 +15,11 @@ import os
 import json
 import re
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+import xml.etree.ElementTree as ET
+import html as _html
+from email.utils import parsedate_to_datetime
+from urllib.parse import quote_plus
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import yfinance as yf
@@ -274,7 +278,22 @@ def _fetch_earnings(t):
     return out
 
 
-def _fetch_news(t, limit=6):
+def _fetch_news(t, limit=8):
+    """Noticias para Rendi AI: las mismas fuentes que el panel de la cartera (yfinance + Yahoo RSS + Google News
+    + prensa argentina para .BA). Si todo falla, cae al método viejo (solo yfinance)."""
+    sym = getattr(t, 'ticker', None)
+    try:
+        if sym:
+            its = cached_call('news:' + sym, NEWS_TTL, lambda: _news_items(sym)) or []
+            if its:
+                return [{'titulo': i.get('title'), 'fuente': i.get('source'), 'fecha': str(i.get('ts') or '')[:10],
+                         'url': i.get('url')} for i in its[:limit]]
+    except Exception as e:
+        print('[Rendi AI] news multi-fuente falló:', e)
+    return _fetch_news_yf(t, limit)
+
+
+def _fetch_news_yf(t, limit=6):
     items = []
     try:
         for n in (t.news or [])[:limit]:
@@ -404,6 +423,17 @@ AI_TOOLS.append({
 })
 
 
+AI_TOOLS.append({
+    'name': 'noticias_mercado',
+    'description': ('Titulares recientes del mercado en general (no de una empresa puntual) desde prensa financiera: '
+                    'mercado argentino (Merval, bonos, dólar, riesgo país; Ámbito, Cronista, Infobae, iProfesional) o '
+                    'Wall Street. Usala para "qué pasó hoy en el mercado", contexto macro o cuando una acción no tiene '
+                    'noticias propias.'),
+    'input_schema': {'type': 'object', 'properties': {
+        'mercado': {'type': 'string', 'enum': ['ar', 'us'], 'description': "'ar' = Argentina (por defecto), 'us' = EEUU"}}},
+})
+
+
 def market_snapshot_text():
     """Resumen compacto (todo sale de caches de 5-15 min) del estado del mercado para la IA:
     Fear & Greed, dirección de índices (la 'M' de CANSLIM), macro y rotación sectorial."""
@@ -440,10 +470,53 @@ def market_snapshot_text():
                 '%s: %s' % (q, ', '.join(by[q])) for q in ('Líder', 'Mejorando', 'Debilitándose', 'Rezagado') if q in by))
     except Exception:
         pass
+    try:   # rotación entre países/índices (ETFs en USD vs ACWI)
+        ri = get_rrg_idx('daily', 8)
+        if ri:
+            by = {}
+            for s in ri['sectors']:
+                by.setdefault(s['quadrant'], []).append('%s (%s, 1M %+.1f%%)' % (s['name'], s['symbol'], s['chg1m'] or 0))
+            lines.append('Rotación entre países/índices (RRG diario vs ACWI, ETFs en USD): ' + ' | '.join(
+                '%s: %s' % (q, ', '.join(by[q])) for q in ('Líder', 'Mejorando', 'Debilitándose', 'Rezagado') if q in by))
+    except Exception:
+        pass
+    try:   # rotación sectorial del Merval
+        ra = get_rrg_ar('daily', 8)
+        if ra:
+            by = {}
+            for s in ra['sectors']:
+                by.setdefault(s['quadrant'], []).append(s['name'])
+            lines.append('Rotación sectorial Merval (canastas equiponderadas vs MERVAL): ' + ' | '.join(
+                '%s: %s' % (q, ', '.join(by[q])) for q in ('Líder', 'Mejorando', 'Debilitándose', 'Rezagado') if q in by))
+    except Exception:
+        pass
+    try:   # dólar y riesgo país
+        d = get_dolar()
+        if d:
+            parts = ['%s $%s' % (k.upper(), d.get(k)) for k in ('oficial', 'mep', 'ccl', 'blue') if d.get(k)]
+            if d.get('brechaCclMep') is not None:
+                parts.append('brecha CCL/MEP %s%%' % d['brechaCclMep'])
+            if d.get('brechaMepOficial') is not None:
+                parts.append('brecha MEP/oficial %s%%' % d['brechaMepOficial'])
+            if parts:
+                lines.append('Dólar: ' + ' | '.join(parts))
+        rp = cached_call('riesgo', RIESGO_TTL, _build_riesgo)
+        if rp and rp.get('valor') is not None:
+            lines.append('Riesgo país: %s pb (%s)%s' % (rp['valor'], rp.get('fecha'),
+                         (', var. 1 mes %+.0f pb' % rp['var1m']) if rp.get('var1m') is not None else ''))
+    except Exception:
+        pass
     return '\n'.join(lines)
 
 
 def run_ai_tool(name, inp):
+    if name == 'noticias_mercado':
+        mk = str((inp or {}).get('mercado') or 'ar').lower()
+        ar = mk != 'us'
+        its = cached_call('news:mkt:%s' % ('ar' if ar else 'us'), NEWS_TTL, lambda: _market_news(ar, 12)) or []
+        if not its:
+            return 'No se pudieron traer titulares ahora. Probá con web_search.'
+        return '\n'.join('- %s (%s, %s)' % (i.get('title'), i.get('source') or 's/f', str(i.get('ts') or '')[:10]) for i in its)
     if name == 'mercado_hoy':
         return market_snapshot_text() or 'No hay datos de mercado disponibles en este momento.'
     if name == 'datos_ticker':
@@ -985,12 +1058,39 @@ def _tech_from_hist(symbol, hist):
         'betaCalc':      calc_beta_local(close_series, symbol),
         'upDownVolRatio': calc_updown_ratio(closes, volumes, 50),   # 50 ruedas (O'Neil)
         'upDownVol20':    calc_updown_ratio(closes, volumes, 20),
+        'baseDepth':      calc_base_depth(hist),
+        'daysSinceHigh':  calc_days_since_high(hist),
         'spark':         [round(c, 2) for c in closes[-20:]],
         'sqzOn':         sqz.get('sqzOn'),
         'sqzOff':        sqz.get('sqzOff'),
         'sqzMom':        sqz.get('sqzMom'),
         'sqzMomPrev':    sqz.get('sqzMomPrev'),
     }
+
+
+def calc_base_depth(hist, window=75):
+    """Profundidad (%) de la base actual: caída desde el máximo de las últimas ~15 semanas hasta el
+    mínimo posterior. O'Neil: bases sanas rara vez superan 33-35%; más profundas suelen fallar."""
+    try:
+        h = hist['High'].astype(float).values[-window:]
+        l = hist['Low'].astype(float).values[-window:]
+        i = int(np.nanargmax(h))
+        peak = h[i]
+        if not peak or peak <= 0:
+            return None
+        trough = float(np.nanmin(l[i:]))
+        return round((peak - trough) / peak * 100, 1)
+    except Exception:
+        return None
+
+
+def calc_days_since_high(hist):
+    """Ruedas transcurridas desde el máximo de 52 semanas (0 = hizo máximo hoy)."""
+    try:
+        h = hist['High'].astype(float).values
+        return int(len(h) - 1 - int(np.nanargmax(h)))
+    except Exception:
+        return None
 
 
 def _fetch_tech(symbol):
@@ -1124,6 +1224,45 @@ def _yoy_growths(s):
     return out
 
 
+_INFL_CACHE_KEY = 'ar_infl'
+
+
+def _ar_inflation():
+    """Inflación argentina (%): interanual (últimos 12 meses) y CAGR de 3 años (últimos 36 meses), compuestas
+    desde la serie mensual de api.argentinadatos.com. Sirve para medir el crecimiento de balances en pesos en
+    términos reales. Si la API falla: AR_INFLATION_YOY (por defecto 30) y AR_INFLATION_CAGR3 (por defecto 60)."""
+    def build():
+        arr = _http_json('https://api.argentinadatos.com/v1/finanzas/indices/inflacion', timeout=15)
+        vals = [_num(x.get('valor')) for x in arr if isinstance(x, dict)]
+        vals = [v for v in vals if v is not None]
+        if len(vals) < 12:
+            return None
+
+        def comp(vs):
+            acc = 1.0
+            for v in vs:
+                acc *= (1 + v / 100.0)
+            return acc
+        yoy = (comp(vals[-12:]) - 1) * 100
+        cagr3 = ((comp(vals[-36:]) ** (12.0 / min(36, len(vals)))) - 1) * 100 if len(vals) >= 24 else None
+        return {'yoy': round(yoy, 1), 'cagr3': round(cagr3, 1) if cagr3 is not None else None}
+    try:
+        v = cached_call(_INFL_CACHE_KEY, 12 * 3600, build)
+        if v:
+            return v
+    except Exception:
+        pass
+    try:
+        return {'yoy': float(os.environ.get('AR_INFLATION_YOY', '30')),
+                'cagr3': float(os.environ.get('AR_INFLATION_CAGR3', '60'))}
+    except Exception:
+        return {'yoy': 30.0, 'cagr3': 60.0}
+
+
+def _ar_inflation_yoy():
+    return _ar_inflation()['yoy']
+
+
 def _fetch_fund(symbol):
     t = yf.Ticker(symbol)
     with ThreadPoolExecutor(max_workers=3) as ex:
@@ -1160,8 +1299,14 @@ def _fetch_fund(symbol):
     # A — crecimiento anual: último año + CAGR a 3 años (O'Neil pide ~25% sostenido, no un año suelto)
     eps_a, _ = _row_series(af, ['Diluted EPS', 'Basic EPS', 'Net Income'])
     eps_growth_a = eps_cagr3 = None
+    eps_stable = None      # True = ningún año de caída en el EPS (O'Neil pide crecimiento estable, no un año suelto)
+    eps_years = 0
     if eps_a is not None and len(eps_a) >= 2:
         v = list(eps_a.values)
+        _gs = [(v[i] - v[i + 1]) / abs(v[i + 1]) for i in range(min(3, len(v) - 1)) if v[i + 1] != 0]
+        eps_years = len(_gs)
+        if _gs:
+            eps_stable = all(g >= 0 for g in _gs)
         if v[1] > 0:
             eps_growth_a = round((v[0] - v[1]) / v[1] * 100, 1)
         if len(v) >= 4 and v[3] > 0 and v[0] > 0:
@@ -1193,6 +1338,11 @@ def _fetch_fund(symbol):
         'epsGrowthA':    eps_growth_a,
         'epsCagr3':      eps_cagr3,
         'epsSource':     'EPS' if (eps_src and 'EPS' in eps_src) else ('Net Income' if eps_src else None),
+        'epsStable':     eps_stable,
+        'epsYears':      eps_years or None,
+        'inflYoY':       _ar_inflation()['yoy'] if symbol.endswith('.BA') else None,
+        'inflCagr3':     _ar_inflation()['cagr3'] if symbol.endswith('.BA') else None,
+        'fundV':         2,          # versión del esquema: el frontend re-pide fundamentals viejos sin estos campos
         'revGrowthQ':    rev_growth_q,
         'roe':           pct('returnOnEquity'),
         'profitMargin':  pct('profitMargins'),
@@ -1292,6 +1442,7 @@ def _index_state(sym, name, hist):
         'symbol': sym, 'name': name, 'price': round(price, 2),
         'chgPct': round((price / prev - 1) * 100, 2),
         'mom1m': momentum(closes, 21), 'mom3m': momentum(closes, 63),
+        'rsScore': calc_rs_score(closes),
         'distEma50': d50, 'distEma200': d200, 'distDays': dd, 'status': status,
         'ok': status == 'alcista',
     }
@@ -1516,8 +1667,11 @@ def rrg_route():
         trail = int(request.args.get('trail', 8))
     except ValueError:
         trail = 8
-    if request.args.get('market', 'us') == 'ar':
+    mk_ = request.args.get('market', 'us')
+    if mk_ == 'ar':
         d = get_rrg_ar(request.args.get('period', 'daily'), trail)
+    elif mk_ == 'idx':
+        d = get_rrg_idx(request.args.get('period', 'daily'), trail)
     else:
         d = get_rrg(request.args.get('period', 'daily'), trail)
     if not d:
@@ -1913,14 +2067,20 @@ def ai_chat():
         "3. Herramienta web_search: para todo lo reciente o que no está en las otras fuentes: resultados o balances "
         "recién publicados, guidance, conference call, noticias del día, datos macro (dólar, inflación, tasas, "
         "riesgo país, Fed, BCRA). Si preguntan por algo de hoy o de las últimas horas, buscá en la web antes de responder.\n"
-        "4. Herramienta mercado_hoy: sentimiento (Fear & Greed), dirección de índices, VIX, macro y rotación sectorial "
-        "al instante. Ya viene un resumen abajo en 'Estado del mercado'; llamala solo si necesitás el detalle.\n"
+        "4. Herramienta mercado_hoy: sentimiento (Fear & Greed), dirección de índices, VIX, macro, rotación sectorial "
+        "(EEUU y Merval), rotación entre países/índices (EEUU, Brasil, México, Argentina, Europa, Japón, China, India, "
+        "Corea...), dólar (oficial/MEP/CCL/blue y brechas) y riesgo país al instante. Ya viene un resumen abajo en "
+        "'Estado del mercado'; llamala solo si necesitás el detalle.\n"
+        "4b. Herramienta noticias_mercado: titulares recientes del mercado argentino o de Wall Street (prensa financiera). "
+        "Las noticias de cada empresa dentro de datos_ticker ya combinan Yahoo, Google News y prensa argentina.\n"
         "5. Tu conocimiento general, solo para contexto (qué hace la empresa, cómo leer un indicador). Nunca para "
         "cifras actuales.\n"
         "Para ahorrar tiempo: si los datos pre-cargados ya responden la pregunta, NO uses web_search. Los campos "
         "scanner_tecnico y scanner_canslim son los mismos números que el usuario ve en su scanner (CANSLIM: C = EPS "
-        "trimestral YoY y aceleración, A = EPS anual y CAGR 3 años, N = cerca de máximos 52s, S = volumen compra/venta, "
-        "L = fuerza relativa vs. su universo, I = tenencia institucional, M = dirección del mercado).\n\n"
+        "trimestral YoY con aceleración y ventas creciendo, A = EPS anual: CAGR 3 años, sin años de caída y ROE >= 17%, "
+        "N = a menos de 10% del máximo de 52s con una base de profundidad sana, S = volumen compra/venta de 50 ruedas, "
+        "L = fuerza relativa (percentil >= 80 en su universo y mejor que el índice), I = tenencia institucional, "
+        "M = dirección del mercado; en acciones argentinas los crecimientos se miden descontando la inflación).\n\n"
         "REGLAS:\n"
         "- Nunca digas que no tenés datos en vivo sin haber probado antes las herramientas. Si aun así falta algo, "
         "decí exactamente qué falta.\n"
@@ -2286,9 +2446,96 @@ def earnings_route():
     return jsonify({'results': rows, 'asOf': datetime.utcnow().isoformat() + 'Z'})
 
 
-# ─── NOTICIAS ────────────────────────────────────────────────────────────────
+# ─── NOTICIAS (multi-fuente) ─────────────────────────────────────────────────
+# Antes salían SOLO de yfinance, que casi no trae noticias de acciones argentinas (.BA) ni de
+# papeles chicos: por eso "Noticias de mi cartera" quedaba vacío. Ahora cada ticker junta:
+#   1) yfinance            (Yahoo, el que ya estaba)
+#   2) Yahoo Finance RSS   (feed de titulares por ticker; a veces trae lo que yfinance no)
+#   3) Google News RSS     (por nombre de empresa; en español/Argentina para los .BA)
+#   4) Prensa argentina    (Ámbito, El Cronista, Infobae, iProfesional vía Google News, solo .BA)
+# Si aun así quedan pocas, se agregan titulares generales del mercado (símbolo 'MERCADO').
+NEWS_PER_SYMBOL = int(os.environ.get('NEWS_PER_SYMBOL', '6'))
+NEWS_MAX_AGE_DAYS = int(os.environ.get('NEWS_MAX_AGE_DAYS', '21'))
 
-def _news_items(sym):
+AR_NEWS_NAMES = {
+    'GGAL': 'Grupo Financiero Galicia', 'YPFD': 'YPF', 'YPF': 'YPF', 'PAMP': 'Pampa Energía', 'PAM': 'Pampa Energía',
+    'BMA': 'Banco Macro', 'SUPV': 'Grupo Supervielle', 'BBAR': 'BBVA Argentina', 'BBVA': 'BBVA Argentina',
+    'BYMA': 'BYMA Bolsas y Mercados Argentinos', 'VIST': 'Vista Energy', 'TGSU2': 'Transportadora de Gas del Sur',
+    'TGS': 'Transportadora de Gas del Sur', 'TGNO4': 'Transportadora de Gas del Norte', 'CEPU': 'Central Puerto',
+    'EDN': 'Edenor', 'TRAN': 'Transener', 'TXAR': 'Ternium Argentina', 'ALUA': 'Aluar', 'LOMA': 'Loma Negra',
+    'CRES': 'Cresud', 'MIRG': 'Mirgor', 'COME': 'Sociedad Comercial del Plata', 'TECO2': 'Telecom Argentina',
+    'TEO': 'Telecom Argentina', 'IRS': 'IRSA', 'IRSA': 'IRSA', 'METR': 'Metrogas', 'HARG': 'Holcim Argentina',
+    'VALO': 'Grupo Financiero Valores', 'CVH': 'Cablevisión Holding', 'AGRO': 'Agrometal', 'BHIP': 'Banco Hipotecario',
+    'BPAT': 'Banco Patagonia', 'CAPX': 'Capex', 'DGCU2': 'Distribuidora de Gas Cuyana', 'GCLA': 'Grupo Clarín',
+    'LEDE': 'Ledesma', 'MOLI': 'Molinos Río de la Plata', 'OEST': 'Oeste Grupo Concesionario', 'PGR': 'Phoenix Global Resources',
+    'RICH': 'Laboratorios Richmond', 'SEMI': 'Molinos Semino', 'GBAN': 'Gas Natural BAN', 'BOLT': 'Boldt',
+    'MELI': 'MercadoLibre', 'GLOB': 'Globant', 'DESP': 'Despegar', 'BIOX': 'Bioceres', 'CRESY': 'Cresud',
+}
+AR_PRESS_SITES = '(site:ambito.com OR site:cronista.com OR site:infobae.com OR site:iprofesional.com OR site:lanacion.com.ar)'
+
+
+def _to_iso_utc(dt):
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt.isoformat() + 'Z'
+
+
+def _rss_items(url, sym, limit=10, timeout=8, default_source=None):
+    """Lee un feed RSS y devuelve [{symbol,title,source,ts,url}]. Nunca levanta excepción."""
+    out = []
+    try:
+        r = requests.get(url, timeout=timeout, headers={'User-Agent': 'Mozilla/5.0 (compatible; DUBZ-Monitor/2.0)'})
+        r.raise_for_status()
+        root = ET.fromstring(r.content)
+        for it in root.iter('item'):
+            title = _html.unescape((it.findtext('title') or '').strip())
+            link = (it.findtext('link') or '').strip()
+            if not title or not link:
+                continue
+            se = it.find('source')
+            source = (se.text or '').strip() if (se is not None and se.text) else default_source
+            # Google News agrega " - Medio" al final del título: lo sacamos y queda en 'source'
+            if source and title.endswith(' - ' + source):
+                title = title[:-(len(source) + 3)].strip()
+            elif se is None and 'news.google.com' in url and ' - ' in title:
+                head, _, tail = title.rpartition(' - ')
+                if head and 2 < len(tail) < 40:
+                    title, source = head.strip(), tail.strip()
+            ts = None
+            pub = it.findtext('pubDate')
+            if pub:
+                try:
+                    ts = _to_iso_utc(parsedate_to_datetime(pub))
+                except Exception:
+                    ts = None
+            out.append({'symbol': sym, 'title': title, 'source': source, 'ts': ts, 'url': link})
+            if len(out) >= limit:
+                break
+    except Exception as e:
+        print('[news-rss]', url[:80], e)
+    return out
+
+
+def _gnews_url(query, ar):
+    q = quote_plus(query + ' when:14d')
+    if ar:
+        return 'https://news.google.com/rss/search?q=%s&hl=es-419&gl=AR&ceid=AR:es-419' % q
+    return 'https://news.google.com/rss/search?q=%s&hl=en-US&gl=US&ceid=US:en' % q
+
+
+def _company_name(sym):
+    base = sym[:-3] if sym.endswith('.BA') else sym
+    if base in AR_NEWS_NAMES:
+        return AR_NEWS_NAMES[base]
+    f = cache_get_stale('fund:' + sym)          # si ya se cargaron los fundamentals, tenemos el nombre
+    if isinstance(f, dict) and f.get('shortName') and f.get('shortName') != sym:
+        return re.sub(r'\s+(Inc\.?|Corp\.?|Corporation|Ltd\.?|S\.A\.?|Co\.?|Holdings?|Class [A-C])$', '', str(f['shortName']), flags=re.I).strip()
+    return None
+
+
+def _yf_news(sym):
     items = []
     try:
         for n in (yf.Ticker(sym).news or [])[:10]:
@@ -2304,8 +2551,69 @@ def _news_items(sym):
                               'ts': datetime.utcfromtimestamp(ts).isoformat() + 'Z' if ts else None,
                               'url': n.get('link')})
     except Exception as e:
-        print('[news]', sym, e)
-    return [i for i in items if i.get('title')] or None
+        print('[news-yf]', sym, e)
+    return [i for i in items if i.get('title') and i.get('url')]
+
+
+def _norm_title(t):
+    return re.sub(r'[^a-z0-9áéíóúñ]+', ' ', (t or '').lower()).strip()[:90]
+
+
+def _news_items(sym):
+    """Noticias de un ticker juntando todas las fuentes en paralelo (cada una falla sola)."""
+    ar = sym.endswith('.BA')
+    base = sym[:-3] if ar else sym
+    name = _company_name(sym)
+    jobs = [lambda: _yf_news(sym),
+            lambda: _rss_items('https://feeds.finance.yahoo.com/rss/2.0/headline?s=%s&region=US&lang=en-US' % quote_plus(sym),
+                               sym, 10, 8, 'Yahoo Finance')]
+    if ar:
+        q1 = ('"%s" acciones OR bolsa OR balance OR resultados' % name) if name else ('%s acciones bolsa' % base)
+        q2 = ('%s %s' % (name or base, AR_PRESS_SITES))
+        jobs.append(lambda: _rss_items(_gnews_url(q1, True), sym, 10, 8))
+        jobs.append(lambda: _rss_items(_gnews_url(q2, True), sym, 10, 8))
+    else:
+        q = ('"%s" stock' % name) if name else ('%s stock' % base)
+        jobs.append(lambda: _rss_items(_gnews_url(q, False), sym, 10, 8))
+    lists = []
+    with ThreadPoolExecutor(max_workers=len(jobs)) as ex:
+        futs = [ex.submit(j) for j in jobs]
+        for f in futs:
+            try:
+                lists.append(f.result(timeout=14) or [])
+            except Exception:
+                lists.append([])
+    cutoff = (datetime.utcnow() - timedelta(days=NEWS_MAX_AGE_DAYS)).isoformat()
+    seen, merged = set(), []
+    for lst in lists:
+        for it in lst:
+            k = _norm_title(it.get('title'))
+            if not k or k in seen:
+                continue
+            if it.get('ts') and str(it['ts'])[:19] < cutoff:      # muy viejas: afuera
+                continue
+            seen.add(k)
+            merged.append(it)
+    merged.sort(key=lambda i: i.get('ts') or '', reverse=True)
+    return merged[:12]          # [] si no hay nada (cached_call lo cachea y no insiste en cada request)
+
+
+def _market_news(ar=True, limit=8):
+    """Titulares generales del mercado (para cuando las acciones de la cartera no tienen noticias propias)."""
+    if ar:
+        qs = [('Merval acciones bolsa argentina', True), ('mercado argentino bonos riesgo país dólar %s' % AR_PRESS_SITES, True)]
+    else:
+        qs = [('Wall Street stocks S&P 500 Nasdaq', False)]
+    items = []
+    for q, a_ in qs:
+        items += _rss_items(_gnews_url(q, a_), 'MERCADO', limit, 8)
+    seen, out = set(), []
+    for it in sorted(items, key=lambda i: i.get('ts') or '', reverse=True):
+        k = _norm_title(it.get('title'))
+        if k and k not in seen:
+            seen.add(k)
+            out.append(it)
+    return out[:limit]
 
 
 @app.route('/news', methods=['POST'])
@@ -2313,7 +2621,7 @@ def news_route():
     data = request.get_json(silent=True) or {}
     symbols = _clean_symbols(data.get('symbols'), 30)
     try:
-        limit = max(1, min(60, int(data.get('limit', 30))))
+        limit = max(1, min(80, int(data.get('limit', 30))))
     except (TypeError, ValueError):
         limit = 30
     if not symbols:
@@ -2321,17 +2629,41 @@ def news_route():
 
     def one(s):
         return cached_call('news:' + s, NEWS_TTL, lambda: _news_items(s)) or []
-    with ThreadPoolExecutor(max_workers=6) as ex:
+    with ThreadPoolExecutor(max_workers=8) as ex:
         lists = list(ex.map(one, symbols))
-    seen, merged = set(), []
+    # tope por ticker para que uno solo no tape a los demás; después se ordena todo por fecha
+    seen, merged, per_sym = set(), [], {}
     for lst in lists:
         for it in lst:
-            k = (it.get('title') or '').strip().lower()
+            k = _norm_title(it.get('title'))
+            s = it.get('symbol')
+            if not k or k in seen or per_sym.get(s, 0) >= NEWS_PER_SYMBOL:
+                continue
+            seen.add(k)
+            per_sym[s] = per_sym.get(s, 0) + 1
+            merged.append(it)
+    covered = sorted({i['symbol'] for i in merged})
+    # Si hay pocas noticias propias, sumar titulares generales del mercado (símbolo 'MERCADO')
+    general = False
+    if len(merged) < 8:
+        has_ar = any(s.endswith('.BA') for s in symbols)
+        extra = cached_call('news:mkt:%s' % ('ar' if has_ar else 'us'), NEWS_TTL, lambda: _market_news(has_ar)) or []
+        for it in extra:
+            k = _norm_title(it.get('title'))
             if k and k not in seen:
                 seen.add(k)
                 merged.append(it)
+                general = True
     merged.sort(key=lambda i: i.get('ts') or '', reverse=True)
-    return jsonify({'results': merged[:limit], 'asOf': datetime.utcnow().isoformat() + 'Z'})
+    return jsonify({'results': merged[:limit], 'asOf': datetime.utcnow().isoformat() + 'Z',
+                    'covered': covered, 'missing': [s for s in symbols if s not in covered], 'general': general})
+
+
+@app.route('/news/mercado', methods=['GET'])
+def news_mercado_route():
+    ar = request.args.get('market', 'ar') != 'us'
+    items = cached_call('news:mkt:%s' % ('ar' if ar else 'us'), NEWS_TTL, lambda: _market_news(ar, 12)) or []
+    return jsonify({'results': items})
 
 
 # ─── OPCIONES: PUT/CALL Y FLUJO INUSUAL ──────────────────────────────────────
@@ -2583,6 +2915,75 @@ def get_rrg_ar(period='daily', trail=8):
     trail = max(3, min(16, int(trail)))
     return cached_call('rrg:ar:%s:%d' % (period, trail), RRG_TTL, lambda: _build_rrg_ar(period, trail))
 
+
+
+# ─── ROTACIÓN DE ÍNDICES Y PAÍSES (ETFs en dólares vs ACWI) ───────────────────
+# Todos son ETFs que cotizan en USD, así los países son comparables entre sí (el ^MERV en pesos NO lo es:
+# la inflación y el tipo de cambio lo distorsionan, por eso Argentina entra vía ARGT). Benchmark: ACWI
+# (acciones del mundo) y no SPY, porque medir países contra EEUU solo diría "gana o pierde contra EEUU";
+# SPY entra como un miembro más.
+IDX_BENCH = ('ACWI', 'ACWI (mundo)')
+IDX_ETFS = [
+    ('SPY',  'EEUU · S&P 500'),        ('QQQ',  'EEUU · Nasdaq 100'),    ('IWM',  'EEUU · Small caps'),
+    ('EFA',  'Desarrollados ex-EEUU'), ('EEM',  'Emergentes'),           ('EWZ',  'Brasil'),
+    ('ARGT', 'Argentina (USD)'),       ('EWW',  'México'),               ('VGK',  'Europa'),
+    ('EWU',  'Reino Unido'),           ('EWJ',  'Japón'),                ('MCHI', 'China'),
+    ('INDA', 'India'),                 ('EWY',  'Corea del Sur'),        ('EWT',  'Taiwán'),
+    ('EWC',  'Canadá'),
+]
+
+
+def _build_rrg_idx(period, trail):
+    bench = IDX_BENCH[0]
+    syms = [bench] + [s for s, _ in IDX_ETFS]
+    frames = _download_many(syms, period='2y')
+    if bench not in frames:
+        return None
+    raw = pd.DataFrame({s: f['Close'].astype(float) for s, f in frames.items()})
+    idx = pd.to_datetime(raw.index)
+    raw.index = (idx.tz_localize(None) if getattr(idx, 'tz', None) is not None else idx).normalize()
+    raw = raw[~raw.index.duplicated(keep='last')].sort_index()
+    closes = raw.dropna(subset=[bench]).ffill()
+    if period == 'weekly':
+        closes = closes.resample('W-FRI').last().dropna(subset=[bench])
+        w, k = 26, 4
+    else:
+        w, k = 60, 5
+    sectors = []
+    for sym, name in IDX_ETFS:
+        if sym not in closes.columns or closes[sym].notna().sum() < w + k + 5:
+            continue
+        c = closes[sym]
+        rs = 100 * c / closes[bench]
+        ratio = 100 + (rs - rs.rolling(w).mean()) / rs.rolling(w).std(ddof=0)
+        roc = ratio.diff(k)
+        mom = 100 + roc / roc.rolling(w).std(ddof=0)
+        df = pd.DataFrame({'x': ratio, 'y': mom}).replace([np.inf, -np.inf], np.nan).dropna()
+        if len(df) < 2:
+            continue
+        tail = df.tail(trail)
+        cl = c.dropna()
+
+        def ret(n, cl=cl):
+            return round((cl.iloc[-1] / cl.iloc[-1 - n] - 1) * 100, 2) if len(cl) > n else None
+        x, y = float(df['x'].iloc[-1]), float(df['y'].iloc[-1])
+        sectors.append({
+            'symbol': sym, 'name': name, 'ratio': round(x, 2), 'momentum': round(y, 2), 'quadrant': _quadrant(x, y),
+            'trail': [{'x': round(float(a), 2), 'y': round(float(b), 2), 'd': d.strftime('%Y-%m-%d')}
+                      for d, a, b in zip(tail.index, tail['x'], tail['y'])],
+            'chg1d': ret(1), 'chg1w': ret(5), 'chg1m': ret(21), 'chg3m': ret(63),
+        })
+    if not sectors:
+        return None
+    return {'market': 'idx', 'period': period, 'benchmark': IDX_BENCH[0], 'benchmarkName': IDX_BENCH[1],
+            'asOf': closes.index[-1].strftime('%Y-%m-%d'), 'sectors': sectors,
+            'params': {'window': w, 'rocPeriod': k, 'trail': trail}}
+
+
+def get_rrg_idx(period='daily', trail=8):
+    period = 'weekly' if period == 'weekly' else 'daily'
+    trail = max(3, min(16, int(trail)))
+    return cached_call('rrg:idx:%s:%d' % (period, trail), RRG_TTL, lambda: _build_rrg_idx(period, trail))
 
 
 @app.route('/health', methods=['GET'])
