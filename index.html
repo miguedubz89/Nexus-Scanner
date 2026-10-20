@@ -1500,14 +1500,14 @@ a.dz-news:hover{background:var(--bg3)}
     <!-- ROTACIÓN TAB -->
     <div class="tab-panel" id="tab-rotation">
       <div class="mk-toolbar">
-        <select class="sel" id="rrgMarket" onchange="_rrgSel=null;_rrgData=null;loadRotation(true)"><option value="us">EEUU · ETFs SPDR vs SPY</option><option value="ar">Merval · sectores vs MERVAL</option></select>
+        <select class="sel" id="rrgMarket" onchange="_rrgSel=null;_rrgData=null;loadRotation(true)"><option value="us">EEUU · ETFs SPDR vs SPY</option><option value="ar">Merval · sectores vs MERVAL</option><option value="idx">Índices y países · ETFs vs ACWI</option></select>
         <select class="sel" id="rrgPeriod" onchange="loadRotation(true)"><option value="daily">Diario</option><option value="weekly">Semanal</option></select>
         <select class="sel" id="rrgTrail" onchange="loadRotation(true)"><option value="5">Estela: 5</option><option value="8" selected>Estela: 8</option><option value="12">Estela: 12</option></select>
         <button class="btn btn-a btn-sm" onclick="loadRotation(true)">↺ ACTUALIZAR</button><span id="rrgStatus"></span>
       </div>
       <div class="rr-layout"><div class="mk-card"><div class="mk-title">🔄 ROTACIÓN DE SECTORES <span class="mk-src" id="rrgSrc">RRG · ETFs sectoriales SPDR vs SPY</span></div><div id="rrgChart"><div class="mk-empty">Abrí la pestaña para calcular…</div></div></div><div class="mk-card" id="rrgTable"></div></div>
       <div id="rrgMembers"></div>
-      <div class="mk-note">Cómo leerlo: cada sector rota en sentido horario → <b>Mejorando</b> (azul) → <b>Líder</b> (verde) → <b>Debilitándose</b> (amarillo) → <b>Rezagado</b> (rojo). El eje horizontal es la fuerza relativa contra el S&amp;P 500 (SPY) y el vertical el momentum de esa fuerza. La estela muestra los últimos períodos. Es una aproximación propia al RRG de JdK (normalización por z-score), no idéntica a la de Bloomberg o StockCharts; sirve para ver hacia dónde se mueve el dinero entre sectores, no como señal de compra.</div>
+      <div class="mk-note" id="rrgNote">Cómo leerlo: cada sector rota en sentido horario → <b>Mejorando</b> (azul) → <b>Líder</b> (verde) → <b>Debilitándose</b> (amarillo) → <b>Rezagado</b> (rojo). El eje horizontal es la fuerza relativa contra el S&amp;P 500 (SPY) y el vertical el momentum de esa fuerza. La estela muestra los últimos períodos. Es una aproximación propia al RRG de JdK (normalización por z-score), no idéntica a la de Bloomberg o StockCharts; sirve para ver hacia dónde se mueve el dinero entre sectores, no como señal de compra.</div>
     </div>
 
     <!-- TECHNICAL TAB -->
@@ -4219,7 +4219,7 @@ function toggleAuto(){
 // ══════════════════════════════════════════════════════════════════════
 var FUND_KEYS = ['fundTs','shortName','currency','marketCap','pe','beta','divYield','epsGrowthQ','epsGrowthQPrev',
   'epsAccel','epsGrowthA','epsCagr3','epsSource','revGrowthQ','roe','profitMargin','floatShares','sharesOutstanding',
-  'heldPctInstitutions'];
+  'heldPctInstitutions','epsStable','epsYears','inflYoY','inflCagr3','fundV'];
 var FUND_TTL_MS = 6 * 3600 * 1000;
 var _renderTimer = null;
 var _dirty = {};
@@ -4270,7 +4270,7 @@ async function loadFundamentals(list) {
   var now = Date.now();
   var queue = list.filter(function(d) {
     if (!d || d._error || d.price == null || d.sector === 'ETF') return false;
-    if (d.fundTs && (now - d.fundTs * 1000) < FUND_TTL_MS) return false;   // todavía fresco
+    if (d.fundV === 2 && d.fundTs && (now - d.fundTs * 1000) < FUND_TTL_MS) return false;   // fresco y con el esquema nuevo (fundV 2)
     return true;
   });
   if (!queue.length) return;
@@ -4521,7 +4521,7 @@ window.addEventListener('resize', function(){ clearTimeout(_hmResizeT); _hmResiz
 // ══════════════════════════════════════════════════════════════════════
 //  PESTAÑA ROTACIÓN: Relative Rotation Graph de sectores (ETFs SPDR vs SPY)
 // ══════════════════════════════════════════════════════════════════════
-var RRG_COLORS = ['#00d4ff', '#ff9100', '#b47eff', '#00e676', '#ff3d5a', '#ffd600', '#4dd0e1', '#f06292', '#a1887f', '#9ccc65', '#7986cb'];
+var RRG_COLORS = ['#00d4ff', '#ff9100', '#b47eff', '#00e676', '#ff3d5a', '#ffd600', '#4dd0e1', '#f06292', '#a1887f', '#9ccc65', '#7986cb', '#ffab40', '#80cbc4', '#ce93d8', '#e6ee9c', '#90caf9'];
 var RRG_ORDER = ['Líder', 'Mejorando', 'Debilitándose', 'Rezagado'];
 var RRG_QCOL = {'Líder': '#00e676', 'Mejorando': '#00d4ff', 'Debilitándose': '#ffd600', 'Rezagado': '#ff3d5a'};
 
@@ -4542,7 +4542,9 @@ async function loadRotation(force) {
 
 function renderRotation() {
   var data = _rrgData; if (!data || !data.sectors) return;
-  var _src = document.getElementById('rrgSrc'); if (_src) _src.textContent = data.market === 'ar' ? 'RRG · sectores del Merval (canasta equiponderada) vs MERVAL' : 'RRG · ETFs sectoriales SPDR vs SPY';
+  var _src = document.getElementById('rrgSrc'); if (_src) _src.textContent = data.market === 'ar' ? 'RRG · sectores del Merval (canasta equiponderada) vs MERVAL' : data.market === 'idx' ? 'RRG · índices y países (ETFs en USD) vs ACWI' : 'RRG · ETFs sectoriales SPDR vs SPY';
+  var _nt = document.getElementById('rrgNote');
+  if (_nt) _nt.innerHTML = 'Cómo leerlo: cada ' + (data.market === 'idx' ? 'país o índice' : 'sector') + ' rota en sentido horario → <b>Mejorando</b> (azul) → <b>Líder</b> (verde) → <b>Debilitándose</b> (amarillo) → <b>Rezagado</b> (rojo). El eje horizontal es la fuerza relativa contra ' + (data.market === 'ar' ? 'el MERVAL' : data.market === 'idx' ? 'el mundo (ACWI)' : 'el S&amp;P 500 (SPY)') + ' y el vertical el momentum de esa fuerza. La estela muestra los últimos períodos. Es una aproximación propia al RRG de JdK (normalización por z-score), no idéntica a la de Bloomberg o StockCharts; sirve para ver hacia dónde se mueve el dinero, no como señal de compra.';
   var S = data.sectors, W = 760, H = 540, L = 56, R = 18, T = 16, B = 44, pw = W - L - R, ph = H - T - B;
   var dx = 1, dy = 1;
   S.forEach(function(s){ s.trail.forEach(function(p){ dx = Math.max(dx, Math.abs(p.x - 100)); dy = Math.max(dy, Math.abs(p.y - 100)); }); });
@@ -4587,7 +4589,7 @@ function renderRotation() {
   }).join('');
   var byQ = {}; sorted.forEach(function(s){ (byQ[s.quadrant] = byQ[s.quadrant] || []).push(s.symbol); });
   var sum = RRG_ORDER.filter(function(q){ return byQ[q]; }).map(function(q){ return '<span style="color:' + RRG_QCOL[q] + '"><b>' + q + ':</b> ' + byQ[q].join(', ') + '</span>'; }).join('<br>');
-  document.getElementById('rrgTable').innerHTML = '<div class="mk-title">🔄 SECTORES</div><div class="tbl-wrap"><table class="dt mk-tbl"><thead><tr><th>Sector</th><th>Cuadrante</th><th>Ratio</th><th>Mom</th><th>1D</th><th>1S</th><th>1M</th><th>3M</th></tr></thead><tbody>' + rows + '</tbody></table></div><div class="rr-sum">' + sum + '</div>';
+  document.getElementById('rrgTable').innerHTML = '<div class="mk-title">🔄 ' + (data.market === 'idx' ? 'ÍNDICES Y PAÍSES' : 'SECTORES') + '</div><div class="tbl-wrap"><table class="dt mk-tbl"><thead><tr><th>' + (data.market === 'idx' ? 'País / índice' : 'Sector') + '</th><th>Cuadrante</th><th>Ratio</th><th>Mom</th><th>1D</th><th>1S</th><th>1M</th><th>3M</th></tr></thead><tbody>' + rows + '</tbody></table></div><div class="rr-sum">' + sum + '</div>';
 }
 function rrgSelect(sym) { _rrgSel = (_rrgSel === sym ? null : sym); renderRotation(); }
 
@@ -4945,7 +4947,7 @@ function aiTickerLine(d) {
   push('vol alza/baja 50d', aiN(d.upDownVolRatio));
   push('RS score (IBD)', aiN(d.rsScore, 1));
   push('EPS CAGR 3a', aiN(d.epsCagr3, 1), '%');
-  try { var cs = canslimScore(d); parts.push('CANSLIM ' + cs.score + '/7 (' + cs.hits.map(function(h){ return h.l + (h.ok ? '✓' : '✗'); }).join(' ') + ')'); } catch (e) {}
+  try { var cs = canslimScore(d); parts.push('CANSLIM ' + cs.score + '/7 ' + cs.rating + (cs.capped ? ' (limitada: falta C, L o M)' : '') + ' (' + cs.hits.map(function(h){ return h.l + (h.ok ? '✓' : '✗') + (h.proxy ? '(aprox)' : ''); }).join(' ') + ')'); } catch (e) {}
   push('div yield', aiN(d.divYield));
   if (d.sector) parts.push('sector ' + d.sector);
   return '- ' + sym + ': ' + parts.join(' | ');
@@ -5268,14 +5270,17 @@ function squeezeDotBar(sqzOn, sqzOff, mom, momPrev) {
 }
 
 // ── CANSLIM SCORE ─────────────────────────────────
-// C = EPS trimestral (Diluted EPS) YoY > 25%, sin desaceleración fuerte y con ventas que no caen
-// A = EPS anual: CAGR a 3 años >= 25% (si hay historial) y último año >= 15%
-// N = Cerca del máximo de 52 semanas (a menos de 15%)
-// S = Oferta/demanda: volumen en ruedas de suba / en ruedas de baja (50 ruedas) >= 1.1
-// L = Líder: percentil de fuerza relativa IBD-style (40% último trimestre + 20% x 3 anteriores) dentro de
-//     tu universo, separado Argentina / Global, con precio sobre EMA200
-// I = Soporte institucional: tenencia institucional > 30% (fallback: capitalización > US$2B, convertida a USD)
-// M = Dirección del mercado: SPY (EEUU) / Merval (AR) sobre EMA50 y EMA200 y con menos de 5 días de distribución
+// Umbrales (O'Neil / IBD). Cada letra muestra en su tooltip el dato real y el umbral que usó.
+// C = EPS trimestral YoY > 25% sin desaceleración fuerte (o 15-25% con aceleración > 25pp) Y ventas >= +10%
+// A = EPS CAGR 3 años >= 25%, último año >= 15%, SIN años de caída y ROE >= 17%
+// N = a menos de 10% del máximo de 52s Y base de profundidad <= 35% (las bases muy profundas suelen fallar)
+// S = volumen en ruedas de suba / de baja >= 1.1 (50 ruedas) y >= 1.0 (20 ruedas: que no esté distribuyendo ahora)
+// L = percentil de fuerza relativa >= 80 en tu universo, sobre EMA200 y MEJOR que el índice (SPY / Merval)
+// I = tenencia institucional > 30% (fallback: capitalización > US$2B, convertida a USD)
+// M = SPY (EEUU) / Merval (AR) sobre EMA50 y EMA200 y con menos de 5 días de distribución
+// Argentina: los crecimientos de balances en pesos se miden en términos REALES (descontando inflación).
+// Calificación: 'strong' exige >= 5/7 Y que C, L y M estén en verde (O'Neil: sin ganancias actuales, sin liderazgo
+// o contra el mercado, no se compra). Las letras con dato aproximado (proxy) se marcan con borde punteado.
 
 // ── CANSLIM — M real: dirección del MERCADO GENERAL, no de la acción ──
 // Se calcula una sola vez por índice de referencia y se aplica igual a
@@ -5314,157 +5319,162 @@ function canslimRSPercentile(symbol) {
   return (below / pool.length) * 100;
 }
 
+// En acciones argentinas, los balances en pesos traen inflación adentro: un +25% nominal con 30% de inflación es
+// una caída real. Se deflacta con la inflación interanual (EPS trimestral/anual) o la de 3 años (CAGR) que manda el
+// server. Poner CANSLIM_AR_DEFLATE = false para volver a usar valores nominales.
+var CANSLIM_AR_DEFLATE = true;
+function canslimReal(g, d, infl) {
+  if (g == null) return null;
+  if (!CANSLIM_AR_DEFLATE || !isArgentineTicker(d.symbol) || infl == null) return g;
+  return Math.round(((1 + g / 100) / (1 + infl / 100) - 1) * 1000) / 10;
+}
+// Fuerza relativa del índice de referencia (misma fórmula IBD que usa cada acción) para exigir que el líder le gane
+function canslimBenchRS(d) {
+  var sym = isArgentineTicker(d.symbol) ? '^MERV' : 'SPY';
+  var ix = (_mktData && _mktData.indexes) ? _mktData.indexes.filter(function(i){ return i.symbol === sym; })[0] : null;
+  return (ix && ix.rsScore != null) ? {v: ix.rsScore, name: sym === 'SPY' ? 'SPY' : 'Merval'} : null;
+}
+function canslimRSPoolSize(symbol) {
+  var ar = isArgentineTicker(symbol);
+  return allData.filter(function(d){ return d.sector !== 'ETF' && isArgentineTicker(d.symbol) === ar && canslimRSVal(d) != null; }).length;
+}
+
 function canslimScore(d) {
-  var score = 0;
-  var hits  = [];
+  var hits = [];
+  var ar = isArgentineTicker(d.symbol), dfl = CANSLIM_AR_DEFLATE && ar && d.inflYoY != null;
+  function P(v) { return (v > 0 ? '+' : '') + v + '%'; }
+  function add(l, ok, tip, proxy) { hits.push({ l: l, ok: !!ok, tip: tip, proxy: !!proxy }); }
 
-  // C — EPS trimestral YoY > 25% (dato real del server), ahora con aceleración (epsAccel)
-  //     epsAccel = crecimiento YoY del trimestre más reciente MENOS el crecimiento YoY del
-  //     trimestre anterior. Positivo = está acelerando, negativo = está frenando.
-  //     Reglas:
-  //       - Crecimiento fuerte (>25%) pero desacelerando fuerte (<-15pp) → NO pasa
-  //         (señal clásica de alerta CANSLIM: el pico de crecimiento ya quedó atrás)
-  //       - Crecimiento moderado (15-25%) con aceleración fuerte (>25pp) → SÍ pasa
-  //         (empresa que recién está agarrando impulso, aunque el % todavía no sea gigante)
-  //     Fallback sin epsGrowthQ: PE razonable + día positivo
-  var c_ok;
-  var epsAccelKnown = d.epsAccel != null;
+  // C — EPS trimestral YoY (real en AR) + aceleración + ventas
+  var c_ok, cTip, cProxy = false;
   if (d.epsGrowthQ != null) {
-    var strongGrowth   = d.epsGrowthQ > 25;
-    var decelerating   = epsAccelKnown && d.epsAccel < -15;
-    var moderateGrowth = d.epsGrowthQ > 15 && d.epsGrowthQ <= 25;
-    var acceleratingHard = epsAccelKnown && d.epsAccel > 25;
-    var epsOk = (strongGrowth && !decelerating) || (moderateGrowth && acceleratingHard);
-    // Si hay dato de ventas y están cayendo, la ganancia probablemente viene de
-    // recorte de costos/recompras, no de negocio real creciendo — CANSLIM exige ambas.
-    var salesFalling = (d.revGrowthQ != null && d.revGrowthQ < -5);
-    c_ok = epsOk && !salesFalling;
+    var g = canslimReal(d.epsGrowthQ, d, d.inflYoY), rv = canslimReal(d.revGrowthQ, d, d.inflYoY), acc = d.epsAccel;
+    var strong   = g > 25 && !(acc != null && acc < -15);          // crece fuerte y no se está frenando
+    var building = g > 15 && g <= 25 && acc != null && acc > 25;   // recién agarra impulso
+    var salesOk  = (rv == null) || rv >= 10;                       // ganancias sin ventas = recorte de costos/recompras
+    c_ok = (strong || building) && salesOk;
+    cTip = 'EPS trim: ' + P(g) + (dfl ? ' real (nominal ' + P(d.epsGrowthQ) + ')' : '') +
+           ' | Acel: ' + (acc != null ? (acc > 0 ? '+' : '') + acc + 'pp' : 's/d') +
+           ' | Ventas: ' + (rv != null ? P(rv) + (dfl ? ' real' : '') : 's/d') + ' (piso +10%, ideal +25%)';
   } else {
-    c_ok = (d.pe && d.pe > 5 && d.pe < 40 && d.chgPct > 0);
+    c_ok = !!(d.pe && d.pe > 5 && d.pe < 40 && d.chgPct > 0); cProxy = true;
+    cTip = 'EPS sin dato — proxy P/E + día';
   }
-  if (c_ok) score++;
-  var cTip;
-  if (d.epsGrowthQ != null) {
-    cTip = 'EPS trim: '+(d.epsGrowthQ>0?'+':'')+d.epsGrowthQ+'%';
-    cTip += ' | Acel: '+(epsAccelKnown ? (d.epsAccel>0?'+':'')+d.epsAccel+'pp' : 's/d');
-    cTip += ' | Ventas: '+(d.revGrowthQ!=null ? (d.revGrowthQ>0?'+':'')+d.revGrowthQ+'%' : 's/d');
-  } else {
-    cTip = 'EPS sin dato — proxy P/E+día';
-  }
-  hits.push({ l:'C', ok: c_ok, tip: cTip });
+  add('C', c_ok, cTip, cProxy);
 
-  // A — EPS anual YoY > 25%
-  //     Fallback: momentum 12M > 20%
-  var a_ok, aTip;
+  // A — EPS anual: CAGR 3 años real, último año, estabilidad (sin años de caída) y ROE >= 17%
+  var a_ok, aTip, aProxy = false;
+  var roeOk = (d.roe == null) || d.roe >= 17, stable = (d.epsStable !== false);
+  var stTxt = d.epsStable == null ? 'estabilidad s/d' : (d.epsStable ? 'sin años de caída' : 'hubo años de caída ✗');
+  var roeTxt = 'ROE ' + (d.roe != null ? d.roe + '%' : 's/d') + ' (piso 17%)';
   if (d.epsCagr3 != null) {
-    a_ok = d.epsCagr3 >= 25 && (d.epsGrowthA == null || d.epsGrowthA >= 15);
-    aTip = 'EPS CAGR 3 años: '+(d.epsCagr3>0?'+':'')+d.epsCagr3+'% | último año: '+(d.epsGrowthA!=null ? (d.epsGrowthA>0?'+':'')+d.epsGrowthA+'%' : 's/d');
+    var cg = canslimReal(d.epsCagr3, d, d.inflCagr3), ly = canslimReal(d.epsGrowthA, d, d.inflYoY);
+    a_ok = cg >= 25 && (ly == null || ly >= 15) && stable && roeOk;
+    aTip = 'EPS CAGR 3a: ' + P(cg) + (dfl ? ' real' : '') + ' | último año: ' + (ly != null ? P(ly) : 's/d') + ' | ' + stTxt + ' | ' + roeTxt;
   } else if (d.epsGrowthA != null) {
-    a_ok = d.epsGrowthA > 25;
-    aTip = 'EPS anual: '+(d.epsGrowthA>0?'+':'')+d.epsGrowthA+'% (sin 3 años de historial)';
+    var ly2 = canslimReal(d.epsGrowthA, d, d.inflYoY);
+    a_ok = ly2 > 25 && stable && roeOk;
+    aTip = 'EPS anual: ' + P(ly2) + (dfl ? ' real' : '') + ' (sin 3 años de historial) | ' + stTxt + ' | ' + roeTxt;
   } else {
     var m12 = d.mom12m != null ? d.mom12m : d.mom6m;
-    a_ok = (m12 != null && m12 > 20);
+    a_ok = (m12 != null && m12 > 20); aProxy = true;
     aTip = 'EPS anual sin dato — proxy Mom12M';
   }
-  if (a_ok) score++;
-  hits.push({ l:'A', ok: a_ok, tip: aTip });
+  add('A', a_ok, aTip, aProxy);
 
-  // N — Cerca de máximos 52s (distFromHigh > -15%)
-  var n_ok = (d.distFromHigh != null && d.distFromHigh > -15);
-  if (n_ok) score++;
-  hits.push({ l:'N', ok: n_ok,
-    tip: d.distFromHigh != null ? 'Dist máx 52s: '+(d.distFromHigh>0?'+':'')+d.distFromHigh.toFixed(1)+'%' : 'Sin dato' });
+  // N — cerca del máximo de 52s y base sana
+  var depthOk = (d.baseDepth == null) || d.baseDepth <= 35;
+  var n_ok = (d.distFromHigh != null && d.distFromHigh > -10 && depthOk);
+  var nTip = d.distFromHigh != null ? 'Dist máx 52s: ' + P(+d.distFromHigh.toFixed(1)) + ' (piso -10%, ideal ≤5%)' : 'Sin dato';
+  if (d.baseDepth != null) nTip += ' | Base: ' + d.baseDepth + '% de profundidad (máx 35%)';
+  if (d.daysSinceHigh != null) nTip += ' | Máx hace ' + d.daysSinceHigh + ' ruedas';
+  add('N', n_ok, nTip, false);
 
-  // S — Supply & Demand: acumulación = más volumen en ruedas de suba que de baja (50 ruedas, como pide O'Neil).
-  //     Ya no se exige "volumen de hoy > 1.2x": durante la rueda el volumen del día está incompleto y
-  //     castigaba injustamente a casi todos los tickers hasta el cierre.
-  var s_ok, sTip;
+  // S — acumulación: volumen en suba vs baja, 50 y 20 ruedas
+  var s_ok, sTip, sProxy = false;
   if (d.upDownVolRatio != null) {
-    s_ok = d.upDownVolRatio >= 1.1;
-    sTip = 'Vol compra/venta (50d): '+d.upDownVolRatio.toFixed(2)+'x';
-    if (d.avgVol20 && d.volume) sTip += ' | Hoy: '+(d.volume/d.avgVol20).toFixed(2)+'x prom20';
+    var r50 = d.upDownVolRatio, r20 = d.upDownVol20;
+    s_ok = r50 >= 1.1 && (r20 == null || r20 >= 1.0);
+    sTip = 'Vol alza/baja 50d: ' + r50.toFixed(2) + 'x (piso 1.1)' + (r20 != null ? ' | 20d: ' + r20.toFixed(2) + 'x (piso 1.0)' : '');
   } else {
-    s_ok = !!(d.avgVol20 && d.volume && d.volume > d.avgVol20 * 1.2);
-    sTip = d.avgVol20 ? 'Vol/Avg: '+(d.volume/d.avgVol20).toFixed(2)+'x (sin desglose compra/venta)' : 'Sin dato volumen';
+    s_ok = !!(d.avgVol20 && d.volume && d.volume > d.avgVol20 * 1.2); sProxy = true;
+    sTip = d.avgVol20 ? 'Vol/Avg: ' + (d.volume / d.avgVol20).toFixed(2) + 'x (sin desglose compra/venta)' : 'Sin dato volumen';
   }
-  if (d.floatShares) sTip += ' | Float: '+(d.floatShares/1e6).toFixed(0)+'M';
-  if (s_ok) score++;
-  hits.push({ l:'S', ok: s_ok, tip: sTip });
+  if (d.floatShares) sTip += ' | Float: ' + (d.floatShares / 1e6).toFixed(0) + 'M';
+  add('S', s_ok, sTip, sProxy);
 
-  // L — Líder: Relative Strength percentil vs. tu universo cargado (top ~30%) + tendencia intacta
-  //     RSI y ROE quedan como señales secundarias/fallback, no como el criterio principal,
-  //     porque RSI (oscilador de sobrecompra/sobreventa) NO es lo mismo que la Relative
-  //     Strength de CANSLIM (ranking de performance de precio vs. el resto del mercado).
-  var rsPct = canslimRSPercentile(d.symbol);
-  var l_ok, lTip;
+  // L — líder: percentil >= 80 en tu universo + sobre EMA200 + mejor que el índice
+  var rsPct = canslimRSPercentile(d.symbol), bench = canslimBenchRS(d), l_ok, lTip, lProxy = false;
+  var above = d.distEma200 != null && d.distEma200 > 0;
   if (rsPct != null) {
-    l_ok = (rsPct >= 70 && d.distEma200 != null && d.distEma200 > 0);
-    lTip = 'RS vs tu universo: percentil ' + rsPct.toFixed(0);
+    var beats = !(bench && d.rsScore != null) || d.rsScore > bench.v;
+    l_ok = (rsPct >= 80 && above && beats);
+    lTip = 'RS percentil ' + rsPct.toFixed(0) + ' de ' + canslimRSPoolSize(d.symbol) + ' tickers de tu universo (piso 80)' +
+           (bench && d.rsScore != null ? ' | RS ' + d.rsScore.toFixed(1) + ' vs ' + bench.name + ' ' + bench.v.toFixed(1) : '') +
+           ' | ' + (above ? 'sobre' : 'bajo') + ' EMA200';
   } else if (d.roe != null) {
-    l_ok = (d.roe > 17 && d.rsi != null && d.rsi > 55 && d.distEma200 != null && d.distEma200 > 0);
-    lTip = 'Sin universo suficiente — proxy ROE: ' + d.roe + '% | RSI: ' + (d.rsi?d.rsi.toFixed(1):'--');
+    l_ok = (d.roe > 17 && d.rsi != null && d.rsi > 55 && above); lProxy = true;
+    lTip = 'Universo muy chico para rankear — proxy ROE: ' + d.roe + '% | RSI: ' + (d.rsi ? d.rsi.toFixed(1) : '--');
   } else {
-    l_ok = (d.rsi != null && d.rsi > 55 && d.distEma200 != null && d.distEma200 > 0);
-    lTip = 'Sin universo ni ROE — proxy RSI+EMA200';
+    l_ok = (d.rsi != null && d.rsi > 55 && above); lProxy = true;
+    lTip = 'Sin universo ni ROE — proxy RSI + EMA200';
   }
-  if (l_ok) score++;
-  hits.push({ l:'L', ok: l_ok, tip: lTip });
+  add('L', l_ok, lTip, lProxy);
 
-  // I — Soporte institucional: % real de tenencia institucional (dato de Yahoo Finance).
-  //     Fallback si no hay dato: MarketCap > $2B (proxy de tamaño, no de sponsorship real).
-  var i_ok, iTip;
+  // I — soporte institucional
+  var i_ok, iTip, iProxy = false;
   if (d.heldPctInstitutions != null) {
     i_ok = d.heldPctInstitutions > 30;
-    iTip = 'Tenencia institucional: '+d.heldPctInstitutions+'%';
+    iTip = 'Tenencia institucional: ' + d.heldPctInstitutions + '% (piso 30%)';
   } else {
-    // Yahoo da la capitalización de los .BA en PESOS: sin convertir, todas pasaban "> 2B" (siempre true)
     var isArs = (d.currency === 'ARS') || (!d.currency && isArgentineTicker(d.symbol));
     var capUsd = d.marketCap ? (isArs ? (cclRate ? d.marketCap / cclRate : null) : d.marketCap) : null;
-    i_ok = !!(capUsd && capUsd > 2e9);
-    iTip = capUsd ? 'Sin dato institucional — proxy Cap: US$'+(capUsd/1e9).toFixed(1)+'B' : 'Sin dato';
+    i_ok = !!(capUsd && capUsd > 2e9); iProxy = true;
+    iTip = capUsd ? 'Sin dato institucional — proxy capitalización: US$' + (capUsd / 1e9).toFixed(1) + 'B' : 'Sin dato';
   }
-  if (i_ok) score++;
-  hits.push({ l:'I', ok: i_ok, tip: iTip });
+  add('I', i_ok, iTip, iProxy);
 
-  // M — Mercado alcista: dirección del ÍNDICE de referencia (SPY / promedio Merval),
-  //     no de la propia acción. Si no hay referencia de mercado cargada, cae al
-  //     comportamiento anterior (EMA200 de la propia acción) como último recurso.
-  var mktDir = isArgentineTicker(d.symbol) ? canslimMarketDirectionAR() : canslimMarketDirectionUS();
-  var m_ok, mTip;
-  if (mktDir) {
-    m_ok = mktDir.ok; mTip = mktDir.tip;
-  } else {
-    m_ok = (d.distEma200 != null && d.distEma200 > 0);
-    mTip = d.distEma200 != null ? 'Sin referencia de mercado — proxy propia EMA200: '+(d.distEma200>0?'+':'')+d.distEma200.toFixed(1)+'%' : 'Sin dato';
+  // M — dirección del mercado general
+  var mktDir = ar ? canslimMarketDirectionAR() : canslimMarketDirectionUS(), m_ok, mTip, mProxy = false;
+  if (mktDir) { m_ok = mktDir.ok; mTip = mktDir.tip; }
+  else {
+    m_ok = (d.distEma200 != null && d.distEma200 > 0); mProxy = true;
+    mTip = d.distEma200 != null ? 'Sin referencia de mercado — proxy EMA200 propia: ' + P(+d.distEma200.toFixed(1)) : 'Sin dato';
   }
-  if (m_ok) score++;
-  hits.push({ l:'M', ok: m_ok, tip: mTip });
+  add('M', m_ok, mTip, mProxy);
 
-  return { score: score, hits: hits };
+  var score = hits.filter(function(h){ return h.ok; }).length;
+  var byL = {}; hits.forEach(function(h){ byL[h.l] = h; });
+  var crit = byL.C.ok && byL.L.ok && byL.M.ok;               // C, L y M son excluyentes para 'strong'
+  var capped = score >= 5 && !crit;
+  var rating = score >= 5 ? (crit ? 'strong' : 'moderate') : (score >= 3 ? 'moderate' : 'weak');
+  return { score: score, hits: hits, rating: rating, capped: capped, nProxy: hits.filter(function(h){ return h.proxy; }).length };
 }
 
 function canslimCell(d) {
   if (d._fundPending) return '<div class="canslim-cell"><span class="canslim-badge moderate" title="Cargando fundamentals…">…</span></div>';
   var result = canslimScore(d);
-  var score  = result.score;
-  var hits   = result.hits;
+  var score = result.score, hits = result.hits;
 
-  var badgeCls, badgeTxt;
-  if (score >= 5)      { badgeCls = 'strong';   badgeTxt = score+'/7 ★'; }
-  else if (score >= 3) { badgeCls = 'moderate'; badgeTxt = score+'/7 ~'; }
-  else                 { badgeCls = 'weak';      badgeTxt = score+'/7 ✗'; }
+  var badgeCls = result.rating, badgeTxt;
+  if (result.rating === 'strong')      badgeTxt = score + '/7 ★';
+  else if (result.rating === 'moderate') badgeTxt = score + '/7 ~';
+  else                                  badgeTxt = score + '/7 ✗';
+  var badgeTip = [];
+  if (result.capped) badgeTip.push('Tiene ' + score + '/7 pero le falta C, L o M: no se la califica como fuerte');
+  if (result.nProxy) badgeTip.push(result.nProxy + ' letra(s) con dato aproximado (borde punteado)');
 
   var dots = hits.map(function(h) {
     var col = h.ok ? 'var(--green)' : 'rgba(255,61,90,0.35)';
-    return '<div class="canslim-dot" title="'+h.l+': '+h.tip+'" style="background:'+col+'"></div>';
+    var ex = h.proxy ? ';box-shadow:0 0 0 1px var(--text-dim);opacity:.8' : '';
+    return '<div class="canslim-dot" title="' + h.l + (h.proxy ? ' (aprox.)' : '') + ': ' + h.tip.replace(/"/g, '&quot;') + '" style="background:' + col + ex + '"></div>';
   }).join('');
 
-  return '<div class="canslim-cell">'+
-    '<div class="canslim-score">'+
-      '<span class="canslim-badge '+badgeCls+'">'+badgeTxt+'</span>'+
-      '<div class="canslim-dots">'+dots+'</div>'+
-    '</div>'+
+  return '<div class="canslim-cell">' +
+    '<div class="canslim-score">' +
+      '<span class="canslim-badge ' + badgeCls + '" title="' + badgeTip.join(' · ') + '">' + badgeTxt + '</span>' +
+      '<div class="canslim-dots">' + dots + '</div>' +
+    '</div>' +
   '</div>';
 }
 
@@ -8027,7 +8037,7 @@ window.dzEvRange = function (v) { evRange = parseInt(v, 10) || 0; lsSet('dubz_ev
 DZ._t = {buildMonthly: buildMonthly, aggAnnual: aggAnnual, comboChart: comboChart};
 
 /* ═══════════════ 4. EVENTOS, NOTICIAS Y FUNDAMENTALES ══════════════ */
-var cart = {evSig: '', evAt: 0, ev: [], newsSig: '', newsAt: 0, news: [], fund: {}, fundBusy: false, evAll: false, newsAll: false};
+var cart = {evSig: '', evAt: 0, ev: [], newsSig: '', newsAt: 0, news: [], newsMeta: null, fund: {}, fundBusy: false, evAll: false, newsAll: false};
 
 function evRenderList() {
   var host = $('dzEvents'); if (!host) return;
@@ -8052,11 +8062,16 @@ function newsRenderList() {
   hs.forEach(function (h) { lbl[h.sym] = h.label; });
   var shown = cart.newsAll ? cart.news : cart.news.slice(0, 4);
   host.innerHTML = shown.length ? shown.map(function (n) {
-    var l = lbl[n.symbol] || n.symbol;
+    var l = lbl[n.symbol] || (n.symbol === 'MERCADO' ? 'Mercado' : n.symbol);
     return '<a class="dz-row dz-news" href="' + esc(n.url || '#') + '" target="_blank" rel="noopener noreferrer">' + avatar(l) +
       '<div style="min-width:0;flex:1"><div class="dz-dim"><b style="color:var(--text-bright)">' + esc(l) + '</b> · ' + esc(n.source || '') + ' · ' + esc(ago(n.ts)) + '</div>' +
       '<div class="dz-news-t">' + esc(n.title) + '</div></div><span class="dz-dim">↗</span></a>';
   }).join('') : '<div class="mk-empty" style="padding:16px">Sin noticias recientes de tus acciones.</div>';
+  var mt = cart.newsMeta;
+  if (mt && shown.length && mt.missing && mt.missing.length && mt.general) {
+    var names = mt.missing.map(function (s) { return lbl[s] || s; }).slice(0, 8).join(', ');
+    host.innerHTML += '<div class="dz-dim" style="padding:8px 12px">Sin noticias propias de ' + esc(names) + (mt.missing.length > 8 ? '…' : '') + ': se muestran también titulares generales del mercado.</div>';
+  }
   var more = $('dzNewsMore'); if (more) more.textContent = cart.newsAll ? 'Ver menos ←' : 'Ver todas →';
 }
 window.dzEvToggle = function () { cart.evAll = !cart.evAll; evRenderList(); };
@@ -8074,7 +8089,7 @@ async function ensureNews(syms, force) {
   if (!force && sig === cart.newsSig && Date.now() - cart.newsAt < 10 * 60000) return;
   cart.newsSig = sig; cart.newsAt = Date.now();
   if (!syms.length) { cart.news = []; return; }
-  try { cart.news = (await postJ('/news', {symbols: syms.slice(0, 30), limit: 30}, 60000)).results || []; } catch (e) { cart.newsAt = 0; }
+  try { var nr = await postJ('/news', {symbols: syms.slice(0, 30), limit: 40}, 60000); cart.news = nr.results || []; cart.newsMeta = nr; } catch (e) { cart.newsAt = 0; }
 }
 async function ensureFund(syms) {
   if (cart.fundBusy) return;
@@ -8352,13 +8367,13 @@ async function alertsPoll() {
         st.fg = s;
       }
     } catch (e) {}
-    var mk = [['us', ''], ['ar', '&market=ar']];
+    var mk = [['us', ''], ['ar', '&market=ar'], ['idx', '&market=idx']];
     for (var i = 0; i < mk.length; i++) {
       try {
         var r = await getJ('/rrg?period=daily&trail=5' + mk[i][1], 60000);
         (r.sectors || []).forEach(function (sec) {
           var key = mk[i][0] + ':' + sec.symbol, prev = st.q[key];
-          if (prev && prev !== sec.quadrant) fresh.push({k: 'sector', t: Date.now(), title: (mk[i][0] === 'ar' ? '🇦🇷 ' : '🇺🇸 ') + sec.name + ' (' + sec.symbol + ') cambió de cuadrante', detail: prev + ' → ' + sec.quadrant, sev: sec.quadrant === 'Líder' ? 'green' : sec.quadrant === 'Rezagado' ? 'red' : 'cyan', from: prev, to: sec.quadrant});
+          if (prev && prev !== sec.quadrant) fresh.push({k: 'sector', t: Date.now(), title: (mk[i][0] === 'ar' ? '🇦🇷 ' : mk[i][0] === 'idx' ? '🌎 ' : '🇺🇸 ') + sec.name + ' (' + sec.symbol + ') cambió de cuadrante', detail: prev + ' → ' + sec.quadrant, sev: sec.quadrant === 'Líder' ? 'green' : sec.quadrant === 'Rezagado' ? 'red' : 'cyan', from: prev, to: sec.quadrant});
           st.q[key] = sec.quadrant; st.names = st.names || {}; st.names[key] = sec.name;
         });
       } catch (e) {}
@@ -8366,7 +8381,7 @@ async function alertsPoll() {
     st.init = true; st.t = Date.now(); lsSet(AL_STATE, st);
     if (fresh.length && !first) {
       log = fresh.concat(log).slice(0, 60); lsSet(AL_LOG, log);
-      fresh.forEach(function (a) { toast('<b>' + esc(a.title) + '</b><br>' + esc(a.detail), a.sev); notify(a.title.replace(/^(🇦🇷|🇺🇸) /, ''), a.detail); });
+      fresh.forEach(function (a) { toast('<b>' + esc(a.title) + '</b><br>' + esc(a.detail), a.sev); notify(a.title.replace(/^(🇦🇷|🇺🇸|🌎) /, ''), a.detail); });
     }
     alertsRender();
   } finally { alBusy = false; }
@@ -8383,16 +8398,16 @@ function alertsRender() {
   var perm = ('Notification' in window) ? Notification.permission : 'unsupported';
   var notifBtn = perm === 'granted' ? '<span class="mk-src" style="color:var(--green)">🔔 notificaciones del navegador activas</span>' : perm === 'denied' ? '<span class="mk-src">🔕 notificaciones bloqueadas en el navegador</span>' : perm === 'default' ? '<button class="btn btn-g btn-sm" onclick="dzAlertsEnable()">🔔 Activar notificaciones</button>' : '';
   var fgTxt = st.fg == null ? '--' : Math.round(st.fg);
-  var chips = ['us', 'ar'].map(function (m) {
-    var by = {}; Object.keys(st.q || {}).forEach(function (k) { if (k.indexOf(m + ':') === 0) (by[st.q[k]] = by[st.q[k]] || []).push(k.slice(3)); });
+  var chips = ['us', 'ar', 'idx'].map(function (m) {
+    var by = {}; Object.keys(st.q || {}).forEach(function (k) { if (k.indexOf(m + ':') === 0) (by[st.q[k]] = by[st.q[k]] || []).push(k.slice(k.indexOf(':') + 1)); });
     var txt = ['Líder', 'Mejorando', 'Debilitándose', 'Rezagado'].filter(function (q) { return by[q]; }).map(function (q) { return '<span style="color:' + Q_COL[q] + '"><b>' + q + ':</b> ' + by[q].join(', ') + '</span>'; }).join(' · ');
-    return '<div class="dz-al-line"><b>' + (m === 'ar' ? '🇦🇷 Merval' : '🇺🇸 EEUU') + '</b> ' + (txt || '<span class="mk-dim">esperando primer cálculo…</span>') + '</div>';
+    return '<div class="dz-al-line"><b>' + (m === 'ar' ? '🇦🇷 Merval' : m === 'idx' ? '🌎 Países' : '🇺🇸 EEUU') + '</b> ' + (txt || '<span class="mk-dim">esperando primer cálculo…</span>') + '</div>';
   }).join('');
   var rows = log.slice(0, 12).map(function (a) {
     var col = {red: 'var(--red)', green: 'var(--green)', yellow: 'var(--yellow)', cyan: 'var(--accent)'}[a.sev] || 'var(--text)';
     return '<div class="dz-al-row"><span class="mk-dim">' + new Date(a.t).toLocaleString('es-AR', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'}) + '</span><span style="color:' + col + '"><b>' + esc(a.title) + '</b> — ' + esc(a.detail) + '</span></div>';
   }).join('');
-  el.innerHTML = '<div class="mk-title">🔔 ALERTAS <span class="mk-src">cambio de cuadrante de un sector · Fear &amp; Greed cruza 25 o 75</span>' + notifBtn + '<button class="btn btn-g btn-sm" onclick="dzAlertsCheck()">Revisar ahora</button>' + (log.length ? '<button class="btn btn-r btn-sm" onclick="dzAlertsClear()">Borrar historial</button>' : '') + '</div>' +
+  el.innerHTML = '<div class="mk-title">🔔 ALERTAS <span class="mk-src">cambio de cuadrante de un sector o país · Fear &amp; Greed cruza 25 o 75</span>' + notifBtn + '<button class="btn btn-g btn-sm" onclick="dzAlertsCheck()">Revisar ahora</button>' + (log.length ? '<button class="btn btn-r btn-sm" onclick="dzAlertsClear()">Borrar historial</button>' : '') + '</div>' +
     '<div class="dz-al-line"><b>Fear &amp; Greed:</b> ' + fgTxt + (st.fg != null ? ' · ' + (typeof fgLabel === 'function' ? fgLabel(st.fg) : '') : '') + ' <span class="mk-dim">(alerta al cruzar 25 o 75)</span></div>' + chips +
     '<div style="margin-top:8px">' + (rows || '<div class="mk-empty" style="padding:8px 0">Todavía no hubo cambios. Te avisamos acá, con un cartel en pantalla y, si lo activás, con una notificación del navegador.</div>') + '</div>' +
     '<div class="mk-note" style="margin-top:8px">Se evalúa cada 5 minutos <b>mientras DUBZ esté abierto</b> en el navegador (en cualquier pestaña). Si lo cerrás, no hay aviso hasta que lo vuelvas a abrir. Las alertas usan la rotación diaria; un sector puede entrar y salir de un cuadrante cerca del límite, por eso a veces aparecen cambios seguidos.</div>';
@@ -8403,6 +8418,7 @@ function rotMembers() {
   var el = $('rrgMembers'); if (!el) return;
   var d = window._rrgData;
   if (d && d.market === 'ar') el.innerHTML = '<div class="mk-note"><b>Composición de los sectores del Merval</b> (canasta equiponderada, sin ponderar por capitalización; se mide contra el índice MERVAL): ' + (d.sectors || []).map(function (s) { return '<b>' + esc(s.name) + '</b>: ' + esc((s.members || []).join(', ')); }).join(' · ') + '. Clasificación propia, hecha a mano: los sectores con pocas acciones son más ruidosos.</div>';
+  else if (d && d.market === 'idx') el.innerHTML = '<div class="mk-note"><b>Qué mide:</b> hacia dónde rota el dinero entre mercados, con ETFs que cotizan en dólares (' + (d.sectors || []).map(function (s) { return '<b>' + esc(s.symbol) + '</b> ' + esc(s.name); }).join(' · ') + '), contra el índice mundial ACWI. Ojo: al ser ETFs en USD, el resultado mezcla el mercado local con el tipo de cambio de ese país. Argentina entra con ARGT (en dólares) porque el MERVAL en pesos no es comparable con el resto.</div>';
   else el.innerHTML = '';
 }
 
