@@ -577,8 +577,9 @@ def call_anthropic(system_prompt, messages, use_web=True):
                   'messages': msgs, 'tools': tools},
             timeout=75,
         )
-        if r.status_code == 400 and AI_WEB_TOOL in tools:
+        if r.status_code == 400 and AI_WEB_TOOL in tools and 'web_search' in r.text.lower().replace(' ', '_'):
             # búsqueda web no habilitada en la cuenta/modelo: seguimos sin ella en vez de fallar
+            # (solo si el 400 habla de web_search: otros 400 no deben taparse reintentando)
             print('[Rendi AI] 400 con web_search, reintento sin búsqueda web:', r.text[:300])
             tools = list(AI_TOOLS)
             continue
@@ -588,7 +589,6 @@ def call_anthropic(system_prompt, messages, use_web=True):
         content = res.get('content', [])
         stop = res.get('stop_reason')
         if stop == 'tool_use':
-            msgs.append({'role': 'assistant', 'content': content})
             results = []
             for b in content:
                 if b.get('type') == 'tool_use':
@@ -596,7 +596,14 @@ def call_anthropic(system_prompt, messages, use_web=True):
                         out = run_ai_tool(b.get('name'), b.get('input') or {})
                     except Exception as e:
                         out = 'Error al ejecutar la herramienta: ' + str(e)
-                    results.append({'type': 'tool_result', 'tool_use_id': b.get('id'), 'content': out})
+                    results.append({'type': 'tool_result', 'tool_use_id': b.get('id'),
+                                    'content': out or '(sin datos)'})
+            if not results:
+                # stop_reason=tool_use pero sin pedidos que ejecutar nosotros: mandar un mensaje de usuario vacío
+                # rompe la API ("user messages must have non-empty content"). Se toma como respuesta final.
+                print('[Rendi AI] tool_use sin bloques tool_use; bloques recibidos:', [b.get('type') for b in content])
+                return content
+            msgs.append({'role': 'assistant', 'content': content})
             msgs.append({'role': 'user', 'content': results})
             continue
         if stop == 'pause_turn':   # turno largo con búsquedas web: se continúa
