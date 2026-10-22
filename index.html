@@ -1055,6 +1055,16 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 .ai-msg-error{background:rgba(255,61,90,0.1);border:1px solid var(--red2);color:var(--red);align-self:flex-start;border-bottom-left-radius:4px}
 .ai-msg-order{background:rgba(255,214,0,0.08);border:1px solid var(--yellow2);color:var(--text-bright);align-self:flex-start;border-bottom-left-radius:4px}
 .ai-msg-order button{margin-top:10px}
+.ai-md{white-space:normal}
+.ai-md p{margin:0 0 9px}
+.ai-md p:last-child,.ai-md ul:last-child{margin-bottom:0}
+.ai-md ul{margin:2px 0 9px;padding-left:19px}
+.ai-md li{margin:0 0 4px}
+.ai-md h4{margin:10px 0 5px;font-size:12px;letter-spacing:.9px;text-transform:uppercase;color:var(--accent)}
+.ai-md h4:first-child{margin-top:0}
+.ai-md b{color:var(--text-bright);font-weight:600}
+.ai-md code{font-family:var(--mono);font-size:12.5px;background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px}
+.ai-md a{color:var(--accent);text-decoration:underline;word-break:break-all}
 .ai-input-row{display:flex;gap:8px;margin-top:10px}
 .ai-input-row .pf-input{flex:1;font-family:var(--head);border-radius:20px;padding:10px 16px}
 #aiMicBtn.listening{background:var(--red);color:var(--bg);border-color:var(--red);animation:pulse 1s infinite}
@@ -4219,7 +4229,8 @@ function toggleAuto(){
 // ══════════════════════════════════════════════════════════════════════
 var FUND_KEYS = ['fundTs','shortName','currency','marketCap','pe','beta','divYield','epsGrowthQ','epsGrowthQPrev',
   'epsAccel','epsGrowthA','epsCagr3','epsSource','revGrowthQ','roe','profitMargin','floatShares','sharesOutstanding',
-  'heldPctInstitutions','epsStable','epsYears','inflYoY','inflCagr3','fundV'];
+  'heldPctInstitutions','epsStable','epsYears','inflYoY','inflCagr3','fundV',
+  'epsAccel2','epsQCur','epsQBase','revAccel','epsEstGrowthCQ','epsEstGrowthNQ','epsEstGrowthY','epsEstGrowthNY','revEstGrowthCQ'];
 var FUND_TTL_MS = 6 * 3600 * 1000;
 var _renderTimer = null;
 var _dirty = {};
@@ -4270,7 +4281,7 @@ async function loadFundamentals(list) {
   var now = Date.now();
   var queue = list.filter(function(d) {
     if (!d || d._error || d.price == null || d.sector === 'ETF') return false;
-    if (d.fundV === 2 && d.fundTs && (now - d.fundTs * 1000) < FUND_TTL_MS) return false;   // fresco y con el esquema nuevo (fundV 2)
+    if (d.fundV >= 3 && d.fundTs && (now - d.fundTs * 1000) < FUND_TTL_MS) return false;   // fresco y con el esquema nuevo (fundV 3)
     return true;
   });
   if (!queue.length) return;
@@ -4789,6 +4800,37 @@ function aiEscape(s) {
   return String(s == null ? '' : s).replace(/[&<>]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]; });
 }
 
+// Convierte el texto de Rendi AI (negrita **x**, listas "- ", títulos "## ") en HTML. Primero se escapa TODO el HTML,
+// así que lo que mande el modelo nunca se interpreta como etiquetas. También saca restos de <cite ...> por si
+// llega una respuesta vieja o un server sin actualizar.
+function aiMd(src) {
+  var raw = String(src == null ? '' : src).replace(/<\/?cite[^>]*>/gi, '').replace(/\[\s*\d{1,3}(?:\s*[-–:,]\s*\d{1,3})*\s*\]/g, '');
+  var lines = aiEscape(raw).split(/\r?\n/), html = '', inList = false, para = [];
+  function inl(x) {
+    return x.replace(/\*\*([^*\n]+?)\*\*/g, '<b>$1</b>')
+            .replace(/(^|[\s(])\*([^*\s][^*\n]*?)\*(?=[\s).,;:!?]|$)/g, '$1<i>$2</i>')
+            .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+            .replace(/(https?:\/\/[^\s<)]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+  }
+  function flushP() { if (para.length) { html += '<p>' + para.map(inl).join('<br>') + '</p>'; para = []; } }
+  function closeList() { if (inList) { html += '</ul>'; inList = false; } }
+  lines.forEach(function (ln) {
+    var m;
+    if (/^\s*$/.test(ln)) { flushP(); closeList(); return; }
+    if ((m = ln.match(/^\s{0,3}#{1,4}\s+(.*)$/))) { flushP(); closeList(); html += '<h4>' + inl(m[1]) + '</h4>'; return; }
+    if ((m = ln.match(/^\s*(?:[-*•]|\d+[.)])\s+(.*)$/))) {
+      flushP();
+      if (!inList) { html += '<ul>'; inList = true; }
+      html += '<li>' + inl(m[1]) + '</li>';
+      return;
+    }
+    closeList();
+    para.push(ln.trim());
+  });
+  flushP(); closeList();
+  return html || '(sin respuesta)';
+}
+
 // Arma un resumen de la cartera activa para darle contexto a la IA.
 // Se asegura de que la cartera esté cargada aunque el usuario nunca haya
 // abierto la pestaña Cartera (por ej. si preguntó desde la burbuja flotante).
@@ -4849,6 +4891,7 @@ var AI_ALIAS = {
   'TELECOM':'TECO2','TRANSENER':'TRAN','LOMA':'LOMA','CRESUD':'CRES','CENTRAL PUERTO':'CEPU','EDENOR':'EDN',
   'BROADCOM':'AVGO','QUALCOMM':'QCOM','ORACLE':'ORCL','SALESFORCE':'CRM','UBER':'UBER','PAYPAL':'PYPL'
 };
+var AI_AMBIG = {'META':1,'MACRO':1,'LOMA':1,'TELECOM':1,'UBER':0};
 var AI_STOP = {'COME':1,'LONG':1,'HOLA':1,'PARA':1,'QUE':1,'COMO':1,'CON':1,'LOS':1,'LAS':1,'UNA':1,'MAS':1,'POR':1,'DEL':1,'ESTA':1,'ESTE':1,'HOY':1};
 
 function aiPushHistory(prefix, role, content) {
@@ -4870,7 +4913,12 @@ function aiDetectTickers(pregunta, prefix) {
   function add(sym){ var k = aiBaseSym(sym); if (!seen[k] && found.length < 5) { seen[k] = 1; found.push(known[k] || sym); } }
   texts.forEach(function(t){
     var up = String(t || '').toUpperCase();
-    Object.keys(AI_ALIAS).forEach(function(name){ if (up.indexOf(name) !== -1 && new RegExp('(^|[^A-Z])' + name + '([^A-Z]|$)').test(up)) add(AI_ALIAS[name]); });
+    Object.keys(AI_ALIAS).forEach(function(name){
+      if (up.indexOf(name) === -1 || !new RegExp('(^|[^A-Z])' + name + '([^A-Z]|$)').test(up)) return;
+      // 'meta', 'macro', 'loma' y 'telecom' son palabras comunes: solo cuentan si vienen con mayúscula inicial (Meta, Macro, MACRO)
+      if (AI_AMBIG[name] && !new RegExp('(^|[^A-Za-zÁÉÍÓÚÑáéíóúñ])(' + name.charAt(0) + name.slice(1).toLowerCase() + '|' + name + ')([^A-Za-zÁÉÍÓÚÑáéíóúñ]|$)').test(String(t || ''))) return;
+      add(AI_ALIAS[name]);
+    });
     (String(t || '').match(/[A-Za-z0-9.]{2,8}/g) || []).forEach(function(w){
       var u = w.toUpperCase();
       if (AI_STOP[u]) return;
@@ -4939,11 +4987,17 @@ function aiTickerLine(d) {
   push('momentum 12m', aiN(d.mom12m, 1), '%');
   push('PER', aiN(d.pe, 1));
   push('cap', aiBig(d.marketCap));
-  push('EPS crec trim', aiN(d.epsGrowthQ != null && Math.abs(d.epsGrowthQ) < 5 ? d.epsGrowthQ * 100 : d.epsGrowthQ, 1), '%');
-  push('EPS crec anual', aiN(d.epsGrowthA != null && Math.abs(d.epsGrowthA) < 5 ? d.epsGrowthA * 100 : d.epsGrowthA, 1), '%');
-  push('ventas crec trim', aiN(d.revGrowthQ != null && Math.abs(d.revGrowthQ) < 5 ? d.revGrowthQ * 100 : d.revGrowthQ, 1), '%');
-  push('ROE', aiN(d.roe != null && Math.abs(d.roe) < 5 ? d.roe * 100 : d.roe, 1), '%');
-  push('inst %', aiN(d.heldPctInstitutions != null && d.heldPctInstitutions <= 1 ? d.heldPctInstitutions * 100 : d.heldPctInstitutions, 1), '%');
+  // El server ya devuelve estos campos en % (3.2 = 3,2%): antes se multiplicaban x100 si eran < 5 (un EPS de +3% salía como +320%)
+  push('EPS crec trim', aiN(d.epsGrowthQ, 1), '%');
+  push('EPS aceleración', aiN(d.epsAccel, 1), 'pp');
+  push('EPS est. analistas trim. actual', aiN(d.epsEstGrowthCQ, 1), '%');
+  push('EPS crec anual', aiN(d.epsGrowthA, 1), '%');
+  push('EPS est. analistas año en curso', aiN(d.epsEstGrowthY, 1), '%');
+  push('ventas crec trim', aiN(d.revGrowthQ, 1), '%');
+  push('ROE', aiN(d.roe, 1), '%');
+  push('inst %', aiN(d.heldPctInstitutions, 1), '%');
+  if (d.baseDepth != null) parts.push('base ' + d.baseDepth + '% de profundidad');
+  if (d.stockDistDays != null) parts.push('dias de distribucion (25 ruedas) ' + d.stockDistDays);
   push('vol alza/baja 50d', aiN(d.upDownVolRatio));
   push('RS score (IBD)', aiN(d.rsScore, 1));
   push('EPS CAGR 3a', aiN(d.epsCagr3, 1), '%');
@@ -5058,7 +5112,7 @@ async function aiSend(prefix) {
     if (data.tipo === 'orden' && data.orden) {
       aiShowOrderConfirm(prefix, data.orden, data.texto);
     } else {
-      aiAddMsg(prefix, aiEscape(data.texto || '(sin respuesta)'), 'ai-msg-bot');
+      aiAddMsg(prefix, aiMd(data.texto || '(sin respuesta)'), 'ai-msg-bot ai-md');
     }
   } catch(e) {
     var th2 = document.getElementById(prefix + 'Thinking'); if (th2) th2.remove();
@@ -5270,17 +5324,27 @@ function squeezeDotBar(sqzOn, sqzOff, mom, momPrev) {
 }
 
 // ── CANSLIM SCORE ─────────────────────────────────
-// Umbrales (O'Neil / IBD). Cada letra muestra en su tooltip el dato real y el umbral que usó.
-// C = EPS trimestral YoY > 25% sin desaceleración fuerte (o 15-25% con aceleración > 25pp) Y ventas >= +10%
+// Umbrales (O'Neil / IBD) en CANSLIM_CFG (más abajo): se ajustan en un solo lugar. Cada letra muestra en su tooltip
+// el dato real y el umbral que usó.
+// C = EPS trimestral YoY >= 25% sin frenarse (o 15-25% con aceleración >= 25pp) Y ventas >= +10%. Si el EPS pasó de
+//     pérdida a ganancia (turnaround) NO califica. Usa el EPS reportado (ajustado, el que usa IBD) con ~4 años de trimestres.
 // A = EPS CAGR 3 años >= 25%, último año >= 15%, SIN años de caída y ROE >= 17%
-// N = a menos de 10% del máximo de 52s Y base de profundidad <= 35% (las bases muy profundas suelen fallar)
-// S = volumen en ruedas de suba / de baja >= 1.1 (50 ruedas) y >= 1.0 (20 ruedas: que no esté distribuyendo ahora)
-// L = percentil de fuerza relativa >= 80 en tu universo, sobre EMA200 y MEJOR que el índice (SPY / Merval)
+// N = a menos de 10% del máximo de 52s, base de profundidad <= 35% y NO extendida (> 30% sobre la EMA50: ya corrió)
+// S = volumen en ruedas de suba / de baja >= 1.1 (50 ruedas) y >= 1.0 (20 ruedas), sin distribución fuerte (< 7 días/25)
+// L = percentil de fuerza relativa >= 80 en tu universo, mejor que el índice, sobre EMA200 y con EMA50 > EMA200
 // I = tenencia institucional > 30% (fallback: capitalización > US$2B, convertida a USD)
-// M = SPY (EEUU) / Merval (AR) sobre EMA50 y EMA200 y con menos de 5 días de distribución
+// M = S&P 500 (EEUU) / Merval (AR) sobre EMA50 y EMA200, < 5 días de distribución (con vencimiento IBD) y Nasdaq no bajista
 // Argentina: los crecimientos de balances en pesos se miden en términos REALES (descontando inflación).
 // Calificación: 'strong' exige >= 5/7 Y que C, L y M estén en verde (O'Neil: sin ganancias actuales, sin liderazgo
 // o contra el mercado, no se compra). Las letras con dato aproximado (proxy) se marcan con borde punteado.
+var CANSLIM_CFG = {
+  cEps: 25, cEpsBuild: 15, cAccelBuild: 25, cDecel: -15, cSales: 10,
+  aCagr: 25, aLastYear: 15, aRoe: 17,
+  nFromHigh: 10, nBase: 35, nExt50: 30, nBreakoutVol: 1.4,
+  sUD50: 1.1, sUD20: 1.0, sDistMax: 7,
+  lRs: 80,
+  iMin: 30, iCrowded: 90
+};
 
 // ── CANSLIM — M real: dirección del MERCADO GENERAL, no de la acción ──
 // Se calcula una sola vez por índice de referencia y se aplica igual a
@@ -5340,22 +5404,33 @@ function canslimRSPoolSize(symbol) {
 }
 
 function canslimScore(d) {
-  var hits = [];
+  var K = CANSLIM_CFG, hits = [];
   var ar = isArgentineTicker(d.symbol), dfl = CANSLIM_AR_DEFLATE && ar && d.inflYoY != null;
   function P(v) { return (v > 0 ? '+' : '') + v + '%'; }
   function add(l, ok, tip, proxy) { hits.push({ l: l, ok: !!ok, tip: tip, proxy: !!proxy }); }
+  function est(v, lbl) { return v != null ? ' | ' + lbl + ': ' + P(v) : ''; }
 
   // C — EPS trimestral YoY (real en AR) + aceleración + ventas
   var c_ok, cTip, cProxy = false;
   if (d.epsGrowthQ != null) {
-    var g = canslimReal(d.epsGrowthQ, d, d.inflYoY), rv = canslimReal(d.revGrowthQ, d, d.inflYoY), acc = d.epsAccel;
-    var strong   = g > 25 && !(acc != null && acc < -15);          // crece fuerte y no se está frenando
-    var building = g > 15 && g <= 25 && acc != null && acc > 25;   // recién agarra impulso
-    var salesOk  = (rv == null) || rv >= 10;                       // ganancias sin ventas = recorte de costos/recompras
+    var g = canslimReal(d.epsGrowthQ, d, d.inflYoY), rv = canslimReal(d.revGrowthQ, d, d.inflYoY), acc = d.epsAccel, acc2 = d.epsAccel2;
+    var strong   = g >= K.cEps && !(acc != null && acc < K.cDecel);                       // crece fuerte y no se está frenando
+    var building = g >= K.cEpsBuild && g < K.cEps && acc != null && acc >= K.cAccelBuild;  // recién agarra impulso
+    var salesOk  = (rv == null) || rv >= K.cSales;                                         // ganancias sin ventas = recorte de costos/recompras
     c_ok = (strong || building) && salesOk;
     cTip = 'EPS trim: ' + P(g) + (dfl ? ' real (nominal ' + P(d.epsGrowthQ) + ')' : '') +
            ' | Acel: ' + (acc != null ? (acc > 0 ? '+' : '') + acc + 'pp' : 's/d') +
-           ' | Ventas: ' + (rv != null ? P(rv) + (dfl ? ' real' : '') : 's/d') + ' (piso +10%, ideal +25%)';
+           (acc2 != null ? ' (trim. anterior ' + (acc2 > 0 ? '+' : '') + acc2 + 'pp)' : '') +
+           ' | Ventas: ' + (rv != null ? P(rv) + (dfl ? ' real' : '') : 's/d') + ' (piso +' + K.cSales + '%, ideal +25%)' +
+           est(d.epsEstGrowthCQ, 'est. analistas trim. actual');
+    if (g >= K.cEps && !salesOk) cTip += ' | ✗ ganancias sin ventas';
+    if (c_ok && acc != null && acc > 0 && acc2 != null && acc2 > 0) cTip += ' | ★ 2 trimestres acelerando';
+  } else if (d.epsQBase != null && d.epsQBase <= 0) {
+    // sin % porque la base es negativa: no es crecimiento medible (turnaround o pérdidas seguidas)
+    c_ok = false;
+    cTip = (d.epsQCur != null && d.epsQCur > 0)
+      ? 'EPS trim ' + d.epsQCur + ' vs ' + d.epsQBase + ' hace 1 año: recién pasó a ganancia (turnaround). El % no es medible y O\'Neil pide ganancias previas'
+      : 'EPS trimestral negativo (' + d.epsQCur + ' vs ' + d.epsQBase + ' hace 1 año)';
   } else {
     c_ok = !!(d.pe && d.pe > 5 && d.pe < 40 && d.chgPct > 0); cProxy = true;
     cTip = 'EPS sin dato — proxy P/E + día';
@@ -5364,17 +5439,19 @@ function canslimScore(d) {
 
   // A — EPS anual: CAGR 3 años real, último año, estabilidad (sin años de caída) y ROE >= 17%
   var a_ok, aTip, aProxy = false;
-  var roeOk = (d.roe == null) || d.roe >= 17, stable = (d.epsStable !== false);
+  var roeOk = (d.roe == null) || d.roe >= K.aRoe, stable = (d.epsStable !== false);
   var stTxt = d.epsStable == null ? 'estabilidad s/d' : (d.epsStable ? 'sin años de caída' : 'hubo años de caída ✗');
-  var roeTxt = 'ROE ' + (d.roe != null ? d.roe + '%' : 's/d') + ' (piso 17%)';
+  var roeTxt = 'ROE ' + (d.roe != null ? d.roe + '%' : 's/d') + ' (piso ' + K.aRoe + '%)';
   if (d.epsCagr3 != null) {
     var cg = canslimReal(d.epsCagr3, d, d.inflCagr3), ly = canslimReal(d.epsGrowthA, d, d.inflYoY);
-    a_ok = cg >= 25 && (ly == null || ly >= 15) && stable && roeOk;
-    aTip = 'EPS CAGR 3a: ' + P(cg) + (dfl ? ' real' : '') + ' | último año: ' + (ly != null ? P(ly) : 's/d') + ' | ' + stTxt + ' | ' + roeTxt;
+    a_ok = cg >= K.aCagr && (ly == null || ly >= K.aLastYear) && stable && roeOk;
+    aTip = 'EPS CAGR 3a: ' + P(cg) + (dfl ? ' real' : '') + ' | último año: ' + (ly != null ? P(ly) : 's/d') + ' | ' + stTxt + ' | ' + roeTxt +
+           est(d.epsEstGrowthY, 'est. analistas año en curso');
   } else if (d.epsGrowthA != null) {
     var ly2 = canslimReal(d.epsGrowthA, d, d.inflYoY);
-    a_ok = ly2 > 25 && stable && roeOk;
-    aTip = 'EPS anual: ' + P(ly2) + (dfl ? ' real' : '') + ' (sin 3 años de historial) | ' + stTxt + ' | ' + roeTxt;
+    a_ok = ly2 > K.aCagr && stable && roeOk;
+    aTip = 'EPS anual: ' + P(ly2) + (dfl ? ' real' : '') + ' (sin 3 años de historial) | ' + stTxt + ' | ' + roeTxt +
+           est(d.epsEstGrowthY, 'est. analistas año en curso');
   } else {
     var m12 = d.mom12m != null ? d.mom12m : d.mom6m;
     a_ok = (m12 != null && m12 > 20); aProxy = true;
@@ -5382,20 +5459,26 @@ function canslimScore(d) {
   }
   add('A', a_ok, aTip, aProxy);
 
-  // N — cerca del máximo de 52s y base sana
-  var depthOk = (d.baseDepth == null) || d.baseDepth <= 35;
-  var n_ok = (d.distFromHigh != null && d.distFromHigh > -10 && depthOk);
-  var nTip = d.distFromHigh != null ? 'Dist máx 52s: ' + P(+d.distFromHigh.toFixed(1)) + ' (piso -10%, ideal ≤5%)' : 'Sin dato';
-  if (d.baseDepth != null) nTip += ' | Base: ' + d.baseDepth + '% de profundidad (máx 35%)';
+  // N — cerca del máximo de 52s, base sana y sin estar extendida
+  var depthOk = (d.baseDepth == null) || d.baseDepth <= K.nBase;
+  var ext50 = d.distEma50 != null && d.distEma50 > K.nExt50;
+  var n_ok = (d.distFromHigh != null && d.distFromHigh > -K.nFromHigh && depthOk && !ext50);
+  var nTip = d.distFromHigh != null ? 'Dist máx 52s: ' + P(+d.distFromHigh.toFixed(1)) + ' (piso -' + K.nFromHigh + '%, ideal ≤5%)' : 'Sin dato';
+  if (d.baseDepth != null) nTip += ' | Base: ' + d.baseDepth + '% de profundidad (máx ' + K.nBase + '%)';
   if (d.daysSinceHigh != null) nTip += ' | Máx hace ' + d.daysSinceHigh + ' ruedas';
+  if (ext50) nTip += ' | ✗ extendida: ' + P(+d.distEma50.toFixed(1)) + ' sobre EMA50 (máx +' + K.nExt50 + '%), conviene esperar una base nueva';
+  var vx = (d.avgVol50 && d.volume) ? d.volume / d.avgVol50 : null;
+  if (vx != null) nTip += ' | Vol hoy ' + vx.toFixed(1) + 'x prom. 50d' + ((n_ok && vx >= K.nBreakoutVol && d.chgPct > 0 && d.distFromHigh > -3) ? ' ★ ruptura con volumen' : '');
   add('N', n_ok, nTip, false);
 
-  // S — acumulación: volumen en suba vs baja, 50 y 20 ruedas
+  // S — acumulación: volumen en suba vs baja (50 y 20 ruedas) y que la propia acción no esté siendo distribuida
   var s_ok, sTip, sProxy = false;
   if (d.upDownVolRatio != null) {
     var r50 = d.upDownVolRatio, r20 = d.upDownVol20;
-    s_ok = r50 >= 1.1 && (r20 == null || r20 >= 1.0);
-    sTip = 'Vol alza/baja 50d: ' + r50.toFixed(2) + 'x (piso 1.1)' + (r20 != null ? ' | 20d: ' + r20.toFixed(2) + 'x (piso 1.0)' : '');
+    var distOk = (d.stockDistDays == null) || d.stockDistDays < K.sDistMax;
+    s_ok = r50 >= K.sUD50 && (r20 == null || r20 >= K.sUD20) && distOk;
+    sTip = 'Vol alza/baja 50d: ' + r50.toFixed(2) + 'x (piso ' + K.sUD50 + ')' + (r20 != null ? ' | 20d: ' + r20.toFixed(2) + 'x (piso ' + K.sUD20 + ')' : '');
+    if (d.stockDistDays != null) sTip += ' | Distribución: ' + d.stockDistDays + ' días en 25 ruedas' + (distOk ? '' : ' ✗ (máx ' + (K.sDistMax - 1) + ')');
   } else {
     s_ok = !!(d.avgVol20 && d.volume && d.volume > d.avgVol20 * 1.2); sProxy = true;
     sTip = d.avgVol20 ? 'Vol/Avg: ' + (d.volume / d.avgVol20).toFixed(2) + 'x (sin desglose compra/venta)' : 'Sin dato volumen';
@@ -5403,17 +5486,18 @@ function canslimScore(d) {
   if (d.floatShares) sTip += ' | Float: ' + (d.floatShares / 1e6).toFixed(0) + 'M';
   add('S', s_ok, sTip, sProxy);
 
-  // L — líder: percentil >= 80 en tu universo + sobre EMA200 + mejor que el índice
+  // L — líder: percentil >= 80 en tu universo + tendencia (sobre EMA200 y EMA50 > EMA200) + mejor que el índice
   var rsPct = canslimRSPercentile(d.symbol), bench = canslimBenchRS(d), l_ok, lTip, lProxy = false;
   var above = d.distEma200 != null && d.distEma200 > 0;
+  var trendOk = (d.ema50 != null && d.ema200 != null) ? d.ema50 > d.ema200 : true;
   if (rsPct != null) {
     var beats = !(bench && d.rsScore != null) || d.rsScore > bench.v;
-    l_ok = (rsPct >= 80 && above && beats);
-    lTip = 'RS percentil ' + rsPct.toFixed(0) + ' de ' + canslimRSPoolSize(d.symbol) + ' tickers de tu universo (piso 80)' +
+    l_ok = (rsPct >= K.lRs && above && trendOk && beats);
+    lTip = 'RS percentil ' + rsPct.toFixed(0) + ' de ' + canslimRSPoolSize(d.symbol) + ' tickers de tu universo (piso ' + K.lRs + ')' +
            (bench && d.rsScore != null ? ' | RS ' + d.rsScore.toFixed(1) + ' vs ' + bench.name + ' ' + bench.v.toFixed(1) : '') +
-           ' | ' + (above ? 'sobre' : 'bajo') + ' EMA200';
+           ' | ' + (above ? 'sobre' : 'bajo') + ' EMA200 | EMA50 ' + (trendOk ? 'sobre' : 'bajo') + ' EMA200';
   } else if (d.roe != null) {
-    l_ok = (d.roe > 17 && d.rsi != null && d.rsi > 55 && above); lProxy = true;
+    l_ok = (d.roe > K.aRoe && d.rsi != null && d.rsi > 55 && above); lProxy = true;
     lTip = 'Universo muy chico para rankear — proxy ROE: ' + d.roe + '% | RSI: ' + (d.rsi ? d.rsi.toFixed(1) : '--');
   } else {
     l_ok = (d.rsi != null && d.rsi > 55 && above); lProxy = true;
@@ -5421,11 +5505,12 @@ function canslimScore(d) {
   }
   add('L', l_ok, lTip, lProxy);
 
-  // I — soporte institucional
+  // I — soporte institucional (ni ausente ni sobre-poseída)
   var i_ok, iTip, iProxy = false;
   if (d.heldPctInstitutions != null) {
-    i_ok = d.heldPctInstitutions > 30;
-    iTip = 'Tenencia institucional: ' + d.heldPctInstitutions + '% (piso 30%)';
+    i_ok = d.heldPctInstitutions > K.iMin;
+    iTip = 'Tenencia institucional: ' + d.heldPctInstitutions + '% (piso ' + K.iMin + '%)' +
+           (d.heldPctInstitutions > K.iCrowded ? ' | ⚠ muy poseída: poco margen para nuevos compradores' : '');
   } else {
     var isArs = (d.currency === 'ARS') || (!d.currency && isArgentineTicker(d.symbol));
     var capUsd = d.marketCap ? (isArs ? (cclRate ? d.marketCap / cclRate : null) : d.marketCap) : null;
@@ -8065,7 +8150,7 @@ function newsRenderList() {
     var l = lbl[n.symbol] || (n.symbol === 'MERCADO' ? 'Mercado' : n.symbol);
     return '<a class="dz-row dz-news" href="' + esc(n.url || '#') + '" target="_blank" rel="noopener noreferrer">' + avatar(l) +
       '<div style="min-width:0;flex:1"><div class="dz-dim"><b style="color:var(--text-bright)">' + esc(l) + '</b> · ' + esc(n.source || '') + ' · ' + esc(ago(n.ts)) + '</div>' +
-      '<div class="dz-news-t">' + esc(n.title) + '</div></div><span class="dz-dim">↗</span></a>';
+      '<div class="dz-news-t"' + (n.titleOrig ? ' title="Original: ' + esc(n.titleOrig) + '"' : '') + '>' + esc(n.title) + '</div></div><span class="dz-dim">' + (n.translated ? '🌐 ' : '') + '↗</span></a>';
   }).join('') : '<div class="mk-empty" style="padding:16px">Sin noticias recientes de tus acciones.</div>';
   var mt = cart.newsMeta;
   if (mt && shown.length && mt.missing && mt.missing.length && mt.general) {
