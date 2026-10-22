@@ -122,26 +122,72 @@ AI_WEB_SEARCH     = os.environ.get('AI_WEB_SEARCH', '1') != '0'   # poner AI_WEB
 AI_WEB_MAX_USES   = int(os.environ.get('AI_WEB_MAX_USES', '3'))   # búsquedas web máximas por pregunta (cada una tiene costo)
 AI_FREE_LIMIT     = 2  # preguntas gratis antes de pedir upgrade a premium
 
-# Palabras cortas en mayúsculas que NO son tickers, para no confundirlas al detectarlos en la pregunta
+# Palabras en mayúsculas que NO son tickers, para no confundirlas al detectarlos en la pregunta
 _AI_STOPWORDS_TICKERLIKE = {
     'A','I','Y','O','U','EL','LA','LO','EN','DE','UN','ES','SI','NO','MI','TU','SE','TE','ME',
     'SU','AL','OK','IA','VS','ETC','PBI','USD','ARS','CEO','CFO','ROE','ROA','EPS','PER','ETF',
-    'PDF','CSV','P&L','IVA','AFIP','BCRA','MEP','CCL',
+    'PDF','CSV','P&L','IVA','AFIP','ARCA','BCRA','MEP','CCL','USA','EEUU','FED','FOMC','IPC','CPI',
+    'GDP','PIB','FMI','IMF','RSI','ADX','EMA','SMA','ATH','YTD','TIR','TNA','TEA','AI','QUE','COMO',
+    'HOY','HAY','PARA','POR','CON','UNA','LOS','LAS','DEL','MAS','MUY','TASA','ALTA','BAJA','COME',
+    'HOLA','ESTA','ESTE','CEDEAR','CEDEARS','ETFS','OPA','IPO','SEC','NYSE','SPX','VIX','DXY',
 }
 
 def find_candidate_tickers(text):
-    """Busca posibles tickers (palabras en mayúsculas, 2 a 6 letras, con o sin sufijo .BA)
-    dentro de la pregunta del usuario. Es heurístico: los que no sean tickers válidos
-    simplemente no van a devolver datos en fetch_fundamentals() y se descartan solos."""
-    words = re.findall(r'\b[A-ZÑ]{1,6}(?:\.BA)?\b', (text or '').upper())
+    """Busca posibles tickers (palabras ESCRITAS EN MAYÚSCULAS, 2 a 6 letras, con o sin sufijo .BA).
+    Antes se pasaba todo el texto a mayúsculas, así que las primeras 3 palabras de cualquier pregunta
+    ('pueden subir la tasa...' -> PUEDEN, SUBIR, TASA) se consultaban en Yahoo como si fueran tickers y
+    demoraban la respuesta. Los tickers escritos en minúscula o por nombre los detecta el frontend
+    (tickersMencionados, que conoce tu universo)."""
     out = []
-    for w in words:
+    for w in re.findall(r'\b[A-ZÑ]{2,6}(?:\.BA)?\b', text or ''):
         base = w.replace('.BA', '')
-        if base in _AI_STOPWORDS_TICKERLIKE or len(base) < 2:
+        if base in _AI_STOPWORDS_TICKERLIKE:
             continue
         if w not in out:
             out.append(w)
-    return out[:3]  # como mucho 3, para no demorar la respuesta
+    return out[:3]   # como mucho 3, para no demorar la respuesta
+
+
+# Etiquetas que el modelo mete a veces cuando usa búsqueda web (<cite index="15-1">...</cite>) y que
+# rompían el JSON y se veían crudas en el chat. Se sacan del texto antes de parsear y antes de mostrar.
+_AI_TAG_RE = re.compile(
+    r'</?\s*(?:antml:\w+|cite|citation|source|sources|search_result|document|document_context|thinking|'
+    r'reflection|br|p|b|i|em|strong|ul|ol|li|span|div|a)\b[^<>]*>', re.I)
+_AI_REF_RE = re.compile(r'\[\s*\d{1,3}(?:\s*[-–:,]\s*\d{1,3})*\s*\]|【[^】]*】')
+
+
+def clean_ai_text(txt):
+    s = str(txt or '')
+    s = s.replace('\r\n', '\n').replace('\r', '\n')
+    s = re.sub(r'<br\s*/?>|</p\s*>|</li\s*>', '\n', s, flags=re.I)
+    s = _AI_TAG_RE.sub('', s)
+    s = _AI_REF_RE.sub('', s)
+    s = s.replace('\u200b', '').replace('\ufeff', '').replace('\xa0', ' ')
+    if '\\n' in s and '\n' not in s:          # "\n" literal que quedó sin interpretar
+        s = s.replace('\\n', '\n')
+    s = re.sub(r'[ \t]{2,}', ' ', s)
+    s = re.sub(r' +([,.;:!?])', r'\1', s)
+    s = re.sub(r'[ \t]+\n', '\n', s)
+    s = re.sub(r'\n{3,}', '\n\n', s)
+    return s.strip()
+
+
+def _orden_valida(o):
+    """Una orden dictada solo se acepta si trae acción, ticker, cantidad y precio coherentes."""
+    if not isinstance(o, dict):
+        return None
+    try:
+        accion = str(o.get('accion') or '').lower().strip()
+        ticker = str(o.get('ticker') or '').upper().strip()
+        cant = float(o.get('cantidad'))
+        precio = float(o.get('precio'))
+        moneda = str(o.get('moneda') or 'ARS').upper().strip()
+    except Exception:
+        return None
+    if accion not in ('compra', 'venta') or not re.match(r'^[A-Z0-9.^=\-]{1,14}$', ticker) or cant <= 0 or precio <= 0:
+        return None
+    return {'accion': accion, 'ticker': ticker, 'cantidad': cant, 'precio': precio,
+            'moneda': moneda if moneda in ('ARS', 'USD') else 'ARS'}
 
 
 def fetch_fundamentals(ticker):
@@ -365,11 +411,13 @@ def fetch_market_pack(ticker):
         if _tc:
             pack['scanner_tecnico'] = {k: _tc.get(k) for k in (
                 'rsi', 'adx', 'distEma50', 'distEma200', 'mom3m', 'mom6m', 'mom12m', 'rsScore',
-                'distFromHigh', 'yearHigh', 'yearLow', 'upDownVolRatio', 'sqzOn', 'sqzOff', 'sqzMom', 'volAnnualized', 'betaCalc')}
+                'distFromHigh', 'yearHigh', 'yearLow', 'upDownVolRatio', 'upDownVol20', 'baseDepth', 'stockDistDays', 'sqzOn', 'sqzOff',
+                'sqzMom', 'volAnnualized', 'betaCalc')}
         if _fd:
             pack['scanner_canslim'] = {k: _fd.get(k) for k in (
-                'epsGrowthQ', 'epsGrowthQPrev', 'epsAccel', 'epsGrowthA', 'epsCagr3', 'epsSource', 'revGrowthQ',
-                'roe', 'profitMargin', 'heldPctInstitutions', 'floatShares')}
+                'epsGrowthQ', 'epsGrowthQPrev', 'epsAccel', 'epsAccel2', 'epsQCur', 'epsQBase', 'epsGrowthA', 'epsCagr3',
+                'epsStable', 'epsSource', 'revGrowthQ', 'revAccel', 'roe', 'profitMargin', 'heldPctInstitutions', 'floatShares',
+                'epsEstGrowthCQ', 'epsEstGrowthNQ', 'epsEstGrowthY', 'epsEstGrowthNY', 'revEstGrowthCQ')}
     except Exception as e:
         print('[Rendi AI] datos de scanner no disponibles para', ticker, ':', e)
     try:
@@ -412,7 +460,8 @@ AI_TOOLS = [{
     },
 }]
 
-AI_WEB_TOOL = {'type': 'web_search_20250305', 'name': 'web_search', 'max_uses': AI_WEB_MAX_USES}
+AI_WEB_TOOL = {'type': 'web_search_20250305', 'name': 'web_search', 'max_uses': AI_WEB_MAX_USES,
+               'user_location': {'type': 'approximate', 'country': 'AR', 'timezone': 'America/Argentina/Buenos_Aires'}}
 AI_TOOLS.append({
     'name': 'mercado_hoy',
     'description': ('Panorama del mercado AHORA (instantáneo, sin costo de búsqueda): índice Fear & Greed de CNN, '
@@ -431,6 +480,70 @@ AI_TOOLS.append({
                     'noticias propias.'),
     'input_schema': {'type': 'object', 'properties': {
         'mercado': {'type': 'string', 'enum': ['ar', 'us'], 'description': "'ar' = Argentina (por defecto), 'us' = EEUU"}}},
+})
+
+
+_FED_MONTH_CODE = 'FGHJKMNQUVXZ'
+_MESES_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+
+
+def _last_close(sym, period='7d'):
+    try:
+        h = yf.Ticker(sym).history(period=period, interval='1d')
+        c = h['Close'].dropna()
+        if len(c):
+            return float(c.iloc[-1]), str(c.index[-1])[:10]
+    except Exception as e:
+        print('[Rendi AI] sin dato para', sym, ':', e)
+    return None
+
+
+def _build_fed_text():
+    """Tasas de EEUU: futuros de Fed Funds (la tasa que el mercado descuenta mes a mes) + curva de bonos.
+    Tasa implícita = 100 - precio del futuro de 30 días. Es el PROMEDIO de la tasa efectiva del mes: sirve
+    para ver para dónde va la tasa, pero no es la probabilidad exacta de cada reunión (eso: CME FedWatch)."""
+    now = datetime.utcnow()
+    y, m = now.year, now.month
+    contracts = []
+    for _ in range(9):
+        contracts.append((y, m, 'ZQ%s%02d.CBT' % (_FED_MONTH_CODE[m - 1], y % 100)))
+        m += 1
+        if m > 12:
+            m, y = 1, y + 1
+    syms = [c[2] for c in contracts] + ['^IRX', '^FVX', '^TNX', '^TYX']
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        res = dict(zip(syms, ex.map(_last_close, syms)))
+    lines = []
+    fut = []
+    for yy, mm, sym in contracts:
+        r = res.get(sym)
+        if r and 50 < r[0] < 100:
+            fut.append((yy, mm, round(100 - r[0], 3), r[1]))
+    if fut:
+        base = fut[0][2]
+        lines.append('Futuros Fed Funds (tasa implícita por mes; el primero aproxima la tasa efectiva actual):')
+        for yy, mm, rate, _dt in fut:
+            lines.append('- %s %d: %.2f%% (%+.2f pp vs el contrato más cercano)' % (_MESES_ES[mm - 1], yy, rate, rate - base))
+        lines.append('Datos al %s. Es el promedio mensual de la tasa efectiva, no la probabilidad exacta de cada reunión.' % fut[0][3])
+    for sym, name in (('^IRX', 'Letra del Tesoro 13 semanas'), ('^FVX', 'Bono EEUU 5A'), ('^TNX', 'Bono EEUU 10A'), ('^TYX', 'Bono EEUU 30A')):
+        r = res.get(sym)
+        if r:
+            v = r[0] / 10.0 if r[0] > 25 else r[0]
+            lines.append('%s: %.2f%%' % (name, v))
+    return '\n'.join(lines) or None
+
+
+def fed_text():
+    return cached_call('fedtool', 600, _build_fed_text)
+
+
+AI_TOOLS.append({
+    'name': 'tasas_fed',
+    'description': ('Tasas de EEUU al instante (sin costo de búsqueda): tasa de Fed Funds que descuenta el mercado mes a mes '
+                    '(futuros) y rendimientos de bonos del Tesoro (13 semanas, 5, 10 y 30 años). Usala para preguntas sobre '
+                    'si la Fed va a subir o bajar tasas, la curva de tasas o recesión. Para la probabilidad exacta de una reunión '
+                    'complementala con web_search (CME FedWatch).'),
+    'input_schema': {'type': 'object', 'properties': {}},
 })
 
 
@@ -525,6 +638,8 @@ def run_ai_tool(name, inp):
         if not pack:
             return 'No se encontraron datos para "%s". Probá con otro ticker (EEUU: MU, AAPL; Argentina: GGAL.BA).' % tk
         return json.dumps(pack, ensure_ascii=False, default=str)[:7000]
+    if name == 'tasas_fed':
+        return fed_text() or 'No se pudieron traer las tasas ahora. Probá con web_search (CME FedWatch).'
     return 'Herramienta desconocida: ' + str(name)
 
 
@@ -543,7 +658,7 @@ def build_ai_messages(historial, pregunta):
         if not isinstance(m, dict):
             continue
         role = m.get('role')
-        text = str(m.get('content') or '').strip()[:1500]
+        text = clean_ai_text(m.get('content'))[:1500]   # sin restos de <cite> de respuestas viejas
         if role not in ('user', 'assistant') or not text:
             continue
         if msgs and msgs[-1]['role'] == role:
@@ -1018,6 +1133,7 @@ def _tech_from_hist(symbol, hist):
     vol_today = int(volumes[-1]) if volumes else 0
     avg_vol20 = int(np.mean(volumes[-20:])) if len(volumes) >= 20 else vol_today
     vol_week, avg_vol_week = calc_weekly_volume(hist)
+    avg_vol50 = int(np.mean(volumes[-50:])) if len(volumes) >= 50 else avg_vol20
 
     highs = hist['High'].replace(0, np.nan).astype(float)
     lows  = hist['Low'].replace(0, np.nan).astype(float)
@@ -1050,6 +1166,8 @@ def _tech_from_hist(symbol, hist):
         'rsScore':       calc_rs_score(closes),
         'volume':        vol_today,
         'avgVol20':      avg_vol20,
+        'avgVol50':      avg_vol50,
+        'stockDistDays': _dist_days(hist, 25),
         'volWeek':       vol_week,
         'avgVolWeek':    avg_vol_week,
         'volAnnualized': calc_volatility_annualized(closes, period=20),
@@ -1210,6 +1328,41 @@ def _row_series(df, names):
     return None, None
 
 
+def _yoy_detail(s):
+    """Como _yoy_growths pero devuelve (crecimiento %, valor actual, valor de hace 1 año) por trimestre.
+    Sirve para distinguir 'no hay %' porque la base era negativa (turnaround) de 'no hay dato'."""
+    out = []
+    dates = list(s.index)
+    vals = list(s.values)
+    for i, d in enumerate(dates):
+        g = base = None
+        for j in range(i + 1, len(dates)):
+            gap = (d - dates[j]).days
+            if 320 <= gap <= 410:
+                base = vals[j]
+                if base > 0:
+                    g = round((vals[i] - base) / base * 100, 1)
+                break
+        out.append((g, vals[i], base))
+    return out
+
+
+def _eps_series_from_earnings_dates(ed):
+    """EPS reportado (el ajustado que compara contra el consenso, el que usa IBD) de los últimos ~4 años de
+    earnings, como Serie ordenada de más reciente a más vieja. Yahoo solo da 4-5 trimestres de balance, con eso
+    nunca se podía medir la aceleración (hacen falta 3 crecimientos interanuales = 7 trimestres)."""
+    try:
+        if ed is None or getattr(ed, 'empty', True) or 'Reported EPS' not in ed.columns:
+            return None
+        ser = ed['Reported EPS'].dropna().astype(float)
+        if len(ser) < 2:
+            return None
+        ser.index = pd.DatetimeIndex(ser.index).tz_localize(None)
+        return ser[~ser.index.duplicated()].sort_index(ascending=False)
+    except Exception:
+        return None
+
+
 def _yoy_growths(s):
     """Crecimiento interanual de cada trimestre vs. el trimestre de ~1 año atrás,
     emparejado por FECHA (no por posición: si falta un trimestre en Yahoo, el
@@ -1270,38 +1423,84 @@ def _ar_inflation_yoy():
     return _ar_inflation()['yoy']
 
 
+FUND_EXTRA = os.environ.get('FUND_EXTRA', '1') != '0'   # EPS histórico + estimaciones de analistas (poner 0 si Yahoo limita)
+
+
 def _fetch_fund(symbol):
     t = yf.Ticker(symbol)
-    with ThreadPoolExecutor(max_workers=3) as ex:
-        f_info = ex.submit(lambda: t.info or {})
-        f_q    = ex.submit(lambda: t.quarterly_financials)
-        f_a    = ex.submit(lambda: t.financials)
-        try:    info = f_info.result(timeout=25)
-        except Exception: info = {}
-        try:    qf = f_q.result(timeout=25)
-        except Exception: qf = None
-        try:    af = f_a.result(timeout=25)
-        except Exception: af = None
+    ex = ThreadPoolExecutor(max_workers=6)
+    f_info = ex.submit(lambda: t.info or {})
+    f_q    = ex.submit(lambda: t.quarterly_financials)
+    f_a    = ex.submit(lambda: t.financials)
+    f_ed   = ex.submit(lambda: t.get_earnings_dates(limit=16)) if FUND_EXTRA else None
+    f_ee   = ex.submit(lambda: t.earnings_estimate) if FUND_EXTRA else None
+    f_re   = ex.submit(lambda: t.revenue_estimate) if FUND_EXTRA else None
+
+    def got(f, to, default=None):
+        if f is None:
+            return default
+        try:
+            return f.result(timeout=to)
+        except Exception:
+            return default
+    info = got(f_info, 25, {}) or {}
+    qf, af = got(f_q, 25), got(f_a, 25)
+    ed, ee, rest = got(f_ed, 12), got(f_ee, 10), got(f_re, 10)
+    ex.shutdown(wait=False)
 
     def safe(key, default=None):
         v = info.get(key, default)
         return v if v not in (None, 'None', '', 'N/A') else default
 
-    # C — EPS por acción (Diluted EPS) en vez de Net Income: el EPS descuenta recompras
-    # y dilución, que es lo que CANSLIM mira. Si Yahoo no lo trae, cae a Net Income.
+    def est(df, row):
+        """Crecimiento estimado por analistas (%) de la fila 0q, +1q, 0y o +1y."""
+        try:
+            if df is not None and not df.empty and row in df.index and 'growth' in df.columns:
+                v = float(df.loc[row, 'growth'])
+                return round(v * 100, 1) if v == v else None
+        except Exception:
+            pass
+        return None
+
+    # C — EPS por acción. Se prefiere el EPS reportado (ajustado, el que compara contra el consenso y usa IBD) porque
+    # además trae ~4 años de trimestres: alcanza para medir aceleración. Si Yahoo no lo trae, cae al EPS del balance.
     eps_q, eps_src = _row_series(qf, ['Diluted EPS', 'Basic EPS', 'Net Income'])
     rev_q, _ = _row_series(qf, ['Total Revenue', 'Operating Revenue'])
-    eps_growth_q = eps_growth_prev = eps_accel = None
-    if eps_q is not None:
-        g = _yoy_growths(eps_q)
-        eps_growth_q    = g[0] if len(g) > 0 else None
-        eps_growth_prev = g[1] if len(g) > 1 else None
-        if eps_growth_q is not None and eps_growth_prev is not None:
-            eps_accel = round(eps_growth_q - eps_growth_prev, 1)
-    rev_growth_q = None
-    if rev_q is not None:
-        g = _yoy_growths(rev_q)
-        rev_growth_q = g[0] if g else None
+    det_fin = _yoy_detail(eps_q) if eps_q is not None else []
+    s_ed = _eps_series_from_earnings_dates(ed)
+    det_ed = _yoy_detail(s_ed) if s_ed is not None else []
+    src_fin = 'EPS' if (eps_src and 'EPS' in eps_src) else ('Net Income' if eps_src else None)
+
+    def lead(det, n):
+        return len(det) >= n and all(x[0] is not None for x in det[:n])
+    cands = [(det_ed, 'EPS ajustado'), (det_fin, src_fin)]
+    det, eps_source = [], None
+    for need in (3, 2, 1):                       # la fuente que permita medir más trimestres seguidos
+        for d_, s_ in cands:
+            if lead(d_, need):
+                det, eps_source = d_, s_
+                break
+        if det:
+            break
+    if not det:
+        for d_, s_ in cands:
+            if d_:
+                det, eps_source = d_, s_
+                break
+    gs = [x[0] for x in det]
+    g0 = gs[0] if len(gs) > 0 else None
+    g1 = gs[1] if len(gs) > 1 else None
+    g2 = gs[2] if len(gs) > 2 else None
+    eps_growth_q, eps_growth_prev = g0, g1
+    eps_accel  = round(g0 - g1, 1) if (g0 is not None and g1 is not None) else None
+    eps_accel2 = round(g1 - g2, 1) if (g1 is not None and g2 is not None) else None
+    eps_q_cur  = _num(det[0][1]) if det else None
+    eps_q_base = _num(det[0][2]) if det else None
+
+    rev_det = _yoy_detail(rev_q) if rev_q is not None else []
+    rev_growth_q = rev_det[0][0] if rev_det else None
+    rev_g1 = rev_det[1][0] if len(rev_det) > 1 else None
+    rev_accel = round(rev_growth_q - rev_g1, 1) if (rev_growth_q is not None and rev_g1 is not None) else None
 
     # A — crecimiento anual: último año + CAGR a 3 años (O'Neil pide ~25% sostenido, no un año suelto)
     eps_a, _ = _row_series(af, ['Diluted EPS', 'Basic EPS', 'Net Income'])
@@ -1342,15 +1541,24 @@ def _fetch_fund(symbol):
         'epsGrowthQ':    eps_growth_q,
         'epsGrowthQPrev': eps_growth_prev,
         'epsAccel':      eps_accel,
+        'epsAccel2':     eps_accel2,       # aceleración del trimestre anterior (2 trimestres acelerando = señal fuerte)
+        'epsQCur':       eps_q_cur,        # EPS del último trimestre y el de hace 1 año: si la base es <= 0 es 'turnaround'
+        'epsQBase':      eps_q_base,
         'epsGrowthA':    eps_growth_a,
         'epsCagr3':      eps_cagr3,
-        'epsSource':     'EPS' if (eps_src and 'EPS' in eps_src) else ('Net Income' if eps_src else None),
+        'epsSource':     eps_source,
         'epsStable':     eps_stable,
         'epsYears':      eps_years or None,
         'inflYoY':       _ar_inflation()['yoy'] if symbol.endswith('.BA') else None,
         'inflCagr3':     _ar_inflation()['cagr3'] if symbol.endswith('.BA') else None,
-        'fundV':         2,          # versión del esquema: el frontend re-pide fundamentals viejos sin estos campos
+        'fundV':         3,          # versión del esquema: el frontend re-pide fundamentals viejos sin estos campos
         'revGrowthQ':    rev_growth_q,
+        'revAccel':      rev_accel,
+        'epsEstGrowthCQ': est(ee, '0q'),    # estimaciones de analistas: trimestre en curso, próximo, año en curso y próximo
+        'epsEstGrowthNQ': est(ee, '+1q'),
+        'epsEstGrowthY':  est(ee, '0y'),
+        'epsEstGrowthNY': est(ee, '+1y'),
+        'revEstGrowthCQ': est(rest, '0q'),
         'roe':           pct('returnOnEquity'),
         'profitMargin':  pct('profitMargins'),
         'floatShares':   safe('floatShares'),
@@ -1408,8 +1616,9 @@ MARKET_MACRO   = [('^VIX', 'VIX'), ('^TNX', 'Bono EEUU 10A (%)'), ('DX-Y.NYB', '
 
 
 def _dist_days(hist, lookback=25):
-    """Días de distribución (O'Neil): ruedas con caída >= 0,2% y volumen mayor al de
-    la rueda anterior, en las últimas 25. 5 o más = presión vendedora institucional."""
+    """Días de distribución (O'Neil/IBD): ruedas con caída >= 0,2% y volumen mayor al de la rueda anterior, en las
+    últimas 25. Regla de vencimiento de IBD: un día deja de contar si el precio después cerró 5% o más por encima
+    de ese día (el mercado ya lo "absorbió"). 5 o más = presión vendedora institucional."""
     try:
         c = hist['Close'].astype(float).values
         v = hist['Volume'].fillna(0).astype(float).values
@@ -1418,7 +1627,8 @@ def _dist_days(hist, lookback=25):
         n = 0
         for i in range(max(1, len(c) - lookback), len(c)):
             if c[i] / c[i - 1] - 1 <= -0.002 and v[i] > v[i - 1]:
-                n += 1
+                if max(c[i:]) < c[i] * 1.05:
+                    n += 1
         return n
     except Exception:
         return None
@@ -1485,8 +1695,14 @@ def _build_market():
         if s['distDays'] is not None:
             tip += ' | %d días de distribución (25 ruedas)' % s['distDays']
         return {'ok': s['ok'], 'tip': tip}
+    m_us = m_for('SPY', 'S&P 500 (SPY)')
+    q = by.get('QQQ')
+    if m_us and q:    # IBD mira S&P 500 Y Nasdaq: si el Nasdaq está bajista, el mercado no está confirmado
+        m_us['tip'] += ' | Nasdaq 100: %s' % (q['status'] or 's/d')
+        if q['status'] == 'bajista':
+            m_us['ok'] = False
     return {'asOf': datetime.utcnow().isoformat() + 'Z', 'indexes': idx, 'macro': macro,
-            'm': {'us': m_for('SPY', 'S&P 500 (SPY)'), 'ar': m_for('^MERV', 'Merval')}}
+            'm': {'us': m_us, 'ar': m_for('^MERV', 'Merval')}}
 
 
 def get_market_data():
@@ -2080,20 +2296,30 @@ def ai_chat():
         "'Estado del mercado'; llamala solo si necesitás el detalle.\n"
         "4b. Herramienta noticias_mercado: titulares recientes del mercado argentino o de Wall Street (prensa financiera). "
         "Las noticias de cada empresa dentro de datos_ticker ya combinan Yahoo, Google News y prensa argentina.\n"
+        "4c. Herramienta tasas_fed: tasa de Fed Funds que descuenta el mercado mes a mes (futuros) y curva de bonos del "
+        "Tesoro. Usala SIEMPRE en preguntas sobre la Fed, tasas de EEUU o recesión, junto con web_search para CME FedWatch.\n"
         "5. Tu conocimiento general, solo para contexto (qué hace la empresa, cómo leer un indicador). Nunca para "
         "cifras actuales.\n"
         "Para ahorrar tiempo: si los datos pre-cargados ya responden la pregunta, NO uses web_search. Los campos "
-        "scanner_tecnico y scanner_canslim son los mismos números que el usuario ve en su scanner (CANSLIM: C = EPS "
-        "trimestral YoY con aceleración y ventas creciendo, A = EPS anual: CAGR 3 años, sin años de caída y ROE >= 17%, "
-        "N = a menos de 10% del máximo de 52s con una base de profundidad sana, S = volumen compra/venta de 50 ruedas, "
-        "L = fuerza relativa (percentil >= 80 en su universo y mejor que el índice), I = tenencia institucional, "
-        "M = dirección del mercado; en acciones argentinas los crecimientos se miden descontando la inflación).\n\n"
+        "scanner_tecnico y scanner_canslim son los mismos números que el usuario ve en su scanner. CANSLIM en este scanner: "
+        "C = EPS trimestral YoY >= 25% sin frenarse (o 15-25% con aceleración fuerte) y ventas >= +10% (si el EPS pasó de pérdida "
+        "a ganancia es 'turnaround' y NO califica), A = EPS anual: CAGR 3 años >= 25%, sin años de caída y ROE >= 17%, "
+        "N = a menos de 10% del máximo de 52s, base de profundidad <= 35% y no extendida (más de 30% sobre la EMA50), "
+        "S = volumen de compra/venta de 50 y 20 ruedas, L = fuerza relativa (percentil >= 80 en su universo, mejor que el índice, "
+        "sobre EMA200 y con EMA50 sobre EMA200), I = tenencia institucional > 30%, M = dirección del mercado "
+        "(S&P 500 y Nasdaq sobre EMA50/EMA200 y menos de 5 días de distribución). En acciones argentinas los crecimientos se "
+        "miden descontando la inflación. Los campos epsEstGrowth* son las estimaciones de crecimiento de los analistas.\n\n"
         "REGLAS:\n"
         "- Nunca digas que no tenés datos en vivo sin haber probado antes las herramientas. Si aun así falta algo, "
         "decí exactamente qué falta.\n"
         "- No inventes cifras: cada número sale de los datos, de las herramientas o de la búsqueda. Si dos fuentes "
         "difieren, mencionalo.\n"
-        "- Cuando uses la web, nombrá la fuente y la fecha (ej. 'según Reuters, 30/09').\n"
+        "- Cuando uses la web, nombrá la fuente y la fecha con palabras dentro del texto (ej. 'según Reuters, 30/09'). "
+        "NUNCA escribas etiquetas como <cite>, números de referencia como [1] ni links pelados.\n"
+        "- Probabilidades y pronósticos (tasas de la Fed, inflación, dólar): usá tasas_fed y web_search (CME FedWatch, "
+        "Polymarket, consensos). Decí fuente, fecha y a qué reunión o mes corresponde cada número. Si las fuentes difieren, "
+        "mostrá el rango en vez de elegir una. No mezcles datos de reuniones distintas en la misma frase sin aclararlo. "
+        "Verificá la fecha de la próxima reunión del FOMC antes de nombrarla.\n"
         "- Balances y earnings: ingresos y EPS reportados vs. estimados (sorpresa), márgenes, crecimiento "
         "interanual, guidance si lo hay, reacción del precio y qué está mirando el mercado.\n"
         "- Sobre una acción: combiná lo técnico (tendencia, RSI, ADX, EMAs, volumen, squeeze) con lo fundamental "
@@ -2102,8 +2328,10 @@ def ai_chat():
         "- Si el activo está en la cartera del usuario, relacionalo con su posición (ganancia o pérdida vs. compra).\n"
         "- Es información general, no asesoramiento personalizado ni garantía de rendimiento. Aclaralo en una línea "
         "cuando des una opinión sobre comprar o vender, sin repetirlo en cada mensaje.\n"
-        "- Formato: texto plano. La app NO renderiza markdown (no uses **, # ni tablas). Para listas, líneas que "
-        "empiecen con '- '. Párrafos cortos separados por una línea en blanco.\n"
+        "- FORMATO (la app lo muestra con estilo): empezá por la respuesta directa y después el detalle. Párrafos cortos "
+        "separados por una línea en blanco. **Negrita** solo para cifras o conclusiones clave (máximo 5). Listas con '- '. "
+        "Títulos cortos con '## ' solo si hay varias secciones. Sin tablas, sin HTML, sin emojis de relleno. "
+        "Largo normal: 120 a 250 palabras, salvo que pidan un análisis a fondo.\n"
         "- Seguí la conversación: si el usuario responde 'sí' o algo corto, continuá con lo que venían hablando; "
         "no saludes de nuevo ni repitas preguntas.\n\n"
         "Si el usuario está DICTANDO UNA ORDEN para cargar en su cartera (ej: 'compré 10 GGAL a 4800', "
@@ -2111,9 +2339,8 @@ def ai_chat():
         "después, sin markdown, sin explicaciones adicionales:\n"
         '{"tipo":"orden","orden":{"accion":"compra|venta","ticker":"...","cantidad":0,"precio":0,'
         '"moneda":"ARS|USD"},"texto":"resumen breve para confirmarle al usuario"}\n\n'
-        "Si es una pregunta normal (no una orden), respondé ÚNICA Y EXCLUSIVAMENTE con este JSON, sin texto "
-        "antes ni después y sin markdown fuera del campo texto (los saltos de línea dentro de texto van como \\n):\n"
-        '{"tipo":"respuesta","texto":"tu respuesta acá"}\n\n'
+        "Para CUALQUIER otra cosa (preguntas, análisis, charla) respondé directamente con el texto, SIN JSON y sin "
+        "envolverlo en comillas ni llaves.\n\n"
         "Contexto del usuario (cartera, scanner y mercado, enviado por la app):\n" + contexto + "\n\n" +
         "Estado del mercado ahora:\n" + (mercado_txt or "(no disponible; usá mercado_hoy)") + "\n\n" +
         "Datos en vivo pre-cargados:\n" + (fundamentales_txt or "(ninguno; usá la herramienta datos_ticker si hace falta)")
@@ -2121,18 +2348,29 @@ def ai_chat():
 
     try:
         content  = call_anthropic(system_prompt, build_ai_messages(data.get('historial'), pregunta), AI_WEB_SEARCH)
-        raw_text = extract_final_text(content)
+        # Se limpia ANTES de parsear: las etiquetas <cite index="..."> traen comillas que rompían el JSON y
+        # hacían que el usuario viera el texto crudo con símbolos raros.
+        raw_text = clean_ai_text(extract_final_text(content))
 
-        # El modelo debería devolver JSON puro; si viene con texto extra antes/después
-        # (pasa a veces), extract_json_loose intenta salvarlo antes de degradarlo a texto plano.
-        parsed = extract_json_loose(raw_text)
+        parsed = None
+        head = raw_text.lstrip()
+        if head.startswith('{') or head.startswith('```'):     # solo las órdenes (o un JSON viejo) vienen así
+            parsed = extract_json_loose(raw_text)
+            if not isinstance(parsed, dict):
+                parsed = None
+                if '"tipo"' in head[:40] and '"texto"' in head:   # JSON cortado o mal cerrado: rescatamos el campo texto
+                    m = re.search(r'"texto"\s*:\s*"(.*)$', raw_text, re.DOTALL)
+                    if m:
+                        t = re.sub(r'"\s*\}?\s*$', '', m.group(1).rstrip())
+                        parsed = {'tipo': 'respuesta', 'texto': t.replace('\\n', '\n').replace('\\"', '"')}
         if parsed is None:
-            texto = raw_text
-            if raw_text.lstrip().startswith('{'):   # JSON cortado o mal cerrado: rescatamos el campo texto
-                m = re.search(r'"texto"\s*:\s*"(.*?)(?:"\s*\}\s*)?$', raw_text, re.DOTALL)
-                if m:
-                    texto = m.group(1).replace('\\n', '\n').replace('\\"', '"')
-            parsed = {'tipo': 'respuesta', 'texto': texto}
+            parsed = {'tipo': 'respuesta', 'texto': raw_text}
+
+        tipo = 'orden' if parsed.get('tipo') == 'orden' else 'respuesta'
+        orden = _orden_valida(parsed.get('orden')) if tipo == 'orden' else None
+        if tipo == 'orden' and not orden:
+            tipo = 'respuesta'     # orden incompleta (falta precio, cantidad...): se muestra como texto, no como orden
+        texto = clean_ai_text(parsed.get('texto') or raw_text) or 'No pude armar una respuesta. Probá reformular la pregunta.'
 
         # Contabilizar solo a usuarios free (evita writes innecesarios para premium)
         preguntas_restantes = None
@@ -2144,9 +2382,9 @@ def ai_chat():
             preguntas_restantes = max(0, AI_FREE_LIMIT - nuevo_count)
 
         return jsonify({
-            'tipo':               parsed.get('tipo', 'respuesta'),
-            'texto':              parsed.get('texto', raw_text),
-            'orden':              parsed.get('orden'),
+            'tipo':               tipo,
+            'texto':              texto,
+            'orden':              orden,
             'preguntasRestantes': preguntas_restantes,
         })
     except AIError as e:
@@ -2479,6 +2717,10 @@ AR_NEWS_NAMES = {
     'MELI': 'MercadoLibre', 'GLOB': 'Globant', 'DESP': 'Despegar', 'BIOX': 'Bioceres', 'CRESY': 'Cresud',
 }
 AR_PRESS_SITES = '(site:ambito.com OR site:cronista.com OR site:infobae.com OR site:iprofesional.com OR site:lanacion.com.ar)'
+# Prensa financiera en español para acciones de EEUU (Argentina + España + Latam)
+ES_PRESS_SITES = ('(site:ambito.com OR site:cronista.com OR site:infobae.com OR site:iprofesional.com OR site:es.investing.com '
+                  'OR site:bloomberglinea.com OR site:expansion.com OR site:eleconomista.es OR site:cnnespanol.cnn.com OR site:rankia.com)')
+NEWS_TRANSLATE = os.environ.get('NEWS_TRANSLATE', '1') != '0'   # traducir al español los titulares que vengan en inglés
 
 
 def _to_iso_utc(dt):
@@ -2489,7 +2731,7 @@ def _to_iso_utc(dt):
     return dt.isoformat() + 'Z'
 
 
-def _rss_items(url, sym, limit=10, timeout=8, default_source=None):
+def _rss_items(url, sym, limit=10, timeout=8, default_source=None, lang=None):
     """Lee un feed RSS y devuelve [{symbol,title,source,ts,url}]. Nunca levanta excepción."""
     out = []
     try:
@@ -2517,7 +2759,7 @@ def _rss_items(url, sym, limit=10, timeout=8, default_source=None):
                     ts = _to_iso_utc(parsedate_to_datetime(pub))
                 except Exception:
                     ts = None
-            out.append({'symbol': sym, 'title': title, 'source': source, 'ts': ts, 'url': link})
+            out.append({'symbol': sym, 'title': title, 'source': source, 'ts': ts, 'url': link, 'lang': lang})
             if len(out) >= limit:
                 break
     except Exception as e:
@@ -2577,11 +2819,16 @@ def _news_items(sym):
     if ar:
         q1 = ('"%s" acciones OR bolsa OR balance OR resultados' % name) if name else ('%s acciones bolsa' % base)
         q2 = ('%s %s' % (name or base, AR_PRESS_SITES))
-        jobs.append(lambda: _rss_items(_gnews_url(q1, True), sym, 10, 8))
-        jobs.append(lambda: _rss_items(_gnews_url(q2, True), sym, 10, 8))
+        jobs.append(lambda: _rss_items(_gnews_url(q1, True), sym, 10, 8, None, 'es'))
+        jobs.append(lambda: _rss_items(_gnews_url(q2, True), sym, 10, 8, None, 'es'))
     else:
         q = ('"%s" stock' % name) if name else ('%s stock' % base)
         jobs.append(lambda: _rss_items(_gnews_url(q, False), sym, 10, 8))
+        # Fuentes en español para acciones de EEUU: Google News edición Argentina + prensa financiera en castellano
+        q_es1 = ('"%s" acciones OR resultados OR balance OR Wall Street' % name) if name else ('%s acciones Wall Street' % base)
+        q_es2 = '%s %s' % (name or base, ES_PRESS_SITES)
+        jobs.append(lambda: _rss_items(_gnews_url(q_es1, True), sym, 10, 8, None, 'es'))
+        jobs.append(lambda: _rss_items(_gnews_url(q_es2, True), sym, 10, 8, None, 'es'))
     lists = []
     with ThreadPoolExecutor(max_workers=len(jobs)) as ex:
         futs = [ex.submit(j) for j in jobs]
@@ -2610,10 +2857,10 @@ def _market_news(ar=True, limit=8):
     if ar:
         qs = [('Merval acciones bolsa argentina', True), ('mercado argentino bonos riesgo país dólar %s' % AR_PRESS_SITES, True)]
     else:
-        qs = [('Wall Street stocks S&P 500 Nasdaq', False)]
+        qs = [('Wall Street acciones S&P 500 Nasdaq', True), ('Wall Street mercado acciones %s' % ES_PRESS_SITES, True), ('Wall Street stocks S&P 500 Nasdaq', False)]
     items = []
     for q, a_ in qs:
-        items += _rss_items(_gnews_url(q, a_), 'MERCADO', limit, 8)
+        items += _rss_items(_gnews_url(q, a_), 'MERCADO', limit, 8, None, 'es' if a_ else None)
     seen, out = set(), []
     for it in sorted(items, key=lambda i: i.get('ts') or '', reverse=True):
         k = _norm_title(it.get('title'))
@@ -2621,6 +2868,101 @@ def _market_news(ar=True, limit=8):
             seen.add(k)
             out.append(it)
     return out[:limit]
+
+
+# ── Traducción de titulares al español ─────────────────────────────────────────
+# Los medios en inglés (Yahoo, Reuters, etc.) se traducen con Claude Haiku (una sola llamada por tanda) y, si falla,
+# con el traductor gratuito de Google. Cada titular se traduce una sola vez (cache en memoria).
+_TR_CACHE = {}
+_EN_HINT = re.compile(r"\b(the|of|and|to|in|for|on|with|as|at|by|is|are|its|after|says|stock|stocks|shares|how|why|what|will|from|than|this|that|could|may|new|his|her|their|over|into|ahead|amid)\b", re.I)
+_ES_HINT = re.compile(r"\b(de|la|el|los|las|del|que|en|y|para|por|con|una|un|se|su|al|sobre|tras|más|como|este|esta|según|ante|entre)\b", re.I)
+
+
+def _looks_english(t):
+    en = len(_EN_HINT.findall(t or ''))
+    es = len(_ES_HINT.findall(t or ''))
+    return en >= 2 and en > es
+
+
+def _gtx_translate(t):
+    try:
+        r = requests.get('https://translate.googleapis.com/translate_a/single',
+                         params={'client': 'gtx', 'sl': 'en', 'tl': 'es', 'dt': 't', 'q': t}, timeout=6,
+                         headers={'User-Agent': 'Mozilla/5.0'})
+        r.raise_for_status()
+        return ''.join(seg[0] for seg in r.json()[0] if seg and seg[0]).strip() or None
+    except Exception as e:
+        print('[news-tr] gtx falló:', e)
+        return None
+
+
+def _translate_titles(titles):
+    out, todo = {}, []
+    for t in dict.fromkeys(titles):
+        if t in _TR_CACHE:
+            out[t] = _TR_CACHE[t]
+        else:
+            todo.append(t)
+    todo = todo[:40]
+    if todo and ANTHROPIC_API_KEY:
+        try:
+            numbered = '\n'.join('%d. %s' % (i + 1, t) for i, t in enumerate(todo))
+            r = requests.post('https://api.anthropic.com/v1/messages',
+                              headers={'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01',
+                                       'Content-Type': 'application/json'},
+                              json={'model': AI_MODEL, 'max_tokens': 3000,
+                                    'system': ('Sos traductor de titulares financieros. Traducí cada titular del inglés al español '
+                                               'rioplatense neutro, natural y breve. No traduzcas tickers, nombres de empresas ni '
+                                               'siglas. Mantené las cifras. Devolvé SOLO un array JSON de strings, en el mismo orden '
+                                               'y con la misma cantidad de elementos que la lista recibida.'),
+                                    'messages': [{'role': 'user', 'content': numbered}]},
+                              timeout=18)
+            if r.ok:
+                txt = ''.join(b.get('text', '') for b in r.json().get('content', []) if b.get('type') == 'text')
+                m = re.search(r'\[.*\]', txt, re.DOTALL)
+                arr = json.loads(m.group(0)) if m else None
+                if isinstance(arr, list) and len(arr) == len(todo):
+                    for t, es in zip(todo, arr):
+                        es = clean_ai_text(es)
+                        if es:
+                            out[t] = es
+            else:
+                print('[news-tr] Anthropic', r.status_code, r.text[:200])
+        except Exception as e:
+            print('[news-tr] Claude falló:', e)
+    left = [t for t in todo if t not in out]
+    if left:
+        with ThreadPoolExecutor(max_workers=6) as ex:
+            for t, es in zip(left, ex.map(_gtx_translate, left)):
+                if es:
+                    out[t] = es
+    with _CACHE_LOCK:
+        if len(_TR_CACHE) > 8000:
+            _TR_CACHE.clear()
+        for t in todo:
+            if t in out:
+                _TR_CACHE[t] = out[t]
+    return out
+
+
+def _translate_items(items):
+    """Devuelve copias de las noticias con el título en español (guarda el original en titleOrig)."""
+    items = [dict(i) for i in (items or [])]
+    if not NEWS_TRANSLATE:
+        return items
+    eng = [i for i in items if i.get('lang') != 'es' and i.get('title') and _looks_english(i['title'])]
+    if not eng:
+        return items
+    try:
+        tr = _translate_titles([i['title'] for i in eng])
+    except Exception as e:
+        print('[news-tr]', e)
+        return items
+    for i in eng:
+        es = tr.get(i['title'])
+        if es and es != i['title']:
+            i['titleOrig'], i['title'], i['translated'] = i['title'], es, True
+    return items
 
 
 @app.route('/news', methods=['POST'])
@@ -2662,7 +3004,7 @@ def news_route():
                 merged.append(it)
                 general = True
     merged.sort(key=lambda i: i.get('ts') or '', reverse=True)
-    return jsonify({'results': merged[:limit], 'asOf': datetime.utcnow().isoformat() + 'Z',
+    return jsonify({'results': _translate_items(merged[:limit]), 'asOf': datetime.utcnow().isoformat() + 'Z',
                     'covered': covered, 'missing': [s for s in symbols if s not in covered], 'general': general})
 
 
@@ -2670,7 +3012,7 @@ def news_route():
 def news_mercado_route():
     ar = request.args.get('market', 'ar') != 'us'
     items = cached_call('news:mkt:%s' % ('ar' if ar else 'us'), NEWS_TTL, lambda: _market_news(ar, 12)) or []
-    return jsonify({'results': items})
+    return jsonify({'results': _translate_items(items)})
 
 
 # ─── OPCIONES: PUT/CALL Y FLUJO INUSUAL ──────────────────────────────────────
