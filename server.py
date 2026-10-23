@@ -1218,11 +1218,13 @@ def calc_days_since_high(hist):
         return None
 
 
-# ─── PARCHE "VELA DE HOY" ────────────────────────────────────────────────────
-# Yahoo a veces todavía no publica la vela DIARIA de hoy (sobre todo .BA, ADRs y
-# servidores cloud): la última fila del historial es la de AYER y todo (precio,
-# % Día, volumen, RSI...) queda atrasado un día. Acá detectamos esos casos y
-# reconstruimos la vela de hoy desde datos intradía de 5 minutos.
+# ─── PARCHE "VELA DE HOY" / PRECIO EN TIEMPO REAL ───────────────────────────
+# Yahoo a veces no publica (o publica tarde / desactualizada) la vela DIARIA de hoy:
+# la última fila del historial es la de AYER y precio, % Día, volumen, RSI, etc.
+# quedan atrasados. Acá armamos/actualizamos la vela de hoy desde datos de 1 minuto.
+#   · Durante la rueda: SIEMPRE se usa el último dato intradía (tiempo real).
+#   · Fuera de rueda: solo si la vela diaria de la última rueda no está.
+BUILD_ID = 'live-overlay-v2'
 try:
     from zoneinfo import ZoneInfo
     _TZ_NY = ZoneInfo('America/New_York')
@@ -1232,27 +1234,39 @@ except Exception:
 
 
 def _sym_market(sym):
-    """('tz', hora_apertura, minuto_apertura) o None si no sabemos parchear ese símbolo."""
+    """(tz, hora_apertura, min_apertura, hora_cierre) o None si no sabemos parchear ese símbolo."""
     if _TZ_NY is None:
         return None
     u = sym.upper()
     if u.endswith('.BA') or u == '^MERV':
-        return (_TZ_BA, 11, 0)
+        return (_TZ_BA, 11, 0, 17)
     if '.' in u or '=' in u:       # otras bolsas / divisas / futuros: no se tocan
         return None
-    return (_TZ_NY, 9, 30)         # EE.UU. e índices (^GSPC, ^VIX, etc.)
+    return (_TZ_NY, 9, 30, 16)     # EE.UU. e índices (^GSPC, ^VIX, etc.)
+
+
+def _now_local(mk, now_utc=None):
+    return (now_utc or datetime.now(timezone.utc)).astimezone(mk[0])
 
 
 def _expected_session_date(mk, now_utc=None):
     """Fecha de la última rueda que ya debería tener vela diaria (sin feriados)."""
-    tz, h, m = mk
-    now = (now_utc or datetime.now(timezone.utc)).astimezone(tz)
+    now = _now_local(mk, now_utc)
     d = now.date()
-    if now.hour < h or (now.hour == h and now.minute < m):
+    if now.hour < mk[1] or (now.hour == mk[1] and now.minute < mk[2]):
         d -= timedelta(days=1)
     while d.weekday() >= 5:        # sábado/domingo → viernes anterior
         d -= timedelta(days=1)
     return d
+
+
+def _market_in_session(mk, now_utc=None):
+    """True si es día hábil y estamos entre la apertura y 30 min después del cierre."""
+    now = _now_local(mk, now_utc)
+    if now.weekday() >= 5:
+        return False
+    mins = now.hour * 60 + now.minute
+    return (mk[1] * 60 + mk[2]) <= mins <= (mk[3] * 60 + 30)
 
 
 def _last_row_date(df):
@@ -1262,24 +1276,26 @@ def _last_row_date(df):
         return None
 
 
-def _patch_today_rows(frames):
-    """frames: {symbol: DataFrame diario}. Si a alguno le falta la vela de hoy, la arma
-    desde intradía (5m) y la agrega. Modifica y devuelve el mismo dict. Nunca rompe:
-    ante cualquier error deja el historial como estaba."""
+def _patch_today_rows(frames, always=False):
+    """frames: {symbol: DataFrame diario}. Actualiza/agrega la vela de hoy desde intradía (1m).
+    always=True → durante la rueda se pisa SIEMPRE con el último dato en vivo.
+    Modifica y devuelve el mismo dict. Nunca rompe: ante cualquier error deja todo como estaba."""
     try:
-        stale = {}
+        cand = {}
         for s, df in frames.items():
             mk = _sym_market(s)
             if mk is None or df is None or df.empty:
                 continue
             exp = _expected_session_date(mk)
             last = _last_row_date(df)
-            if last is not None and last < exp:
-                stale[s] = (mk, exp)
-        if not stale:
+            if last is None:
+                continue
+            if last < exp or (always and _market_in_session(mk)):
+                cand[s] = mk
+        if not cand:
             return frames
-        syms = list(stale.keys())
-        raw = yf.download(tickers=syms, period='2d', interval='5m', auto_adjust=True,
+        syms = list(cand.keys())
+        raw = yf.download(tickers=syms, period='2d', interval='1m', auto_adjust=True,
                           prepost=False, group_by='ticker', threads=True, progress=False)
         if raw is None or raw.empty:
             return frames
@@ -1291,25 +1307,43 @@ def _patch_today_rows(frames):
                 sub = sub.dropna(subset=['Close'])
                 if sub.empty:
                     continue
-                (tz, _h, _m), exp = stale[s]
+                tz = cand[s][0]
                 idx = pd.DatetimeIndex(sub.index)
                 idx = idx.tz_localize('UTC').tz_convert(tz) if idx.tz is None else idx.tz_convert(tz)
-                day = sub[idx.date == exp]
-                if day.empty:
-                    continue            # feriado o todavía sin ruedas: no hay nada que parchear
-                df = frames[s]
-                row = {c: np.nan for c in df.columns}
-                if 'Open' in row:   row['Open']   = float(day['Open'].iloc[0])
-                if 'High' in row:   row['High']   = float(day['High'].max())
-                if 'Low' in row:    row['Low']    = float(day['Low'].min())
-                if 'Close' in row:  row['Close']  = float(day['Close'].iloc[-1])
-                if 'Adj Close' in row: row['Adj Close'] = row.get('Close')
-                if 'Volume' in row: row['Volume'] = float(day['Volume'].fillna(0).sum())
-                new_idx = pd.Timestamp(exp)
-                if getattr(df.index, 'tz', None) is not None:
-                    new_idx = new_idx.tz_localize(df.index.tz)
-                new_df = pd.DataFrame([row], index=pd.DatetimeIndex([new_idx], name=df.index.name))
-                frames[s] = pd.concat([df, new_df])
+                D = idx[-1].date()                       # última rueda con datos intradía
+                day = sub[idx.date == D]
+                df = frames[s].copy()
+                last = _last_row_date(df)
+                if day.empty or last is None or D < last:
+                    continue
+                o  = float(day['Open'].iloc[0])
+                hi = float(day['High'].max())
+                lo = float(day['Low'].min())
+                cl = float(day['Close'].iloc[-1])
+                vo = float(day['Volume'].fillna(0).sum())
+                if D == last:                            # la vela existe: la ponemos al día
+                    i = len(df) - 1
+                    def setv(col, val):
+                        if col in df.columns:
+                            df.iloc[i, df.columns.get_loc(col)] = val
+                    setv('Close', cl)
+                    if 'High' in df.columns and pd.notna(df['High'].iloc[i]): setv('High', max(float(df['High'].iloc[i]), hi))
+                    else: setv('High', hi)
+                    if 'Low' in df.columns and pd.notna(df['Low'].iloc[i]): setv('Low', min(float(df['Low'].iloc[i]), lo))
+                    else: setv('Low', lo)
+                    if 'Volume' in df.columns and pd.notna(df['Volume'].iloc[i]): setv('Volume', max(float(df['Volume'].iloc[i]), vo))
+                    else: setv('Volume', vo)
+                    frames[s] = df
+                else:                                    # D > last: falta la vela de hoy → se agrega
+                    row = {c: np.nan for c in df.columns}
+                    for c, v in (('Open', o), ('High', hi), ('Low', lo), ('Close', cl), ('Volume', vo)):
+                        if c in row:
+                            row[c] = v
+                    new_idx = pd.Timestamp(D)
+                    if getattr(df.index, 'tz', None) is not None:
+                        new_idx = new_idx.tz_localize(df.index.tz)
+                    new_df = pd.DataFrame([row], index=pd.DatetimeIndex([new_idx], name=df.index.name))
+                    frames[s] = pd.concat([df, new_df])
             except Exception:
                 traceback.print_exc()
     except Exception:
@@ -1317,12 +1351,11 @@ def _patch_today_rows(frames):
     return frames
 
 
-
 def _fetch_tech(symbol):
     hist = yf.Ticker(symbol).history(period='1y', interval='1d', auto_adjust=True)
     if hist is None or hist.empty:
         return None
-    hist = _patch_today_rows({symbol: hist})[symbol]
+    hist = _patch_today_rows({symbol: hist}, always=True)[symbol]
     return _tech_from_hist(symbol, hist)
 
 
@@ -1340,7 +1373,7 @@ def _pick_symbol_frame(df, sym, n_syms):
     return None
 
 
-def _download_many(symbols, period='1y', interval='1d', auto_adjust=True):
+def _download_many(symbols, period='1y', interval='1d', auto_adjust=True, live=False):
     """UNA sola llamada a Yahoo para muchos símbolos (mucho más rápido que N llamadas
     sueltas). Devuelve {symbol: DataFrame OHLCV}; los que no vengan quedan afuera."""
     out = {}
@@ -1365,7 +1398,7 @@ def _download_many(symbols, period='1y', interval='1d', auto_adjust=True):
         except Exception:
             continue
     if interval == '1d':
-        _patch_today_rows(out)   # completa la vela de hoy si Yahoo todavía no la publicó
+        _patch_today_rows(out, always=live)   # vela de hoy / precio en vivo
     return out
 
 
@@ -1392,7 +1425,7 @@ def get_tech_batch():
             missing.append(s)
 
     if missing:
-        frames = _download_many(missing)
+        frames = _download_many(missing, live=True)
         for s, hist in frames.items():
             try:
                 t = _tech_from_hist(s, hist)
@@ -2138,7 +2171,7 @@ def get_precio_batch():
         else:
             missing.append(s)
     if missing:
-        for s, h in _download_many(missing, period='5d').items():
+        for s, h in _download_many(missing, period='5d', live=True).items():
             try:
                 cl = h['Close'].dropna().astype(float).values.tolist()
                 if len(cl) < 2:
@@ -2163,15 +2196,17 @@ def debug_precio():
         h = yf.Ticker(sym).history(period='5d', interval='1d', auto_adjust=True)
         mk = _sym_market(sym)
         antes = [{'date': str(i)[:10], 'close': round(float(r['Close']), 4)} for i, r in h.iterrows()]
-        h2 = _patch_today_rows({sym: h.copy()})[sym]
+        h2 = _patch_today_rows({sym: h.copy()}, always=True)[sym]
         despues = [{'date': str(i)[:10], 'close': round(float(r['Close']), 4)} for i, r in h2.iterrows()]
         return jsonify({
+            'build': BUILD_ID,
             'symbol': sym,
+            'in_session': bool(mk and _market_in_session(mk)),
             'now_utc': datetime.now(timezone.utc).isoformat(),
             'expected_session': str(_expected_session_date(mk)) if mk else None,
             'yahoo_rows': antes,
             'after_patch': despues,
-            'patched': len(despues) > len(antes),
+            'patched': despues != antes,
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -2193,7 +2228,7 @@ def get_precio():
         hist = ticker.history(period='5d', interval='1d', auto_adjust=True)
         if hist.empty or len(hist) < 2:
             return jsonify({'error': 'No data'}), 404
-        hist = _patch_today_rows({symbol: hist})[symbol]
+        hist = _patch_today_rows({symbol: hist}, always=True)[symbol]
         closes  = hist['Close'].dropna().values.tolist()
         volumes = hist['Volume'].dropna().values.tolist()
         price      = round(closes[-1], 4)
