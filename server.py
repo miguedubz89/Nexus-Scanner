@@ -12,6 +12,7 @@ El servidor corre en http://localhost:5000
 """
 
 import os
+import hmac
 import json
 import re
 import requests
@@ -121,6 +122,14 @@ AI_MAX_TOKENS     = int(os.environ.get('AI_MAX_TOKENS', '2500'))
 AI_WEB_SEARCH     = os.environ.get('AI_WEB_SEARCH', '1') != '0'   # poner AI_WEB_SEARCH=0 para apagar la búsqueda web
 AI_WEB_MAX_USES   = int(os.environ.get('AI_WEB_MAX_USES', '3'))   # búsquedas web máximas por pregunta (cada una tiene costo)
 AI_FREE_LIMIT     = 2  # preguntas gratis antes de pedir upgrade a premium
+
+# ─── PARCHE DE SEGURIDAD (Rendi AI) ──────────────────────────────────────────
+#   ADMIN_EMAILS         -> mails admin separados por coma (IA ilimitada). Se validan en el SERVIDOR con el token de Firebase.
+#   AI_PREMIUM_DAILY_LIMIT -> tope diario de preguntas a la IA para usuarios premium/trial (admin exento). 0 = sin tope.
+#   AI_REQUIRE_TOKEN     -> '1' exige idToken de Firebase en /ai/chat (activarlo cuando el frontend ya lo envíe).
+ADMIN_EMAILS           = {e.strip().lower() for e in os.environ.get('ADMIN_EMAILS', 'miguematador8977@gmail.com').split(',') if e.strip()}
+AI_PREMIUM_DAILY_LIMIT = int(os.environ.get('AI_PREMIUM_DAILY_LIMIT', '60'))
+AI_REQUIRE_TOKEN       = os.environ.get('AI_REQUIRE_TOKEN', '0') == '1'
 
 # Palabras en mayúsculas que NO son tickers, para no confundirlas al detectarlos en la pregunta
 _AI_STOPWORDS_TICKERLIKE = {
@@ -800,16 +809,37 @@ def get_user_plan_info(uid):
     """Lee plan/premiumUntil/aiQuestionsUsed del usuario desde Firestore."""
     db = get_firestore()
     if db is None:
-        return {'plan': 'free', 'premiumUntil': None, 'aiQuestionsUsed': 0}
+        return {'plan': 'free', 'premiumUntil': None, 'aiQuestionsUsed': 0, 'aiDay': None, 'aiDayCount': 0}
     doc = db.collection('users').document(uid).get()
     if not doc.exists:
-        return {'plan': 'free', 'premiumUntil': None, 'aiQuestionsUsed': 0}
+        return {'plan': 'free', 'premiumUntil': None, 'aiQuestionsUsed': 0, 'aiDay': None, 'aiDayCount': 0}
     d = doc.to_dict() or {}
     return {
         'plan': d.get('plan', 'free'),
         'premiumUntil': d.get('premiumUntil'),
         'aiQuestionsUsed': int(d.get('aiQuestionsUsed', 0) or 0),
+        'aiDay': d.get('aiDay'),
+        'aiDayCount': int(d.get('aiDayCount', 0) or 0),
     }
+
+
+def verify_firebase_token(id_token):
+    """Valida un ID token de Firebase en el servidor. Devuelve {'uid','email','email_verified'} o None."""
+    if not id_token:
+        return None
+    try:
+        if get_firestore() is None:       # inicializa firebase_admin
+            return None
+        from firebase_admin import auth as fb_auth
+        dec = fb_auth.verify_id_token(id_token)
+        return {
+            'uid': dec.get('uid') or dec.get('user_id'),
+            'email': (dec.get('email') or '').lower(),
+            'email_verified': bool(dec.get('email_verified')),
+        }
+    except Exception as e:
+        print('[Rendi AI] Token inválido:', e)
+        return None
 
 # ─── INDICADORES TÉCNICOS ─────────────────────────────────────────────────────
 
@@ -2390,7 +2420,16 @@ def ai_chat():
     uid      = data.get('uid')
     pregunta = (data.get('pregunta') or '').strip()
     contexto = data.get('contexto') or '(el usuario no tiene posiciones cargadas todavía)'
-    is_admin = bool(data.get('isAdmin'))
+
+    # ── Seguridad: el admin y el uid se validan con el token de Firebase, NUNCA con lo que manda el navegador ──
+    auth_h   = request.headers.get('Authorization', '')
+    id_token = data.get('idToken') or (auth_h[7:] if auth_h.lower().startswith('bearer ') else '')
+    tok      = verify_firebase_token(id_token)
+    if tok and tok.get('uid'):
+        uid = tok['uid']                   # el uid sale del token, no del body (evita usar el plan de otro usuario)
+    elif AI_REQUIRE_TOKEN:
+        return jsonify({'error': 'no_autenticado', 'mensaje': 'Iniciá sesión de nuevo para usar Rendi AI.'}), 401
+    is_admin = bool(tok and tok.get('email_verified') and tok.get('email') in ADMIN_EMAILS)   # isAdmin del body se ignora
 
     if not uid or not pregunta:
         return jsonify({'error': 'Falta uid o pregunta'}), 400
@@ -2410,6 +2449,15 @@ def ai_chat():
             'error':   'limite_free',
             'mensaje': 'Ya usaste tus ' + str(AI_FREE_LIMIT) + ' preguntas gratis a Rendi AI. Con Premium tenés preguntas ilimitadas.'
         }), 403
+
+    # Tope diario para premium/trial (protege tu API key). El admin queda exento.
+    hoy_utc    = datetime.utcnow().strftime('%Y-%m-%d')
+    uso_hoy    = info['aiDayCount'] if info.get('aiDay') == hoy_utc else 0
+    if es_premium and not is_admin and AI_PREMIUM_DAILY_LIMIT > 0 and uso_hoy >= AI_PREMIUM_DAILY_LIMIT:
+        return jsonify({
+            'error':   'limite_diario',
+            'mensaje': 'Llegaste al límite de ' + str(AI_PREMIUM_DAILY_LIMIT) + ' preguntas diarias a Rendi AI. Mañana se renueva.'
+        }), 429
 
     # Tickers: los que detectó el frontend (incluye nombres como "micron" -> MU) + los que aparecen en la pregunta
     candidatos = []
@@ -2544,6 +2592,10 @@ def ai_chat():
 
         # Contabilizar solo a usuarios free (evita writes innecesarios para premium)
         preguntas_restantes = None
+        if es_premium and not is_admin and AI_PREMIUM_DAILY_LIMIT > 0:
+            db = get_firestore()
+            if db is not None:
+                db.collection('users').document(uid).set({'aiDay': hoy_utc, 'aiDayCount': uso_hoy + 1}, merge=True)
         if not es_premium:
             nuevo_count = info['aiQuestionsUsed'] + 1
             db = get_firestore()
@@ -2577,7 +2629,7 @@ def admin_grant_trial():
 
     if not ADMIN_SECRET:
         return jsonify({'error': 'ADMIN_SECRET no configurado en el servidor'}), 500
-    if secret != ADMIN_SECRET:
+    if not hmac.compare_digest(str(secret or ''), ADMIN_SECRET):
         return jsonify({'error': 'Clave admin incorrecta'}), 401
 
     emails = data.get('emails')
