@@ -1224,7 +1224,7 @@ def calc_days_since_high(hist):
 # quedan atrasados. Acá armamos/actualizamos la vela de hoy desde datos de 1 minuto.
 #   · Durante la rueda: SIEMPRE se usa el último dato intradía (tiempo real).
 #   · Fuera de rueda: solo si la vela diaria de la última rueda no está.
-BUILD_ID = 'live-overlay-v2'
+BUILD_ID = 'live-overlay-v3'
 try:
     from zoneinfo import ZoneInfo
     _TZ_NY = ZoneInfo('America/New_York')
@@ -1290,7 +1290,12 @@ def _patch_today_rows(frames, always=False):
             last = _last_row_date(df)
             if last is None:
                 continue
-            if last < exp or (always and _market_in_session(mk)):
+            try:
+                last_valid = pd.Timestamp(df['Close'].last_valid_index()).date()
+            except Exception:
+                last_valid = None
+            vacia = (last_valid is None) or (last_valid < exp) or pd.isna(df['Close'].iloc[-1])
+            if last < exp or vacia or (always and _market_in_session(mk)):
                 cand[s] = mk
         if not cand:
             return frames
@@ -1327,6 +1332,7 @@ def _patch_today_rows(frames, always=False):
                         if col in df.columns:
                             df.iloc[i, df.columns.get_loc(col)] = val
                     setv('Close', cl)
+                    if 'Open' in df.columns and pd.isna(df['Open'].iloc[i]): setv('Open', o)
                     if 'High' in df.columns and pd.notna(df['High'].iloc[i]): setv('High', max(float(df['High'].iloc[i]), hi))
                     else: setv('High', hi)
                     if 'Low' in df.columns and pd.notna(df['Low'].iloc[i]): setv('Low', min(float(df['Low'].iloc[i]), lo))
@@ -2195,9 +2201,11 @@ def debug_precio():
     try:
         h = yf.Ticker(sym).history(period='5d', interval='1d', auto_adjust=True)
         mk = _sym_market(sym)
-        antes = [{'date': str(i)[:10], 'close': round(float(r['Close']), 4)} for i, r in h.iterrows()]
+        def _c(v):
+            return None if pd.isna(v) else round(float(v), 4)
+        antes = [{'date': str(i)[:10], 'close': _c(r['Close'])} for i, r in h.iterrows()]
         h2 = _patch_today_rows({sym: h.copy()}, always=True)[sym]
-        despues = [{'date': str(i)[:10], 'close': round(float(r['Close']), 4)} for i, r in h2.iterrows()]
+        despues = [{'date': str(i)[:10], 'close': _c(r['Close'])} for i, r in h2.iterrows()]
         return jsonify({
             'build': BUILD_ID,
             'symbol': sym,
