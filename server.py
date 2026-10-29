@@ -416,7 +416,7 @@ def fetch_market_pack(ticker):
     # Mismos números que ve el usuario en el scanner (técnicos + CANSLIM), desde el cache
     try:
         _tc = cached_call('tech:' + ticker, TECH_TTL, lambda: _fetch_tech(ticker))
-        _fd = cached_call('fund:' + ticker, FUND_TTL, lambda: _fetch_fund(ticker))
+        _fd = get_fund(ticker)
         if _tc:
             pack['scanner_tecnico'] = {k: _tc.get(k) for k in (
                 'rsi', 'adx', 'distEma50', 'distEma200', 'mom3m', 'mom6m', 'mom12m', 'rsScore',
@@ -426,7 +426,7 @@ def fetch_market_pack(ticker):
             pack['scanner_canslim'] = {k: _fd.get(k) for k in (
                 'epsGrowthQ', 'epsGrowthQPrev', 'epsAccel', 'epsAccel2', 'epsQCur', 'epsQBase', 'epsGrowthA', 'epsCagr3',
                 'epsStable', 'epsSource', 'revGrowthQ', 'revAccel', 'roe', 'profitMargin', 'heldPctInstitutions', 'floatShares',
-                'epsEstGrowthCQ', 'epsEstGrowthNQ', 'epsEstGrowthY', 'epsEstGrowthNY', 'revEstGrowthCQ')}
+                'epsEstGrowthCQ', 'epsEstGrowthNQ', 'epsEstGrowthY', 'epsEstGrowthNY', 'revEstGrowthCQ', 'finCurrency', 'fundSrc', 'fundGaps')}
     except Exception as e:
         print('[Rendi AI] datos de scanner no disponibles para', ticker, ':', e)
     try:
@@ -1598,7 +1598,7 @@ def _ar_inflation_yoy():
 FUND_EXTRA = os.environ.get('FUND_EXTRA', '1') != '0'   # EPS histórico + estimaciones de analistas (poner 0 si Yahoo limita)
 
 
-def _fetch_fund(symbol):
+def _fetch_fund_yahoo(symbol):
     t = yf.Ticker(symbol)
     ex = ThreadPoolExecutor(max_workers=6)
     f_info = ex.submit(lambda: t.info or {})
@@ -1702,7 +1702,7 @@ def _fetch_fund(symbol):
     div_rate = safe('dividendRate')
     px_ref = safe('currentPrice') or safe('regularMarketPrice') or safe('previousClose')
     div_y = round(float(div_rate) / float(px_ref) * 100, 2) if (div_rate and px_ref) else None
-    return {
+    _out = {
         'fundTs':        int(time.time()),
         'shortName':     safe('shortName', symbol),
         'currency':      safe('currency', 'ARS' if symbol.endswith('.BA') else 'USD'),
@@ -1723,7 +1723,7 @@ def _fetch_fund(symbol):
         'epsYears':      eps_years or None,
         'inflYoY':       _ar_inflation()['yoy'] if symbol.endswith('.BA') else None,
         'inflCagr3':     _ar_inflation()['cagr3'] if symbol.endswith('.BA') else None,
-        'fundV':         3,          # versión del esquema: el frontend re-pide fundamentals viejos sin estos campos
+        'fundV':         3,          # (la versión final la pone _fetch_fund)
         'revGrowthQ':    rev_growth_q,
         'revAccel':      rev_accel,
         'epsEstGrowthCQ': est(ee, '0q'),    # estimaciones de analistas: trimestre en curso, próximo, año en curso y próximo
@@ -1736,7 +1736,613 @@ def _fetch_fund(symbol):
         'floatShares':   safe('floatShares'),
         'sharesOutstanding': safe('sharesOutstanding'),
         'heldPctInstitutions': pct('heldPercentInstitutions'),
+        'finCurrency':   safe('financialCurrency'),
+        '_coreEmpty':    (not info and qf is None and af is None),
     }
+    # series crudas: las usan las fuentes alternativas para comparar cuál mide más trimestres/años
+    def _ig(key):
+        x = _num(info.get(key))
+        return round(x * 100, 1) if x is not None else None
+    _ser = {'epsQ_ed': s_ed, 'epsQ_fin': eps_q, 'revQ': rev_q, 'epsA': eps_a,
+            'infoG': {'epsGrowthQ': _ig('earningsQuarterlyGrowth'), 'revGrowthQ': _ig('revenueGrowth')}}
+    return _out, _ser
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  FUNDAMENTALS · FUENTES ALTERNATIVAS (C, A e I del CANSLIM)
+#  Yahoo es la fuente principal, pero para muchos tickers (.BA, ADRs, CEDEARs, small caps) devuelve vacío o
+#  incompleto. Si falta algo, se prueba, en este orden y cortando apenas se completa todo:
+#    0. fund_overrides.json  (datos cargados a mano, ej. balances de CNV/BYMA de empresas sin ADR)
+#    1. Yahoo del ADR / del subyacente (GGAL.BA → GGAL, YPFD.BA → YPF, AAPL.BA → AAPL)
+#    2. SEC EDGAR            (oficial y gratis, sin key: EPS y ventas trimestrales/anuales de todas las cotizantes en EEUU)
+#    3. Financial Modeling Prep   (FMP_API_KEY)        — income statement trimestral/anual + ROE
+#    4. Alpha Vantage             (ALPHAVANTAGE_API_KEY) — EPS reportado trimestral/anual (25 pedidos/día en el plan gratis)
+#    5. Finnhub                   (FINNHUB_API_KEY)    — crecimientos y ROE ya calculados + acciones en circulación
+#    6. Nasdaq.com (sin key)      — % institucional
+#    7. Yahoo extra               — major_holders (% institucional) y ROE calculado con balance
+#    8. Yahoo info                — earningsQuarterlyGrowth / revenueGrowth (último recurso)
+#  Nunca se pisa un dato que Yahoo ya trajo, salvo que otra fuente permita medir MÁS trimestres/años seguidos
+#  (más historial = aceleración y CAGR 3a calculables). Cada dato guarda su fuente en 'fundSrc'.
+# ═══════════════════════════════════════════════════════════════════════════
+FUND_ALT           = os.environ.get('FUND_ALT', '1') != '0'                 # 0 = apaga todas las fuentes alternativas
+FINNHUB_KEY        = os.environ.get('FINNHUB_API_KEY', '')
+FMP_KEY            = os.environ.get('FMP_API_KEY', '')
+AV_KEY             = os.environ.get('ALPHAVANTAGE_API_KEY', '')
+AV_DAILY_MAX       = int(os.environ.get('AV_DAILY_MAX', '20'))              # tope diario de pedidos a Alpha Vantage
+SEC_UA             = os.environ.get('SEC_USER_AGENT', 'DUBZ-Monitor (definir SEC_USER_AGENT con un mail de contacto)')
+FUND_ALT_TTL       = int(os.environ.get('FUND_ALT_TTL', str(24 * 3600)))    # seg — series por fuente (cambian 1 vez/trimestre)
+FUND_TRANSIENT_TTL = int(os.environ.get('FUND_TRANSIENT_TTL', '600'))       # seg — si Yahoo falló del todo, reintenta pronto
+FUND_OVERRIDES_FILE = os.environ.get('FUND_OVERRIDES_FILE', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fund_overrides.json'))
+
+# ticker local (sin .BA) → ADR en NYSE/Nasdaq (misma empresa: el crecimiento por acción es el mismo)
+_AR_ADR = {
+    'GGAL': 'GGAL', 'YPFD': 'YPF', 'YPF': 'YPF', 'PAMP': 'PAM', 'PAM': 'PAM', 'BMA': 'BMA', 'BBAR': 'BBAR',
+    'SUPV': 'SUPV', 'CEPU': 'CEPU', 'EDN': 'EDN', 'LOMA': 'LOMA', 'IRSA': 'IRS', 'IRS': 'IRS',
+    'TGSU2': 'TGS', 'TGS': 'TGS', 'CRES': 'CRESY', 'CRESY': 'CRESY', 'TECO2': 'TEO', 'TEO': 'TEO',
+    'VIST': 'VIST', 'BIOX': 'BIOX', 'DESP': 'DESP', 'GLOB': 'GLOB', 'MELI': 'MELI',
+}
+
+_OWN_YAHOO = ('Yahoo EPS ajustado', 'Yahoo balance')   # series que ya midió el propio _fetch_fund_yahoo
+_FUND_FIELDS = ('epsGrowthQ', 'epsAccel', 'revGrowthQ', 'epsGrowthA', 'epsCagr3', 'epsStable', 'roe',
+                'heldPctInstitutions', 'floatShares')
+
+
+# ── series y métricas (misma lógica que usa Yahoo, para que todas las fuentes se midan igual) ───────────────────────
+def _desc(d):
+    """{fecha: valor} → Serie ordenada de más reciente a más vieja (o None si no hay nada)."""
+    if not d:
+        return None
+    s = pd.Series({pd.Timestamp(k): float(v) for k, v in d.items() if v is not None and v == v})
+    return s.sort_index(ascending=False) if len(s) else None
+
+
+def _metrics_q(eps_q):
+    """Crecimiento interanual, aceleración y base de un EPS trimestral (Serie desc)."""
+    det = _yoy_detail(eps_q)
+    gs = [x[0] for x in det]
+    g0 = gs[0] if len(gs) > 0 else None
+    g1 = gs[1] if len(gs) > 1 else None
+    g2 = gs[2] if len(gs) > 2 else None
+    return {
+        'epsGrowthQ': g0, 'epsGrowthQPrev': g1,
+        'epsAccel': round(g0 - g1, 1) if (g0 is not None and g1 is not None) else None,
+        'epsAccel2': round(g1 - g2, 1) if (g1 is not None and g2 is not None) else None,
+        'epsQCur': _num(det[0][1]) if det else None,
+        'epsQBase': _num(det[0][2]) if det else None,
+    }
+
+
+def _metrics_rev(rev_q):
+    det = _yoy_detail(rev_q)
+    g0 = det[0][0] if det else None
+    g1 = det[1][0] if len(det) > 1 else None
+    return {'revGrowthQ': g0, 'revAccel': round(g0 - g1, 1) if (g0 is not None and g1 is not None) else None}
+
+
+def _val_ago(dates, vals, i, lo, hi):
+    """Valor de la fecha que está entre lo y hi días antes de dates[i] (empareja por FECHA, no por posición)."""
+    for j in range(i + 1, len(dates)):
+        gap = (dates[i] - dates[j]).days
+        if lo <= gap <= hi:
+            return vals[j]
+    return None
+
+
+def _metrics_a(eps_a):
+    """Último año, CAGR 3 años y estabilidad de un EPS anual (Serie desc). Empareja por fecha: si falta un año
+    en la fuente no compara contra el año equivocado."""
+    if eps_a is None or len(eps_a) < 2:
+        return {'epsGrowthA': None, 'epsCagr3': None, 'epsStable': None, 'epsYears': None}
+    dates, vals = list(eps_a.index), [float(x) for x in eps_a.values]
+    gs = []
+    for i in range(min(3, len(dates))):
+        b = _val_ago(dates, vals, i, 330, 400)
+        if b is not None and b != 0:
+            gs.append((vals[i] - b) / abs(b))
+    b1 = _val_ago(dates, vals, 0, 330, 400)
+    b3 = _val_ago(dates, vals, 0, 1000, 1190)
+    return {
+        'epsGrowthA': round((vals[0] - b1) / b1 * 100, 1) if (b1 is not None and b1 > 0) else None,
+        'epsCagr3':   round(((vals[0] / b3) ** (1 / 3.0) - 1) * 100, 1) if (b3 is not None and b3 > 0 and vals[0] > 0) else None,
+        'epsStable':  (all(g >= 0 for g in gs) if gs else None),
+        'epsYears':   len(gs) or None,
+    }
+
+
+def _ttm_annual(eps_q):
+    """EPS anual 'móvil' (suma de 4 trimestres seguidos) tomado cada 4 trimestres → sirve como EPS anual cuando la
+    fuente no trae balances anuales pero sí 8-16 trimestres. Exige trimestres consecutivos (60-125 días entre sí)."""
+    if eps_q is None or len(eps_q) < 8:
+        return None
+    dates, vals = list(eps_q.index), [float(x) for x in eps_q.values]
+    ttm = {}
+    for i in range(0, len(dates) - 3, 4):
+        grp = dates[i:i + 4]
+        if all(60 <= (grp[k] - grp[k + 1]).days <= 125 for k in range(3)):
+            ttm[grp[0]] = sum(vals[i:i + 4])
+        else:
+            break
+    return _desc(ttm) if len(ttm) >= 2 else None
+
+
+def _score_q(s, cap):
+    if s is None or len(s) < 2:
+        return (-1, 0)
+    lead = 0
+    for x in _yoy_detail(s):
+        if x[0] is None:
+            break
+        lead += 1
+    return (min(lead, cap), len(s))
+
+
+def _score_a(s):
+    m = _metrics_a(s)
+    return (sum(1 for k in ('epsGrowthA', 'epsCagr3', 'epsStable') if m[k] is not None), m['epsYears'] or 0)
+
+
+def _best(pool, score):
+    """pool = [(serie, nombre, moneda)] en orden de prioridad; gana el que mide más (empate → el primero)."""
+    best, bs = None, None
+    for item in pool:
+        if item[0] is None:
+            continue
+        sc = score(item[0])
+        if bs is None or sc > bs:
+            best, bs = item, sc
+    return best
+
+
+# ── SEC EDGAR (XBRL companyfacts) ─────────────────────────────────────────────────────────────────────────────────
+_SEC_LOCK = threading.Lock()
+_SEC_LAST = [0.0]
+_SEC_EPS_SPEC = [('us-gaap', 'EarningsPerShareDiluted'), ('us-gaap', 'EarningsPerShareBasicAndDiluted'),
+                 ('us-gaap', 'EarningsPerShareBasic'), ('ifrs-full', 'DilutedEarningsLossPerShare'),
+                 ('ifrs-full', 'BasicAndDilutedEarningsLossPerShare'), ('ifrs-full', 'BasicEarningsLossPerShare')]
+_SEC_REV_SPEC = [('us-gaap', 'Revenues'), ('us-gaap', 'RevenueFromContractWithCustomerExcludingAssessedTax'),
+                 ('us-gaap', 'RevenueFromContractWithCustomerIncludingAssessedTax'), ('us-gaap', 'SalesRevenueNet'),
+                 ('us-gaap', 'SalesRevenueGoodsNet'), ('us-gaap', 'RevenuesNetOfInterestExpense'),
+                 ('ifrs-full', 'Revenue'), ('ifrs-full', 'RevenueFromContractsWithCustomers')]
+
+
+def _alt_get_json(url, headers=None, timeout=10):
+    r = requests.get(url, headers=headers or _HTTP_HEADERS, timeout=timeout)
+    r.raise_for_status()
+    return r.json()
+
+
+def _sec_get(url):
+    with _SEC_LOCK:                                   # SEC permite ~10 pedidos/seg: se espacian
+        wait = 0.12 - (time.time() - _SEC_LAST[0])
+        if wait > 0:
+            time.sleep(wait)
+        _SEC_LAST[0] = time.time()
+    r = requests.get(url, headers={'User-Agent': SEC_UA, 'Accept': 'application/json'}, timeout=25)
+    r.raise_for_status()
+    return r.json()
+
+
+def _sec_ticker_map():
+    def build():
+        data = _sec_get('https://www.sec.gov/files/company_tickers.json')
+        return {str(v.get('ticker', '')).upper(): int(v['cik_str']) for v in data.values() if v.get('cik_str')}
+    return cached_call('sec:tickers', 24 * 3600, build) or {}
+
+
+def _sec_extract(facts, spec, unit_ok):
+    """Del JSON de companyfacts saca los valores TRIMESTRALES (duración 80-100 días) y ANUALES (350-380 días) de
+    una métrica. Si el trimestre 4 no está (los 10-K solo traen el año), lo deriva = año - (Q1+Q2+Q3).
+    Combina tags distintos (las empresas cambian de tag con los años) y se queda con lo último presentado."""
+    cands = []
+    for tax, tag in spec:
+        node = (facts.get(tax) or {}).get(tag)
+        if not node:
+            continue
+        q, a, cur = {}, {}, None
+        for unit, arr in (node.get('units') or {}).items():
+            if not unit_ok(unit):
+                continue
+            for f in arr:
+                try:
+                    s, e, v = pd.Timestamp(f['start']), pd.Timestamp(f['end']), float(f['val'])
+                except Exception:
+                    continue
+                days = (e - s).days
+                tgt = q if 80 <= days <= 100 else (a if 350 <= days <= 380 else None)
+                if tgt is None:
+                    continue
+                filed = f.get('filed', '')
+                if e not in tgt or filed > tgt[e][1]:
+                    tgt[e] = (v, filed, s)
+                    cur = unit.split('/')[0] if '/' in unit else unit
+        if q or a:
+            cands.append((max(list(q) + list(a)), len(q) + len(a), q, a, cur))
+    if not cands:
+        return None, None, None
+    cands.sort(key=lambda c: (c[0], c[1]), reverse=True)     # primero el tag con datos más recientes
+    Q, A = {}, {}
+    for _, _, q, a, _c in cands:
+        for e, (v, _f, s) in q.items():
+            Q.setdefault(e, (v, s))
+        for e, (v, _f, s) in a.items():
+            A.setdefault(e, (v, s))
+    for e, (v, s) in list(A.items()):                        # trimestre 4 derivado
+        if any(abs((qe - e).days) <= 7 for qe in Q):
+            continue
+        inside = [qe for qe, (_qv, qs) in Q.items() if qs >= s - pd.Timedelta(days=7) and qe < e - pd.Timedelta(days=30)]
+        if len(inside) == 3:
+            Q[e] = (v - sum(Q[x][0] for x in inside), s)
+    return _desc({e: v for e, (v, _s) in Q.items()}), _desc({e: v for e, (v, _s) in A.items()}), cands[0][4]
+
+
+def _src_sec(sym):
+    def build():
+        cik = _sec_ticker_map().get(sym.upper())
+        if not cik:
+            return {}
+        facts_all = _sec_get('https://data.sec.gov/api/xbrl/companyfacts/CIK%010d.json' % cik).get('facts') or {}
+        eq, ea, cur = _sec_extract(facts_all, _SEC_EPS_SPEC, lambda u: '/' in u)
+        rq, _ra, _c = _sec_extract(facts_all, _SEC_REV_SPEC, lambda u: True)
+        d = {'epsQ': eq, 'epsA': ea, 'revQ': rq, 'cur': cur}
+        try:
+            arr = ((facts_all.get('dei') or {}).get('EntityCommonStockSharesOutstanding') or {}).get('units', {}).get('shares') or []
+            if arr:
+                d['sharesOutstanding'] = float(sorted(arr, key=lambda x: x.get('end', ''))[-1]['val'])
+        except Exception:
+            pass
+        return d
+    return cached_call('alt:sec:' + sym.upper(), FUND_ALT_TTL, build)
+
+
+# ── Financial Modeling Prep ───────────────────────────────────────────────────────────────────────────────────────
+def _src_fmp(sym):
+    def build():
+        base = 'https://financialmodelingprep.com/stable/'
+
+        def rows(period, limit):
+            try:
+                r = _alt_get_json('%sincome-statement?symbol=%s&period=%s&limit=%d&apikey=%s' % (base, sym, period, limit, FMP_KEY))
+                return r if isinstance(r, list) else []
+            except Exception:
+                return []
+
+        def ser(rs, keys):
+            d = {}
+            for r in rs:
+                for k in keys:
+                    v = _num(r.get(k))
+                    if v is not None and r.get('date'):
+                        d[pd.Timestamp(r['date'])] = v
+                        break
+            return _desc(d)
+        q, a = rows('quarter', 24), rows('annual', 8)
+        d = {'epsQ': ser(q, ['epsDiluted', 'epsdiluted', 'eps']), 'revQ': ser(q, ['revenue']),
+             'epsA': ser(a, ['epsDiluted', 'epsdiluted', 'eps']), 'cur': ((q or a or [{}])[0]).get('reportedCurrency')}
+        try:
+            km = _alt_get_json('%skey-metrics-ttm?symbol=%s&apikey=%s' % (base, sym, FMP_KEY))
+            km = km[0] if isinstance(km, list) and km else {}
+            roe = _num(km.get('returnOnEquityTTM'))
+            if roe is not None:
+                d['roe'] = round(roe * 100, 1)
+        except Exception:
+            pass
+        return d
+    return cached_call('alt:fmp:' + sym.upper(), FUND_ALT_TTL, build)
+
+
+# ── Alpha Vantage (EPS reportado; plan gratis = 25 pedidos/día → tope AV_DAILY_MAX) ───────────────────────────────
+_AV_COUNT = {'day': None, 'n': 0}
+_AV_LOCK = threading.Lock()
+
+
+def _av_allow():
+    with _AV_LOCK:
+        today = datetime.now(timezone.utc).date()
+        if _AV_COUNT['day'] != today:
+            _AV_COUNT['day'], _AV_COUNT['n'] = today, 0
+        if _AV_COUNT['n'] >= AV_DAILY_MAX:
+            return False
+        _AV_COUNT['n'] += 1
+        return True
+
+
+def _src_alphavantage(sym):
+    def build():
+        if not _av_allow():
+            raise RuntimeError('tope diario de Alpha Vantage')
+        j = _alt_get_json('https://www.alphavantage.co/query?function=EARNINGS&symbol=%s&apikey=%s' % (sym, AV_KEY), timeout=15)
+        if not isinstance(j, dict) or ('Note' in j or 'Information' in j):
+            raise RuntimeError('Alpha Vantage limitó el pedido')      # no se cachea → se reintenta más tarde
+        def ser(arr):
+            return _desc({pd.Timestamp(r['fiscalDateEnding']): _num(r.get('reportedEPS')) for r in (arr or []) if r.get('fiscalDateEnding')})
+        return {'epsQ': ser(j.get('quarterlyEarnings')), 'epsA': ser(j.get('annualEarnings')), 'cur': 'USD'}
+    return cached_call('alt:av:' + sym.upper(), FUND_ALT_TTL, build)
+
+
+# ── Finnhub (crecimientos ya calculados) ──────────────────────────────────────────────────────────────────────────
+def _src_finnhub(sym):
+    def build():
+        j = _alt_get_json('https://finnhub.io/api/v1/stock/metric?symbol=%s&metric=all&token=%s' % (sym, FINNHUB_KEY))
+        m = (j or {}).get('metric') or {}
+
+        def g(*keys):
+            for k in keys:
+                v = _num(m.get(k))
+                if v is not None:
+                    return round(v, 1)
+            return None
+        d = {'epsGrowthQ': g('epsGrowthQuarterlyYoy'), 'revGrowthQ': g('revenueGrowthQuarterlyYoy'),
+             'epsGrowthA': g('epsGrowthTTMYoy'), 'epsCagr3': g('epsGrowth3Y'), 'roe': g('roeTTM', 'roeRfy')}
+        try:
+            p = _alt_get_json('https://finnhub.io/api/v1/stock/profile2?symbol=%s&token=%s' % (sym, FINNHUB_KEY))
+            so = _num((p or {}).get('shareOutstanding'))
+            if so:
+                d['sharesOutstanding'] = so * 1e6
+        except Exception:
+            pass
+        return d
+    return cached_call('alt:finnhub:' + sym.upper(), FUND_ALT_TTL, build)
+
+
+# ── Nasdaq.com: % institucional (endpoint público no oficial: best-effort, timeout corto) ─────────────────────────
+def _src_nasdaq_inst(sym):
+    def build():
+        hdr = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36',
+               'Accept': 'application/json, text/plain, */*', 'Origin': 'https://www.nasdaq.com', 'Referer': 'https://www.nasdaq.com/'}
+        j = _alt_get_json('https://api.nasdaq.com/api/company/%s/institutional-holdings?limit=1&type=TOTAL&sortColumn=marketValue&sortOrder=DESC' % sym.lower(), hdr, 8)
+        own = (((j or {}).get('data') or {}).get('ownershipSummary') or {})
+        raw = str(((own.get('SharesOutstandingPCT') or {}).get('value')) or '').replace('%', '').replace(',', '').strip()
+        v = _num(raw) if raw else None
+        return {'heldPctInstitutions': round(v, 1)} if (v is not None and 0 < v <= 150) else {}
+    return cached_call('alt:nasdaq:' + sym.upper(), FUND_ALT_TTL, build)
+
+
+# ── Yahoo extra: major_holders y ROE calculado (solo se pide si faltan; son pedidos adicionales) ──────────────────
+def _src_yahoo_extra(sym, need_inst, need_roe):
+    def build():
+        t = yf.Ticker(sym)
+        d = {}
+        if need_inst:
+            try:
+                mh = t.major_holders
+                if mh is not None and not mh.empty:
+                    col = 'Value' if 'Value' in mh.columns else mh.columns[0]
+                    for key, field, mult in (('institutionsPercentHeld', 'heldPctInstitutions', 100.0), ('institutionsCount', 'instCount', 1.0)):
+                        if key in mh.index:
+                            v = _num(mh.loc[key, col])
+                            if v is not None:
+                                d[field] = round(v * mult, 1) if mult != 1.0 else int(v)
+            except Exception:
+                pass
+        if need_roe:
+            try:
+                ni, _ = _row_series(t.quarterly_financials, ['Net Income', 'Net Income Common Stockholders'])
+                eq, _ = _row_series(t.quarterly_balance_sheet, ['Stockholders Equity', 'Common Stock Equity', 'Total Equity Gross Minority Interest'])
+                if ni is not None and len(ni) >= 4 and eq is not None and float(eq.iloc[0]) > 0:
+                    d['roe'] = round(float(ni.iloc[:4].sum()) / float(eq.iloc[0]) * 100, 1)
+            except Exception:
+                pass
+        return d
+    return cached_call('alt:yx:%s:%d%d' % (sym.upper(), need_inst, need_roe), FUND_ALT_TTL, build)
+
+
+# ── Carga manual (fund_overrides.json) para empresas sin ADR ni cobertura en ninguna API ──────────────────────────
+# Formato: {"ALUA.BA": {"epsQ": {"2025-09-30": 12.3, ...}, "revQ": {...}, "epsA": {"2024-12-31": 40.1, ...},
+#                       "roe": 18.5, "heldPctInstitutions": 42, "cur": "ARS"}}   (series = EPS y ventas por acción o totales)
+_FUND_OVR = {'mtime': None, 'data': {}}
+
+
+def _src_overrides(sym):
+    try:
+        mt = os.path.getmtime(FUND_OVERRIDES_FILE)
+    except Exception:
+        return None
+    if _FUND_OVR['mtime'] != mt:
+        try:
+            with open(FUND_OVERRIDES_FILE, encoding='utf-8') as fh:
+                _FUND_OVR['data'] = {str(k).upper(): v for k, v in json.load(fh).items()}
+            _FUND_OVR['mtime'] = mt
+        except Exception:
+            traceback.print_exc()
+            return None
+    e = _FUND_OVR['data'].get(sym.upper()) or _FUND_OVR['data'].get(sym.upper().replace('.BA', ''))
+    if not e:
+        return None
+    d = {k: _desc(e.get(k)) for k in ('epsQ', 'revQ', 'epsA')}
+    for k in ('roe', 'heldPctInstitutions', 'floatShares', 'sharesOutstanding', 'epsGrowthQ', 'epsGrowthA', 'epsCagr3', 'revGrowthQ'):
+        if _num(e.get(k)) is not None:
+            d[k] = _num(e.get(k))
+    d['cur'] = e.get('cur')
+    return d
+
+
+# ── Símbolos alternativos (ADR del ticker local / subyacente del CEDEAR) ──────────────────────────────────────────
+def _norm_name(n):
+    n = re.sub(r'[^a-z0-9 ]', ' ', str(n or '').lower())
+    stop = {'inc', 'corp', 'corporation', 'co', 'company', 'ltd', 'limited', 'sa', 'plc', 'nv', 'ag', 'the', 'adr', 'adrs', 'cedear',
+            'class', 'a', 'b', 'c', 'ordinary', 'shares', 'common', 'stock', 'holdings', 'group', 'de', 'cv', 'ads'}
+    return [w for w in n.split() if w and w not in stop]
+
+
+def _same_company(n1, n2):
+    a, b = set(_norm_name(n1)), set(_norm_name(n2))
+    if not a or not b:
+        return False
+    first = _norm_name(n1)[0] == _norm_name(n2)[0]
+    return first or (len(a & b) / float(len(a | b))) >= 0.5
+
+
+# ── gaps y orquestación ───────────────────────────────────────────────────────────────────────────────────────────
+def _fund_gaps(o):
+    g = []
+    turn = o.get('epsQBase') is not None and o['epsQBase'] <= 0          # turnaround: no hay % medible, no es "falta de dato"
+    if o.get('epsGrowthQ') is None and not turn:
+        g.append('epsGrowthQ')
+    if o.get('epsAccel') is None and not turn:
+        g.append('epsAccel')
+    if o.get('revGrowthQ') is None:
+        g.append('revGrowthQ')
+    for k in ('epsGrowthA', 'epsCagr3', 'epsStable', 'roe', 'heldPctInstitutions', 'floatShares'):
+        if o.get(k) is None:
+            g.append(k)
+    return g
+
+
+def _fund_fill(symbol, out, ser, src, tried):
+    """Completa 'out' (dict de _fetch_fund_yahoo) con las fuentes alternativas hasta que no falte nada."""
+    if not _fund_gaps(out):
+        return
+    sym = symbol.upper()
+    is_ba = sym.endswith('.BA')
+    base = sym[:-3] if is_ba else sym
+    pools = {'epsQ': [], 'revQ': [], 'epsA': []}
+    direct = []                                                           # [(nombre, dict de valores sueltos)]
+    for k, nm in (('epsQ_ed', 'Yahoo EPS ajustado'), ('epsQ_fin', 'Yahoo balance')):
+        pools['epsQ'].append((ser.get(k), nm, out.get('finCurrency')))
+    pools['revQ'].append((ser.get('revQ'), 'Yahoo balance', out.get('finCurrency')))
+    pools['epsA'].append((ser.get('epsA'), 'Yahoo balance', out.get('finCurrency')))
+
+    def absorb(name, d):
+        if not d:
+            return
+        tried.append(name)
+        for k in ('epsQ', 'revQ', 'epsA'):
+            if d.get(k) is not None and len(d[k]) >= 2:
+                pools[k].append((d[k], name, d.get('cur')))
+        direct.append((name, d))
+
+    def recompute():
+        b = _best(pools['epsQ'], lambda s: _score_q(s, 3))
+        if b is not None and b[1] not in _OWN_YAHOO:
+            out.update(_metrics_q(b[0]))
+            out['epsSource'] = b[1]
+            if b[2]:
+                out['finCurrency'] = b[2]
+            for k in ('epsGrowthQ', 'epsAccel'):
+                if out.get(k) is not None:
+                    src[k] = b[1]
+        b = _best(pools['revQ'], lambda s: _score_q(s, 2))
+        if b is not None and b[1] not in _OWN_YAHOO:
+            out.update(_metrics_rev(b[0]))
+            if out.get('revGrowthQ') is not None:
+                src['revGrowthQ'] = b[1]
+        epsq_best = _best(pools['epsQ'], lambda s: _score_q(s, 3))
+        apool = list(pools['epsA'])
+        if epsq_best is not None:
+            apool.append((_ttm_annual(epsq_best[0]), 'EPS móvil 4 trim.', epsq_best[2]))
+        b = _best(apool, _score_a)
+        if b is not None and b[1] not in _OWN_YAHOO:
+            m = _metrics_a(b[0])
+            if any(m[k] is not None for k in ('epsGrowthA', 'epsCagr3', 'epsStable')):
+                out.update(m)
+                for k in ('epsGrowthA', 'epsCagr3', 'epsStable'):
+                    if out.get(k) is not None:
+                        src[k] = b[1]
+        # valores sueltos (ya calculados por la fuente): solo donde sigue faltando
+        for name, d in direct:
+            for k in ('epsGrowthQ', 'revGrowthQ', 'epsGrowthA', 'epsCagr3', 'roe', 'heldPctInstitutions', 'floatShares',
+                      'sharesOutstanding', 'instCount'):
+                if out.get(k) is None and d.get(k) is not None:
+                    out[k] = d[k]
+                    src[k] = name
+
+    stages = []
+    stages.append(('Manual', lambda: _src_overrides(sym)))
+    us_syms = []
+    if is_ba:
+        adr = _AR_ADR.get(base)
+        if adr:
+            stages.append(('Yahoo ' + adr, lambda a=adr: _yahoo_as_source(a, None)))
+            us_syms.append(adr)
+        if base not in _AR_ADR:                                           # ¿es un CEDEAR de una empresa de EEUU?
+            stages.append(('Yahoo ' + base, lambda b=base: _yahoo_as_source(b, out.get('shortName'))))
+            us_syms.append(base)
+    else:
+        us_syms.append(sym)
+    for us in us_syms:
+        stages.append(('SEC EDGAR', lambda u=us: _src_sec(u)))
+    if FMP_KEY:
+        stages += [('FMP', lambda u=u: _src_fmp(u)) for u in (us_syms or [sym])]
+    if AV_KEY:
+        stages += [('Alpha Vantage', lambda u=u: _src_alphavantage(u)) for u in us_syms]
+    if FINNHUB_KEY:
+        stages += [('Finnhub', lambda u=u: _src_finnhub(u)) for u in us_syms]
+    stages.append(('Nasdaq.com', lambda: next((r for r in (_src_nasdaq_inst(u) for u in us_syms) if r), None) if us_syms else None))
+    stages.append(('Yahoo extra', lambda: _src_yahoo_extra(us_syms[0] if us_syms else sym,
+                                                          out.get('heldPctInstitutions') is None, out.get('roe') is None)))
+    stages.append(('Yahoo info', lambda: ser.get('infoG')))
+
+    for name, fn in stages:
+        if name == 'Yahoo extra' and out.get('heldPctInstitutions') is not None and out.get('roe') is not None:
+            continue
+        if name in ('Nasdaq.com',) and out.get('heldPctInstitutions') is not None:
+            continue
+        try:
+            d = fn()
+        except Exception as e:
+            print('[fund-alt]', sym, name, 'falló:', e)
+            continue
+        absorb(name, d)
+        recompute()
+        if not _fund_gaps(out):
+            break
+
+
+def _yahoo_as_source(sym, expect_name):
+    """Fundamentals de OTRO ticker de Yahoo (ADR / subyacente) presentados como una fuente más. Si se espera un
+    nombre (CEDEAR) y no coincide con la empresa, se descarta para no mezclar datos de otra compañía."""
+    o2, s2 = _fetch_fund_yahoo(sym)
+    if expect_name and not _same_company(expect_name, o2.get('shortName')):
+        return None
+    d = {'epsQ': s2.get('epsQ_ed') if _score_q(s2.get('epsQ_ed'), 3) >= _score_q(s2.get('epsQ_fin'), 3) else s2.get('epsQ_fin'),
+         'revQ': s2.get('revQ'), 'epsA': s2.get('epsA'), 'cur': o2.get('finCurrency')}
+    for k in ('roe', 'heldPctInstitutions', 'floatShares', 'sharesOutstanding', 'instCount'):
+        d[k] = o2.get(k)
+    return d
+
+
+def _fetch_fund(symbol):
+    """Fundamentals completos de un ticker: Yahoo + fuentes alternativas para lo que falte (ver bloque de arriba)."""
+    out, ser = _fetch_fund_yahoo(symbol)
+    core_empty = out.pop('_coreEmpty', False)
+    src = {k: 'Yahoo' for k in _FUND_FIELDS if out.get(k) is not None}
+    tried = ['Yahoo']
+    if FUND_ALT:
+        try:
+            _fund_fill(symbol, out, ser, src, tried)
+        except Exception:
+            traceback.print_exc()
+    sym = symbol.upper()
+    cur = out.get('finCurrency')
+    if cur is None and sym.endswith('.BA'):
+        cur = 'ARS'                                                       # balances de empresas locales: pesos
+    out['finCurrency'] = cur
+    # el ajuste por inflación solo corresponde si los balances están en PESOS (MELI/GLOB/DESP/BIOX reportan en USD)
+    if cur == 'ARS':
+        infl = _ar_inflation()
+        out['inflYoY'], out['inflCagr3'] = infl['yoy'], infl['cagr3']
+    else:
+        out['inflYoY'], out['inflCagr3'] = None, None
+    out['fundV'] = 4
+    out['fundSrc'] = src
+    out['fundTried'] = tried
+    out['fundGaps'] = _fund_gaps(out)
+    out['fundTransient'] = bool(core_empty and out.get('epsGrowthQ') is None and out.get('epsGrowthA') is None
+                                and out.get('epsQBase') is None)
+    return out
+
+
+def get_fund(symbol):
+    """Fundamentals cacheados. Si Yahoo falló del todo (transient) se reintenta a los pocos minutos en vez de
+    quedarse 6 h con un resultado vacío."""
+    key = 'fund:' + symbol
+    with _CACHE_LOCK:
+        v = _CACHE.get(key)
+    if v and isinstance(v[1], dict):
+        ttl = FUND_TRANSIENT_TTL if v[1].get('fundTransient') else FUND_TTL
+        if (time.time() - v[0]) < ttl:
+            return v[1]
+    return cached_call(key, 0, lambda: _fetch_fund(symbol))
 
 
 @app.route('/fundamentals', methods=['GET'])
@@ -1744,7 +2350,7 @@ def get_fundamentals():
     symbol = request.args.get('symbol', '').upper().strip()
     if not symbol:
         return jsonify({'error': 'No symbol provided'}), 400
-    f = cached_call('fund:' + symbol, FUND_TTL, lambda: _fetch_fund(symbol))
+    f = get_fund(symbol)
     if not f:
         return jsonify({'error': 'No fundamentals for ' + symbol}), 404
     out = dict(f)
@@ -1767,7 +2373,7 @@ def get_quote():
         else:
             with ThreadPoolExecutor(max_workers=2) as ex:
                 ft = ex.submit(cached_call, 'tech:' + symbol, TECH_TTL, lambda: _fetch_tech(symbol))
-                ff = ex.submit(cached_call, 'fund:' + symbol, FUND_TTL, lambda: _fetch_fund(symbol))
+                ff = ex.submit(get_fund, symbol)
                 tech, fund = ft.result(), ff.result()
         if not tech:
             return jsonify({'error': 'No data for ' + symbol}), 404
