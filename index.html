@@ -4237,7 +4237,8 @@ function toggleAuto(){
 var FUND_KEYS = ['fundTs','shortName','currency','marketCap','pe','beta','divYield','epsGrowthQ','epsGrowthQPrev',
   'epsAccel','epsGrowthA','epsCagr3','epsSource','revGrowthQ','roe','profitMargin','floatShares','sharesOutstanding',
   'heldPctInstitutions','epsStable','epsYears','inflYoY','inflCagr3','fundV',
-  'epsAccel2','epsQCur','epsQBase','revAccel','epsEstGrowthCQ','epsEstGrowthNQ','epsEstGrowthY','epsEstGrowthNY','revEstGrowthCQ'];
+  'epsAccel2','epsQCur','epsQBase','revAccel','epsEstGrowthCQ','epsEstGrowthNQ','epsEstGrowthY','epsEstGrowthNY','revEstGrowthCQ',
+  'finCurrency','fundSrc','fundTried','fundGaps','fundTransient','instCount'];
 var FUND_TTL_MS = 6 * 3600 * 1000;
 var _renderTimer = null;
 var _dirty = {};
@@ -4288,7 +4289,7 @@ async function loadFundamentals(list) {
   var now = Date.now();
   var queue = list.filter(function(d) {
     if (!d || d._error || d.price == null || d.sector === 'ETF') return false;
-    if (d.fundV >= 3 && d.fundTs && (now - d.fundTs * 1000) < FUND_TTL_MS) return false;   // fresco y con el esquema nuevo (fundV 3)
+    if (d.fundV >= 4 && d.fundTs && (now - d.fundTs * 1000) < FUND_TTL_MS && (!d.fundTransient || (now - d.fundTs * 1000) < 300000)) return false;   // fresco, esquema v4 y no es un resultado vacío por falla de Yahoo
     return true;
   });
   if (!queue.length) return;
@@ -5416,6 +5417,8 @@ function canslimScore(d) {
   function P(v) { return (v > 0 ? '+' : '') + v + '%'; }
   function add(l, ok, tip, proxy) { hits.push({ l: l, ok: !!ok, tip: tip, proxy: !!proxy }); }
   function est(v, lbl) { return v != null ? ' | ' + lbl + ': ' + P(v) : ''; }
+  function srcTxt() { for (var i = 0; i < arguments.length; i++) { var f = d.fundSrc && d.fundSrc[arguments[i]]; if (f) return ' | fuente: ' + f; } return ''; }
+  function triedTxt() { return (d.fundTried && d.fundTried.length) ? ' | fuentes consultadas sin resultado: ' + d.fundTried.join(', ') : ''; }
 
   // C — EPS trimestral YoY (real en AR) + aceleración + ventas
   var c_ok, cTip, cProxy = false;
@@ -5442,6 +5445,7 @@ function canslimScore(d) {
     c_ok = !!(d.pe && d.pe > 5 && d.pe < 40 && d.chgPct > 0); cProxy = true;
     cTip = 'EPS sin dato — proxy P/E + día';
   }
+  cTip += cProxy ? triedTxt() : srcTxt('epsGrowthQ');
   add('C', c_ok, cTip, cProxy);
 
   // A — EPS anual: CAGR 3 años real, último año, estabilidad (sin años de caída) y ROE >= 17%
@@ -5464,6 +5468,8 @@ function canslimScore(d) {
     a_ok = (m12 != null && m12 > 20); aProxy = true;
     aTip = 'EPS anual sin dato — proxy Mom12M';
   }
+  if (!aProxy && d.roe == null) { aProxy = true; aTip += ' | ⚠ ROE sin dato en ninguna fuente (no se pudo exigir ≥' + K.aRoe + '%)'; }
+  aTip += (d.epsCagr3 == null && d.epsGrowthA == null) ? triedTxt() : srcTxt('epsCagr3', 'epsGrowthA');
   add('A', a_ok, aTip, aProxy);
 
   // N — cerca del máximo de 52s, base sana y sin estar extendida
@@ -5524,6 +5530,7 @@ function canslimScore(d) {
     i_ok = !!(capUsd && capUsd > 2e9); iProxy = true;
     iTip = capUsd ? 'Sin dato institucional — proxy capitalización: US$' + (capUsd / 1e9).toFixed(1) + 'B' : 'Sin dato';
   }
+  iTip += iProxy ? triedTxt() : srcTxt('heldPctInstitutions');
   add('I', i_ok, iTip, iProxy);
 
   // M — dirección del mercado general
