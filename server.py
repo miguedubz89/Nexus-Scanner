@@ -1175,7 +1175,7 @@ def _tech_from_hist(symbol, hist):
 
     sqz = calc_squeeze_momentum(hist) or {}
 
-    return {
+    _res = {
         'symbol':        symbol,
         'shortName':     symbol,
         'currency':      'ARS' if symbol.endswith('.BA') else 'USD',
@@ -1221,6 +1221,8 @@ def _tech_from_hist(symbol, hist):
         'sqzMom':        sqz.get('sqzMom'),
         'sqzMomPrev':    sqz.get('sqzMomPrev'),
     }
+    _res.update(_canslim_tech(symbol, hist, close_series, price, avg_vol50))   # base/pivot, línea RS, liquidez
+    return _res
 
 
 def calc_base_depth(hist, window=75):
@@ -1600,13 +1602,14 @@ FUND_EXTRA = os.environ.get('FUND_EXTRA', '1') != '0'   # EPS histórico + estim
 
 def _fetch_fund_yahoo(symbol):
     t = yf.Ticker(symbol)
-    ex = ThreadPoolExecutor(max_workers=6)
+    ex = ThreadPoolExecutor(max_workers=7)
     f_info = ex.submit(lambda: t.info or {})
     f_q    = ex.submit(lambda: t.quarterly_financials)
     f_a    = ex.submit(lambda: t.financials)
     f_ed   = ex.submit(lambda: t.get_earnings_dates(limit=16)) if FUND_EXTRA else None
     f_ee   = ex.submit(lambda: t.earnings_estimate) if FUND_EXTRA else None
     f_re   = ex.submit(lambda: t.revenue_estimate) if FUND_EXTRA else None
+    f_bs   = ex.submit(lambda: t.quarterly_balance_sheet) if FUND_EXTRA else None   # deuda y acciones (S/A)
 
     def got(f, to, default=None):
         if f is None:
@@ -1618,6 +1621,7 @@ def _fetch_fund_yahoo(symbol):
     info = got(f_info, 25, {}) or {}
     qf, af = got(f_q, 25), got(f_a, 25)
     ed, ee, rest = got(f_ed, 12), got(f_ee, 10), got(f_re, 10)
+    bs = got(f_bs, 12)
     ex.shutdown(wait=False)
 
     def safe(key, default=None):
@@ -1673,6 +1677,8 @@ def _fetch_fund_yahoo(symbol):
     rev_growth_q = rev_det[0][0] if rev_det else None
     rev_g1 = rev_det[1][0] if len(rev_det) > 1 else None
     rev_accel = round(rev_growth_q - rev_g1, 1) if (rev_growth_q is not None and rev_g1 is not None) else None
+
+    _extra = _canslim_fund_extra(qf, bs, ed)     # márgenes, sorpresas, próximo balance, deuda, recompras
 
     # A — crecimiento anual: último año + CAGR a 3 años (O'Neil pide ~25% sostenido, no un año suelto)
     eps_a, _ = _row_series(af, ['Diluted EPS', 'Basic EPS', 'Net Income'])
@@ -1745,6 +1751,7 @@ def _fetch_fund_yahoo(symbol):
         return round(x * 100, 1) if x is not None else None
     _ser = {'epsQ_ed': s_ed, 'epsQ_fin': eps_q, 'revQ': rev_q, 'epsA': eps_a,
             'infoG': {'epsGrowthQ': _ig('earningsQuarterlyGrowth'), 'revGrowthQ': _ig('revenueGrowth')}}
+    _out.update(_extra)
     return _out, _ser
 
 
@@ -2323,7 +2330,7 @@ def _fetch_fund(symbol):
         out['inflYoY'], out['inflCagr3'] = infl['yoy'], infl['cagr3']
     else:
         out['inflYoY'], out['inflCagr3'] = None, None
-    out['fundV'] = 4
+    out['fundV'] = 5
     out['fundSrc'] = src
     out['fundTried'] = tried
     out['fundGaps'] = _fund_gaps(out)
@@ -2343,6 +2350,557 @@ def get_fund(symbol):
         if (time.time() - v[0]) < ttl:
             return v[1]
     return cached_call(key, 0, lambda: _fetch_fund(symbol))
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  CANSLIM v2 · cálculos de servidor
+#   N  → base, pivot y ruptura con volumen (detección de bases planas / tazas)
+#   L  → línea RS (precio / SPY), ranking contra un universo FIJO (S&P 500 + extras) y fuerza del grupo
+#   M  → fase del mercado: tendencia + días de distribución (S&P y Nasdaq) + follow-through day + amplitud
+#   C/A/S/I → márgenes, sorpresas de resultados, próximo balance, deuda y recompras/dilución
+#   Registro diario de puntajes (Firestore) y estadística de resultados a 20/60/120 ruedas
+# ═══════════════════════════════════════════════════════════════════════════
+import csv
+import io
+import bisect
+
+UNIVERSE_ENABLED = os.environ.get('UNIVERSE_ENABLED', '1') != '0'
+UNI_TTL          = int(os.environ.get('UNIVERSE_TTL', str(12 * 3600)))
+UNI_URL          = os.environ.get('UNIVERSE_URL', 'https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv')
+UNI_EXTRA_FILE   = os.environ.get('UNIVERSE_EXTRA_FILE', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'universe_extra.txt'))
+STATS_TTL        = 3600
+_UNI = {'building': False, 'lastFail': 0.0}
+_UNI_LOCK = threading.Lock()
+
+
+# ── N: base, pivot y ruptura ─────────────────────────────────────────────────────────────────────────────────────
+def _base_info(hist):
+    """Detecta la base actual y el pivot (máximo de la base) con reglas de O'Neil:
+       · plana  = 5+ semanas con profundidad <= 15%      · taza = 7+ semanas con profundidad 15-35%
+       · profunda (35-50%) o rota (>50%) = base no válida
+       · ruptura = cierre sobre el pivot (con volumen >= 1,4x el promedio de 50 ruedas); extendida = > 5% sobre el pivot
+       Si hoy la acción hace máximos (últimas 3 ruedas), la base es la anterior y el pivot es el máximo previo."""
+    try:
+        H = hist['High'].astype(float).values
+        L = hist['Low'].astype(float).values
+        C = hist['Close'].astype(float).values
+        V = hist['Volume'].fillna(0).astype(float).values
+        n = len(C)
+        if n < 60:
+            return {}
+        look = min(n, 200)
+        Hl, Ll = H[-look:], L[-look:]
+        peak = int(np.nanargmax(Hl))
+        if look - 1 - peak >= 3:
+            start, end, pivot = peak, look - 1, float(Hl[peak])
+        else:
+            if look - 3 < 30:
+                return {}
+            Hp = Hl[:look - 3]
+            start, end = int(np.nanargmax(Hp)), look - 4
+            pivot = float(Hp[start])
+        if not pivot or pivot <= 0:
+            return {}
+        if end <= start:       # sube en línea recta: no hay base formada (ni pivot confiable)
+            return {'basePattern': 'sin base', 'baseState': 'sin base', 'pivot': None, 'pivotDist': None,
+                    'baseWeeks': 0, 'bDepth': None, 'basePos': None, 'priorRun': None, 'tight10': None,
+                    'volDryUp': None, 'breakoutVol': None}
+        weeks = (end - start + 1) / 5.0
+        trough = float(np.nanmin(Ll[start:end + 1]))
+        depth = (pivot - trough) / pivot * 100
+        close = float(C[-1])
+        pdist = (close / pivot - 1) * 100
+        rng = pivot - trough
+        pos = (close - trough) / rng if rng > 0 else None
+        if weeks < 5:
+            pattern = 'corta'
+        elif depth <= 15:
+            pattern = 'plana'
+        elif depth <= 35:
+            pattern = 'taza' if weeks >= 7 else 'corta'
+        elif depth <= 50:
+            pattern = 'profunda'
+        else:
+            pattern = 'rota'
+        if pdist > 5:
+            state = 'extendida'
+        elif pdist >= 0:
+            state = 'ruptura'
+        elif pdist >= -5:
+            state = 'zona de compra'
+        elif pdist >= -10:
+            state = 'cerca'
+        else:
+            state = 'lejos'
+        s_abs = n - look + start
+        prior = None
+        if s_abs >= 20:
+            lo = float(np.nanmin(L[max(0, s_abs - 120):s_abs + 1]))
+            if lo > 0:
+                prior = round((pivot / lo - 1) * 100, 1)
+        base50 = V[-51:-1] if n > 51 else V[:-1]
+        bvol = float(V[-1] / np.mean(base50)) if (len(base50) and np.mean(base50) > 0) else None
+        vdry = float(np.mean(V[-10:]) / np.mean(V[-50:])) if (n >= 50 and np.mean(V[-50:]) > 0) else None
+        tight = float((np.nanmax(H[-10:]) - np.nanmin(L[-10:])) / close * 100) if close > 0 else None
+        return {
+            'pivot': round(pivot, 4), 'pivotDist': round(pdist, 1), 'baseState': state, 'basePattern': pattern,
+            'baseWeeks': round(weeks, 1), 'bDepth': round(depth, 1), 'basePos': round(pos, 2) if pos is not None else None,
+            'priorRun': prior, 'tight10': round(tight, 1) if tight is not None else None,
+            'volDryUp': round(vdry, 2) if vdry is not None else None,
+            'breakoutVol': round(bvol, 2) if bvol is not None else None,
+        }
+    except Exception:
+        return {}
+
+
+# ── L: línea RS (precio / SPY) ───────────────────────────────────────────────────────────────────────────────────
+def _rs_line_info(symbol, close_series):
+    """Línea de fuerza relativa = precio de la acción / precio del SPY. O'Neil: los líderes tienen la línea RS en
+    máximos, y la señal más fuerte es que la línea haga máximos ANTES que el precio."""
+    try:
+        if symbol.upper().endswith('.BA'):
+            return {}
+        bench = _get_benchmark_closes('SPY')
+        if bench is None or len(bench) < 60:
+            return {}
+        df = pd.DataFrame({'a': _naive_dates(close_series), 'b': _naive_dates(bench)}).dropna()
+        if len(df) < 60:
+            return {}
+        r = (df['a'] / df['b']).values
+        hi = float(np.max(r[-252:]))
+        out = {'rsLineDist': round((r[-1] / hi - 1) * 100, 1), 'rsLineHigh': bool(np.max(r[-5:]) >= hi * 0.995)}
+        if len(r) >= 64:
+            out['rsLine3m'] = round((r[-1] / r[-64] - 1) * 100, 1)
+        return out
+    except Exception:
+        return {}
+
+
+def _canslim_tech(symbol, hist, close_series, price, avg_vol50):
+    out = {}
+    out.update(_base_info(hist))
+    out.update(_rs_line_info(symbol, close_series))
+    try:
+        out['avgDollarVol'] = int(avg_vol50 * price) if (avg_vol50 and price) else None
+    except Exception:
+        pass
+    return out
+
+
+# ── C / A / S: márgenes, sorpresas, próximo balance, deuda, recompras ────────────────────────────────────────────
+def _canslim_fund_extra(qf, bs, ed):
+    o = {}
+    try:
+        ni, _ = _row_series(qf, ['Net Income', 'Net Income Common Stockholders'])
+        rv, _ = _row_series(qf, ['Total Revenue', 'Operating Revenue'])
+        if ni is not None and rv is not None:
+            m = {d: float(ni[d]) / float(rv[d]) * 100 for d in ni.index if d in rv.index and float(rv[d]) > 0}
+            ms = _desc(m)
+            if ms is not None and len(ms):
+                o['netMarginQ'] = round(float(ms.iloc[0]), 1)
+                b = _val_ago(list(ms.index), list(ms.values), 0, 320, 410)
+                if b is not None:
+                    o['netMarginChg'] = round(float(ms.iloc[0]) - float(b), 1)
+    except Exception:
+        pass
+    try:
+        if ed is not None and not getattr(ed, 'empty', True):
+            e2 = ed.copy()
+            idx = pd.DatetimeIndex(e2.index)
+            if idx.tz is not None:
+                idx = idx.tz_convert('UTC').tz_localize(None)
+            e2.index = idx
+            now = pd.Timestamp.now('UTC').tz_localize(None)
+            fut = e2[e2.index > now]
+            if len(fut):
+                o['nextEarnDays'] = int(max(0, (fut.index.min() - now).days))
+            past = e2[e2.index <= now]
+            if 'Surprise(%)' in past.columns:
+                sp = past['Surprise(%)'].dropna().astype(float).sort_index(ascending=False)
+                if len(sp):
+                    last4 = sp.iloc[:4]
+                    o['epsSurpriseQ'] = round(float(sp.iloc[0]), 1)
+                    o['epsSurpriseAvg4'] = round(float(last4.mean()), 1)
+                    o['epsBeats4'] = int((last4 > 0).sum())
+                    o['epsBeatsN'] = int(len(last4))
+    except Exception:
+        pass
+    try:
+        debt, _ = _row_series(bs, ['Total Debt'])
+        eq, _ = _row_series(bs, ['Stockholders Equity', 'Common Stock Equity', 'Total Equity Gross Minority Interest'])
+        if debt is not None and eq is not None and float(eq.iloc[0]) > 0:
+            o['debtEquity'] = round(float(debt.iloc[0]) / float(eq.iloc[0]) * 100, 1)
+        sh, _ = _row_series(bs, ['Ordinary Shares Number', 'Share Issued'])
+        if sh is not None and len(sh) >= 2:
+            b = _val_ago(list(sh.index), list(sh.values), 0, 320, 410)
+            if b:
+                o['sharesChgYoY'] = round((float(sh.iloc[0]) / float(b) - 1) * 100, 1)
+    except Exception:
+        pass
+    return o
+
+
+# ── M: fase del mercado (tendencia + distribución + follow-through day) ──────────────────────────────────────────
+def _index_phase(hist):
+    """Estado del índice al estilo IBD:
+       alcista (1)  = sobre EMA50 y EMA200 con menos de 5 días de distribución
+       presión (0,5) = sobre EMA200 pero con 5+ días de distribución o bajo la EMA50
+       rally confirmado (0,5) = tras una corrección >= 7%, hubo follow-through day (día 4+ del intento, suba >= 1,25% con
+                                más volumen que la rueda anterior, sin perder el mínimo)
+       intento de rally / corrección / bajista (0)"""
+    try:
+        h = hist.dropna(subset=['Close'])
+        c = h['Close'].astype(float).values
+        v = h['Volume'].fillna(0).astype(float).values
+        n = len(c)
+        if n < 60:
+            return None
+        cl = [float(x) for x in c]
+        price = cl[-1]
+        e21, e50, e200 = calc_ema(cl, 21), calc_ema(cl, 50), calc_ema(cl, 200)
+        look = min(n, 252)
+        seg, vseg = c[-look:], v[-look:]
+        hi_rel = int(np.argmax(seg))
+        hi = float(seg[hi_rel])
+        dd_now = (price / hi - 1) * 100
+        low_rel = hi_rel + int(np.argmin(seg[hi_rel:]))
+        low = float(seg[low_rel])
+        corr = (low / hi - 1) * 100
+        dist = _dist_days(h, 25)
+        trend_ok = bool(e50 and e200 and price > e50 and price > e200)
+        above200 = bool(e200 and price > e200)
+        ftd = False
+        attempt_day = None
+        ftd_day = None
+        if corr <= -7 and low_rel < look - 1:
+            j = None
+            for k in range(low_rel + 1, look):
+                if seg[k] > seg[k - 1]:
+                    j = k
+                    break
+            if j is not None:
+                attempt_day = look - 1 - j + 1
+                for i in range(j + 3, look):
+                    if seg[i] / seg[i - 1] - 1 >= 0.0125 and vseg[i] > vseg[i - 1] and i - j + 1 <= 25:
+                        ftd, ftd_day = True, i - j + 1
+                        break
+        if trend_ok and (dist is None or dist < 5):
+            state, level = 'alcista confirmado', 1.0
+        elif trend_ok:
+            state, level = 'alcista bajo presión (%d días de distribución)' % dist, 0.5
+        elif ftd and e21 and price > e21:
+            state, level = 'rally confirmado (FTD en el día %d)' % ftd_day, 0.5
+        elif above200:
+            state, level = 'bajo la EMA50 (presión)', 0.5
+        elif corr <= -7 and attempt_day and attempt_day >= 1 and low_rel >= look - 40:
+            state, level = 'intento de rally día %d (sin FTD)' % attempt_day, 0.0
+        elif dd_now <= -20:
+            state, level = 'mercado bajista', 0.0
+        else:
+            state, level = 'corrección', 0.0
+        return {'state': state, 'level': level, 'ftd': ftd, 'ftdDay': ftd_day, 'attemptDay': attempt_day,
+                'drawdown': round(dd_now, 1), 'corrDepth': round(corr, 1), 'distDays': dist,
+                'distEma50': pct_dist(price, e50), 'distEma200': pct_dist(price, e200)}
+    except Exception:
+        traceback.print_exc()
+        return None
+
+
+def _m_us_composite(spy_ph, qqq_ph, breadth):
+    """M de EEUU: manda el PEOR de S&P 500 y Nasdaq (IBD mira los dos) + filtro de amplitud."""
+    parts = [(n, p) for n, p in (('S&P 500', spy_ph), ('Nasdaq 100', qqq_ph)) if p]
+    if not parts:
+        return None
+    worst = min(parts, key=lambda x: x[1]['level'])
+    level = worst[1]['level']
+    tips = []
+    for name, p in parts:
+        t = '%s: %s' % (name, p['state'])
+        if p.get('distDays') is not None:
+            t += ' · %d días de distribución' % p['distDays']
+        if p.get('distEma50') is not None and p.get('distEma200') is not None:
+            t += ' · vs EMA50 %+.1f%% / EMA200 %+.1f%%' % (p['distEma50'], p['distEma200'])
+        tips.append(t)
+    if breadth and breadth.get('pctAbove50') is not None:
+        tips.append('Amplitud (S&P 500): %.0f%% sobre EMA50, %.0f%% sobre EMA200, %d cerca de máx / %d cerca de mín 52s' % (
+            breadth['pctAbove50'], breadth.get('pctAbove200') or 0, breadth.get('nearHighs') or 0, breadth.get('nearLows') or 0))
+        if level >= 1 and breadth['pctAbove50'] < 40:
+            level = 0.5
+            tips.append('⚠ amplitud débil: pocas acciones acompañan al índice')
+    return {'ok': level >= 1, 'level': level, 'state': worst[1]['state'], 'tip': ' | '.join(tips),
+            'ftd': any(p.get('ftd') for _, p in parts)}
+
+
+# ── L: universo fijo (S&P 500 + extras) → RS Rating, grupos y amplitud ───────────────────────────────────────────
+def _load_constituents():
+    """{ticker Yahoo: (sector, sub-industria)} del S&P 500 + extras (universe_extra.txt / UNIVERSE_EXTRA)."""
+    meta = {}
+    try:
+        r = requests.get(UNI_URL, timeout=20, headers=_HTTP_HEADERS)
+        r.raise_for_status()
+        for row in csv.DictReader(io.StringIO(r.text)):
+            sym = (row.get('Symbol') or row.get('symbol') or '').strip().upper().replace('.', '-')
+            if sym:
+                meta[sym] = ((row.get('GICS Sector') or row.get('Sector') or '').strip() or None,
+                             (row.get('GICS Sub-Industry') or row.get('Sub-Industry') or '').strip() or None)
+    except Exception as e:
+        print('[universo] no se pudo bajar la lista del S&P 500:', e)
+    extra = [x.strip().upper() for x in os.environ.get('UNIVERSE_EXTRA', '').split(',') if x.strip()]
+    try:
+        with open(UNI_EXTRA_FILE, encoding='utf-8') as fh:
+            extra += [ln.strip().upper() for ln in fh if ln.strip() and not ln.startswith('#')]
+    except Exception:
+        pass
+    for s in extra:
+        meta.setdefault(s.replace('.', '-'), (None, None))
+    return meta
+
+
+def _closes_many(symbols, period='1y', chunk_size=100, pause=0.4, min_len=130):
+    """{ticker: Serie de cierres con fecha} bajando de a tandas (sin el parche de 'vela de hoy')."""
+    out = {}
+    for i in range(0, len(symbols), chunk_size):
+        chunk = symbols[i:i + chunk_size]
+        try:
+            df = yf.download(tickers=chunk, period=period, interval='1d', auto_adjust=True, group_by='ticker',
+                             threads=True, progress=False)
+        except Exception:
+            traceback.print_exc()
+            continue
+        if df is None or df.empty:
+            continue
+        for s in chunk:
+            try:
+                sub = _pick_symbol_frame(df, s, len(chunk))
+                if sub is None or 'Close' not in sub.columns:
+                    continue
+                cl = sub['Close'].dropna().astype(float)
+                if len(cl) >= min_len:
+                    cl.index = pd.to_datetime(cl.index)
+                    if getattr(cl.index, 'tz', None) is not None:
+                        cl.index = cl.index.tz_localize(None)
+                    out[s] = cl
+            except Exception:
+                continue
+        time.sleep(pause)
+    return out
+
+
+def _uni_compute(closes_map, meta):
+    """Pura (sin red): arma tabla de percentiles de RS, grupos y amplitud desde {ticker: array de cierres}."""
+    rs, rows = {}, {}
+    ab50 = ab200 = nh = nl = adv = tot = 0
+    for s, arr in closes_map.items():
+        cl = [float(x) for x in arr]
+        sc = calc_rs_score(cl)
+        if sc is None:
+            continue
+        rs[s] = sc
+        e50, e200 = calc_ema(cl, 50), calc_ema(cl, 200)
+        last = cl[-1]
+        hi, lo = max(cl[-252:]), min(cl[-252:])
+        tot += 1
+        ab50 += 1 if (e50 and last > e50) else 0
+        ab200 += 1 if (e200 and last > e200) else 0
+        nh += 1 if last >= hi * 0.97 else 0
+        nl += 1 if last <= lo * 1.03 else 0
+        adv += 1 if (len(cl) > 1 and last > cl[-2]) else 0
+        rows[s] = last
+    if len(rs) < 30:
+        return None
+    scores = sorted(rs.values())
+    table = [round(float(x), 2) for x in np.percentile(scores, list(range(1, 100)))]
+    # grupos: sub-industria si tiene 3+ miembros con dato; si no, el sector
+    by_sub, by_sec = {}, {}
+    for s in rs:
+        sec, sub = meta.get(s, (None, None))
+        if sub:
+            by_sub.setdefault(sub, []).append(s)
+        if sec:
+            by_sec.setdefault(sec, []).append(s)
+    grp_of, groups = {}, {}
+    for s in rs:
+        sec, sub = meta.get(s, (None, None))
+        if sub and len(by_sub.get(sub, [])) >= 3:
+            g = sub
+        elif sec:
+            g = sec
+        else:
+            continue
+        grp_of[s] = g
+        groups.setdefault(g, []).append(rs[s])
+    med = {g: float(np.median(v)) for g, v in groups.items()}
+    meds = sorted(med.values())
+    gpct = {g: int(round(100.0 * (bisect.bisect_left(meds, m) + 0.5 * (bisect.bisect_right(meds, m) - bisect.bisect_left(meds, m))) / len(meds))) for g, m in med.items()}
+    members = {}
+    for s, sc in rs.items():
+        rating = max(1, min(99, bisect.bisect_right(table, sc)))
+        g = grp_of.get(s)
+        members[s] = [rating, g, gpct.get(g), len(groups.get(g, [])) if g else None, (meta.get(s) or (None, None))[0]]
+    top = sorted(med.items(), key=lambda kv: kv[1], reverse=True)
+    return {
+        'asOf': datetime.utcnow().isoformat() + 'Z', 'n': len(rs), 'rsTable': table, 'members': members,
+        'groupsTop': [{'g': g, 'pct': gpct[g], 'n': len(groups[g]), 'med': round(m, 1)} for g, m in top[:12]],
+        'groupsBottom': [{'g': g, 'pct': gpct[g], 'n': len(groups[g]), 'med': round(m, 1)} for g, m in top[-6:]],
+        'breadth': {'n': tot, 'pctAbove50': round(ab50 / tot * 100, 1), 'pctAbove200': round(ab200 / tot * 100, 1),
+                    'nearHighs': nh, 'nearLows': nl, 'advPct': round(adv / tot * 100, 1)},
+    }
+
+
+def _build_universe():
+    meta = _load_constituents()
+    if not meta:
+        return None
+    closes = _closes_many(sorted(meta.keys()))
+    if len(closes) < 30:
+        return None
+    return _uni_compute({s: c.values for s, c in closes.items()}, meta)
+
+
+def _uni_kick():
+    with _UNI_LOCK:
+        if _UNI['building'] or (time.time() - _UNI['lastFail']) < 600:
+            return
+        _UNI['building'] = True
+
+    def run():
+        ok = False
+        try:
+            u = _build_universe()
+            if u:
+                cache_set('universe', u)
+                ok = True
+                print('[universo] listo: %d tickers, %d grupos' % (u['n'], len(u['groupsTop'])))
+        except Exception:
+            traceback.print_exc()
+        finally:
+            with _UNI_LOCK:
+                _UNI['building'] = False
+                if not ok:
+                    _UNI['lastFail'] = time.time()
+    threading.Thread(target=run, daemon=True).start()
+
+
+def get_universe():
+    v = cache_get('universe', UNI_TTL)
+    if v is not None:
+        return v
+    if UNIVERSE_ENABLED:
+        _uni_kick()
+    return cache_get_stale('universe')
+
+
+@app.route('/universe', methods=['GET'])
+def universe_route():
+    u = get_universe()
+    if not u:
+        return jsonify({'ready': False, 'building': _UNI['building']})
+    return jsonify(dict(u, ready=True))
+
+
+if UNIVERSE_ENABLED:
+    _t = threading.Timer(25, get_universe)      # precalienta al arrancar el server
+    _t.daemon = True
+    _t.start()
+
+
+# ── Registro diario de puntajes y estadística de resultados ──────────────────────────────────────────────────────
+def _admin_from_request():
+    auth_h = request.headers.get('Authorization', '')
+    tok = verify_firebase_token(auth_h[7:] if auth_h.lower().startswith('bearer ') else '')
+    return bool(tok and tok.get('email_verified') and tok.get('email') in ADMIN_EMAILS)
+
+
+def _clean_log_rows(rows):
+    out = []
+    for r in (rows or [])[:700]:
+        try:
+            s = str(r.get('s', '')).upper().strip()
+            p, sc = _num(r.get('p')), _num(r.get('sc'))
+            if not s or not _SYM_RE.match(s) or p is None or sc is None:
+                continue
+            lv = {k: _num((r.get('l') or {}).get(k)) for k in 'CANSLIM'}
+            out.append({'s': s, 'p': p, 'sc': sc, 'r': str(r.get('r', ''))[:10], 'l': lv})
+        except Exception:
+            continue
+    return out
+
+
+@app.route('/canslim/log', methods=['POST'])
+def canslim_log():
+    if not _admin_from_request():
+        return jsonify({'error': 'no autorizado'}), 403
+    db = get_firestore()
+    if db is None:
+        return jsonify({'error': 'Firestore no disponible'}), 503
+    rows = _clean_log_rows((request.get_json(silent=True) or {}).get('rows'))
+    if not rows:
+        return jsonify({'error': 'sin filas válidas'}), 400
+    day = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    db.collection('canslim_log').document(day).set({'rows': rows, 'n': len(rows), 'ts': time.time()})
+    return jsonify({'ok': True, 'date': day, 'n': len(rows)})
+
+
+def _agg(rets):
+    if not rets:
+        return None
+    r = np.array([x[0] for x in rets], dtype=float)
+    ex = np.array([x[1] for x in rets if x[1] is not None], dtype=float)
+    return {'n': int(len(r)), 'avg': round(float(r.mean()) * 100, 1), 'median': round(float(np.median(r)) * 100, 1),
+            'hit': round(float((r > 0).mean()) * 100, 0), 'excess': round(float(ex.mean()) * 100, 1) if len(ex) else None}
+
+
+def _canslim_stats(docs, prices, horizons=(20, 60, 120)):
+    """docs = {fecha: [filas del log]}, prices = {ticker: Serie de cierres}. Devuelve el retorno posterior (y el exceso
+    contra SPY) agrupado por calificación, tramo de puntaje y nivel de cada letra."""
+    spy = prices.get('SPY')
+    buckets = {}
+
+    def put(key, h, ret, ex):
+        buckets.setdefault(key, {}).setdefault(h, []).append((ret, ex))
+    for day, rows in docs.items():
+        d0 = pd.Timestamp(day)
+        i_spy = int(spy.index.searchsorted(d0)) if spy is not None else None
+        for r in rows:
+            s = prices.get(r['s'])
+            if s is None or not r.get('p'):
+                continue
+            i0 = int(s.index.searchsorted(d0))
+            sc = r.get('sc') or 0
+            band = '80-100' if sc >= 80 else ('60-79' if sc >= 60 else ('40-59' if sc >= 40 else '0-39'))
+            keys = ['calificación: ' + r.get('r', '?'), 'puntaje: ' + band]
+            for L, v in (r.get('l') or {}).items():
+                if v is not None:
+                    keys.append('%s %s' % (L, 'verde' if v >= 1 else ('amarillo' if v >= 0.5 else 'rojo')))
+            for h in horizons:
+                j = i0 + h
+                if j >= len(s):
+                    continue
+                ret = float(s.iloc[j]) / float(r['p']) - 1
+                ex = None
+                if spy is not None and i_spy is not None and i_spy + h < len(spy):
+                    ex = ret - (float(spy.iloc[i_spy + h]) / float(spy.iloc[i_spy]) - 1)
+                for k in keys:
+                    put(k, h, ret, ex)
+    return {k: {('%d ruedas' % h): _agg(v) for h, v in sorted(hs.items())} for k, hs in sorted(buckets.items())}
+
+
+@app.route('/canslim/stats', methods=['GET'])
+def canslim_stats_route():
+    if not _admin_from_request():
+        return jsonify({'error': 'no autorizado'}), 403
+    db = get_firestore()
+    if db is None:
+        return jsonify({'error': 'Firestore no disponible'}), 503
+
+    def build():
+        docs = {d.id: (d.to_dict() or {}).get('rows', []) for d in db.collection('canslim_log').stream()}
+        if not docs:
+            return {'days': 0, 'stats': {}}
+        syms = sorted({r['s'] for rows in docs.values() for r in rows} | {'SPY'})
+        prices = _closes_many(syms, period='2y', min_len=20)
+        return {'days': len(docs), 'first': min(docs), 'last': max(docs), 'stats': _canslim_stats(docs, prices)}
+    return jsonify(cached_call('canslim_stats', STATS_TTL, build) or {'days': 0, 'stats': {}})
 
 
 @app.route('/fundamentals', methods=['GET'])
@@ -2440,6 +2998,7 @@ def _index_state(sym, name, hist):
         'rsScore': calc_rs_score(closes),
         'distEma50': d50, 'distEma200': d200, 'distDays': dd, 'status': status,
         'ok': status == 'alcista',
+        'phase': _index_phase(hist),
     }
 
 
@@ -2475,7 +3034,11 @@ def _build_market():
         return {'ok': s['ok'], 'tip': tip}
     m_us = m_for('SPY', 'S&P 500 (SPY)')
     q = by.get('QQQ')
-    if m_us and q:    # IBD mira S&P 500 Y Nasdaq: si el Nasdaq está bajista, el mercado no está confirmado
+    _u = cache_get_stale('universe')
+    _comp = _m_us_composite((by.get('SPY') or {}).get('phase'), (q or {}).get('phase'), (_u or {}).get('breadth'))
+    if _comp:
+        m_us = _comp
+    elif m_us and q:    # IBD mira S&P 500 Y Nasdaq: si el Nasdaq está bajista, el mercado no está confirmado
         m_us['tip'] += ' | Nasdaq 100: %s' % (q['status'] or 's/d')
         if q['status'] == 'bajista':
             m_us['ok'] = False
