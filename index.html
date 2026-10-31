@@ -176,6 +176,24 @@ self.addEventListener('message', e => {
     return null;
   };
 
+  // ── Alertas de precio en Firestore (campo price_alerts del documento del usuario) ──
+  window.saveAlertsCloud = async function(obj) {
+    const user = auth.currentUser;
+    if (!user) return false;
+    try {
+      await setDoc(doc(db, 'users', user.uid), { price_alerts: JSON.stringify(obj || {}) }, { merge: true });
+      return true;
+    } catch(e) { console.warn('Error guardando alertas de precio:', e); return false; }
+  };
+  // Devuelve el objeto de alertas, null si todavía no hay nada en la nube, o false si hubo error de red
+  window.loadAlertsCloud = async function(uid) {
+    try {
+      const snap = await getDoc(doc(db, 'users', uid));
+      if (snap.exists() && typeof snap.data().price_alerts === 'string') return JSON.parse(snap.data().price_alerts) || {};
+      return null;
+    } catch(e) { console.warn('Error cargando alertas de precio:', e); return false; }
+  };
+
   // ── Plan del usuario (free / premium) ──────────────
   window.TICKER_LIMIT_FREE = 15;
   window.PRECIO_PREMIUM_TXT = '9.000';
@@ -8772,12 +8790,41 @@ setInterval(alertsPoll, 5 * 60000);
 </script>
 
 <script>
-/* ═══ ALERTAS DE PRECIO POR TICKER (opcionales, se guardan en este navegador) ═══ */
+/* ═══ ALERTAS DE PRECIO POR TICKER (opcionales, se guardan en tu cuenta de Firestore) ═══ */
 (function () {
   var KEY = 'dubz_price_alerts_v1';
   function load() { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { return {}; } }
-  function save(a) { try { localStorage.setItem(KEY, JSON.stringify(a)); } catch (e) {} }
-  var alerts = load();
+  var alerts = load(), uid = null, lastLocal = 0, saving = false;
+  function push() {
+    if (!uid || !window.saveAlertsCloud) return;
+    saving = true;
+    window.saveAlertsCloud(alerts).then(function () { saving = false; }, function () { saving = false; });
+  }
+  function save(a) { try { localStorage.setItem(KEY, JSON.stringify(a)); } catch (e) {} lastLocal = Date.now(); push(); }
+  async function pull(first) {
+    if (!uid || !window.loadAlertsCloud || saving || Date.now() - lastLocal < 5000) return;
+    var c = await window.loadAlertsCloud(uid);
+    if (c === false) return;                                   // error de red: no tocar nada
+    if (c === null) { if (first === true && Object.keys(alerts).length) push(); return; }   // primera vez: subir lo local
+    if (JSON.stringify(c) === JSON.stringify(alerts)) return;
+    alerts = c;
+    try { localStorage.setItem(KEY, JSON.stringify(alerts)); } catch (e) {}
+    refreshUI();
+  }
+  var waitAuth = setInterval(function () {
+    if (!(window.auth && window.loadAlertsCloud)) return;
+    clearInterval(waitAuth);
+    window.auth.onAuthStateChanged(function (u) {
+      if (!u) { uid = null; return; }
+      try {
+        var prev = localStorage.getItem(KEY + '_uid');
+        if (prev && prev !== u.uid) { alerts = {}; localStorage.removeItem(KEY); refreshUI(); }   // otra cuenta en el mismo navegador
+        localStorage.setItem(KEY + '_uid', u.uid);
+      } catch (e) {}
+      uid = u.uid; pull(true);
+    });
+  }, 500);
+  setInterval(function () { if (!document.hidden) pull(false); }, 60000);
   function esc2(x) { return String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function find(sym) { for (var i = 0; i < allData.length; i++) if (allData[i].symbol === sym) return allData[i]; return null; }
   function fmt(v) { return typeof fp === 'function' ? fp(v) : Number(v).toFixed(2); }
