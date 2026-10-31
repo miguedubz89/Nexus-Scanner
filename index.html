@@ -1170,6 +1170,26 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 .rr-sum{font-family:var(--mono);font-size:11px;line-height:1.7;margin-top:10px}
 .mk-note{font-family:var(--mono);font-size:11px;color:var(--text-dim);line-height:1.6;margin-top:12px;padding:8px 12px;border-left:2px solid var(--border2)}
 @media(max-width:900px){.mk-grid,.rr-layout{grid-template-columns:minmax(0,1fr)}.rr-layout .mk-card{margin-bottom:12px}}
+/* Rotación: contador de suben/bajan + panel derecho sin recortes */
+.rr-breadth{margin-bottom:12px}
+.rr-b-top{display:flex;gap:6px 18px;flex-wrap:wrap;align-items:baseline;font-family:var(--mono);font-size:13px;margin-bottom:8px}
+.rr-b-top b{font-size:15px}
+.rr-b-bar{display:flex;height:8px;background:var(--bg4);border-radius:4px;overflow:hidden}
+.rr-b-bar i{display:block;height:100%}
+#rrgTable .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+#rrgTable table.mk-tbl{table-layout:auto}
+@media(max-width:1100px){.rr-layout{grid-template-columns:minmax(0,1fr)}.rr-layout .mk-card{margin-bottom:12px}}
+@media(max-width:700px){
+  #rrgTable .tbl-wrap{overflow:visible;border:0;background:none}
+  #rrgTable table.mk-tbl,#rrgTable table.mk-tbl tbody{display:block;width:100%}
+  #rrgTable table.mk-tbl thead{display:none}
+  #rrgTable table.mk-tbl tr{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px 6px;padding:9px 2px;border-bottom:1px solid rgba(30,45,61,.7)}
+  #rrgTable table.mk-tbl td{display:block;padding:0;border:0;text-align:left;white-space:normal;overflow:visible;font-size:11px}
+  #rrgTable table.mk-tbl td:nth-child(1){grid-column:1/5;font-size:12px;line-height:1.35}
+  #rrgTable table.mk-tbl td:nth-child(2){grid-column:5/7;text-align:right}
+  #rrgTable table.mk-tbl td:nth-child(n+3)::before{content:attr(data-l);display:block;font-size:9px;letter-spacing:.5px;color:var(--text-dim);margin-bottom:1px}
+  .mk-card{padding:10px 10px}
+}
 </style>
 <style>
 /* ═══ DUBZ v2 ═══ */
@@ -1515,7 +1535,7 @@ a.dz-news:hover{background:var(--bg3)}
         <select class="sel" id="rrgTrail" onchange="loadRotation(true)"><option value="5">Estela: 5</option><option value="8" selected>Estela: 8</option><option value="12">Estela: 12</option></select>
         <button class="btn btn-a btn-sm" onclick="loadRotation(true)">↺ ACTUALIZAR</button><span id="rrgStatus"></span>
       </div>
-      <div class="rr-layout"><div class="mk-card"><div class="mk-title">🔄 ROTACIÓN DE SECTORES <span class="mk-src" id="rrgSrc">RRG · ETFs sectoriales SPDR vs SPY</span></div><div id="rrgChart"><div class="mk-empty">Abrí la pestaña para calcular…</div></div></div><div class="mk-card" id="rrgTable"></div></div>
+      <div id="rrgBreadth"></div><div class="rr-layout"><div class="mk-card"><div class="mk-title">🔄 ROTACIÓN DE SECTORES <span class="mk-src" id="rrgSrc">RRG · ETFs sectoriales SPDR vs SPY</span></div><div id="rrgChart"><div class="mk-empty">Abrí la pestaña para calcular…</div></div></div><div class="mk-card" id="rrgTable"></div></div>
       <div id="rrgMembers"></div>
       <div class="mk-note" id="rrgNote">Cómo leerlo: cada sector rota en sentido horario → <b>Mejorando</b> (azul) → <b>Líder</b> (verde) → <b>Debilitándose</b> (amarillo) → <b>Rezagado</b> (rojo). El eje horizontal es la fuerza relativa contra el S&amp;P 500 (SPY) y el vertical el momentum de esa fuerza. La estela muestra los últimos períodos. Es una aproximación propia al RRG de JdK (normalización por z-score), no idéntica a la de Bloomberg o StockCharts; sirve para ver hacia dónde se mueve el dinero entre sectores, no como señal de compra.</div>
     </div>
@@ -1784,6 +1804,20 @@ a.dz-news:hover{background:var(--bg3)}
 </div>
 
 <!-- ═══ MODAL AGREGAR / EDITAR POSICIÓN ═══ -->
+<!-- ═══ MODAL GRÁFICO TRADINGVIEW ═══ -->
+<div class="tv-modal-overlay" id="tvModalOverlay" onclick="closeTVModal(event)">
+  <div class="tv-modal">
+    <div class="tv-modal-header">
+      <div class="tv-modal-title">📈 <span class="tv-modal-sym" id="tvModalSym"></span></div>
+      <div class="tv-modal-actions">
+        <a id="tvOpenLink" href="#" target="_blank" rel="noopener" class="btn btn-g btn-sm" style="text-decoration:none">ABRIR EN TRADINGVIEW ↗</a>
+        <button class="btn btn-r btn-sm" onclick="closeTVNow()">✕</button>
+      </div>
+    </div>
+    <div class="tv-modal-body" id="tvModalBody"></div>
+  </div>
+</div>
+
 <div class="pf-modal-overlay" id="pfModalOverlay" onclick="pfCloseModal(event)">
   <div class="pf-modal">
     <div class="pf-modal-header">
@@ -3623,6 +3657,7 @@ function renderTech(){
       '<td>'+squeezeCell1h(d)+'</td>'+
       '<td style="color:var(--text-dim)" title="'+(d.beta!=null?'Beta Yahoo':(d.betaCalc!=null?'Beta calculado localmente (Yahoo no lo provee)':''))+'">'+(d.beta!=null?f2(d.beta):(d.betaCalc!=null?f2(d.betaCalc)+'*':'--'))+'</td>'+
       '<td style="color:var(--text-dim)">'+(d.volAnnualized!=null?f2(d.volAnnualized)+'%':'--')+'</td>'+
+      '<td style="text-align:center">'+priceAlertBtn(d.symbol)+'</td>'+
       '</tr>';
   }
 
@@ -3680,7 +3715,7 @@ function renderTech(){
           '<th style="width:40px" title="De 0 a 100. Menos de 30 = sobrevendido (posible rebote). Más de 70 = sobrecomprado (posible corrección).">RSI</th><th style="width:40px" title="Fuerza de la tendencia, no su dirección. Menos de 20 = sin tendencia, 25-50 = fuerte, más de 50 = muy fuerte.">ADX</th><th style="width:54px" title="Distancia del precio a su media móvil de 50 ruedas. Positivo = está por encima de la media.">EMA50%</th><th style="width:60px" title="Distancia del precio a su media móvil de 200 ruedas (tendencia de largo plazo).">EMA200%</th>' +
           '<th style="width:50px" title="Volumen de hoy: cantidad de acciones operadas en el día.">Vol</th><th style="width:50px" title="Volumen diario promedio de las últimas 20 ruedas. Sirve para ver si hoy se opera más o menos de lo normal.">Vol20</th>' +
           '<th style="width:54px" title="Volumen acumulado en la semana en curso.">VolSem</th><th style="width:62px" title="Volumen semanal promedio de las últimas semanas.">Vol20Sem</th>' +
-          '<th style="width:100px" title="Compresión de volatilidad (TTM Squeeze) en velas diarias. Punto amarillo = comprimido, celeste = recién liberado, gris = sin squeeze. Barra verde = impulso alcista, roja = bajista.">Squeeze D</th><th style="width:100px" title="Lo mismo que Squeeze D pero con velas de 1 hora. Sirve para ver señales de corto plazo.">Squeeze 1H</th><th style="width:38px" title="Sensibilidad frente al mercado (SPY o Merval). 1 = se mueve igual; mayor a 1 = más agresivo; menor a 1 = más defensivo. El * indica beta calculado localmente.">Beta</th><th style="width:46px" title="Volatilidad anualizada (últimas 20 ruedas). Cuanto más alto, más oscila el precio y más riesgo tiene.">Volat</th>' +
+          '<th style="width:100px" title="Compresión de volatilidad (TTM Squeeze) en velas diarias. Punto amarillo = comprimido, celeste = recién liberado, gris = sin squeeze. Barra verde = impulso alcista, roja = bajista.">Squeeze D</th><th style="width:100px" title="Lo mismo que Squeeze D pero con velas de 1 hora. Sirve para ver señales de corto plazo.">Squeeze 1H</th><th style="width:38px" title="Sensibilidad frente al mercado (SPY o Merval). 1 = se mueve igual; mayor a 1 = más agresivo; menor a 1 = más defensivo. El * indica beta calculado localmente.">Beta</th><th style="width:46px" title="Volatilidad anualizada (últimas 20 ruedas). Cuanto más alto, más oscila el precio y más riesgo tiene.">Volat</th><th style="width:34px;text-align:center" title="Alerta de precio (opcional): tocá la campana para que te avisemos cuando el ticker llegue al precio que elijas.">🔔</th>' +
         '</tr></thead>' +
         '<tbody>' + secData.map(makeRow).join('') + '</tbody>' +
       '</table></div></div>';
@@ -4615,11 +4650,20 @@ function renderRotation() {
   svg += '</svg>';
   document.getElementById('rrgChart').innerHTML = svg;
 
+  // Contador del día: cuántos suben y cuántos bajan
+  var bUp = 0, bDn = 0, bFl = 0;
+  S.forEach(function(s){ var c = s.chg1d; if (c == null || isNaN(c)) return; if (c > 0) bUp++; else if (c < 0) bDn++; else bFl++; });
+  var bTot = bUp + bDn + bFl, bEl = document.getElementById('rrgBreadth');
+  if (bEl) {
+    var bNoun = data.market === 'idx' ? 'ETFs de países/índices' : data.market === 'ar' ? 'sectores del Merval' : 'ETFs sectoriales';
+    bEl.innerHTML = bTot ? '<div class="mk-card rr-breadth"><div class="rr-b-top"><span style="color:var(--green)"><b>▲ ' + bUp + '</b> suben</span><span style="color:var(--red)"><b>▼ ' + bDn + '</b> bajan</span>' + (bFl ? '<span class="mk-dim">= ' + bFl + ' sin cambio</span>' : '') + '<span class="mk-dim">de ' + bTot + ' ' + bNoun + ' en el día</span></div><div class="rr-b-bar"><i style="width:' + (bUp / bTot * 100).toFixed(1) + '%;background:var(--green)"></i><i style="width:' + (bFl / bTot * 100).toFixed(1) + '%;background:var(--text-dim)"></i><i style="width:' + (bDn / bTot * 100).toFixed(1) + '%;background:var(--red)"></i></div></div>' : '';
+  }
+
   var sorted = S.map(function(s, k){ s._col = RRG_COLORS[k % RRG_COLORS.length]; return s; }).sort(function(a, b){ return RRG_ORDER.indexOf(a.quadrant) - RRG_ORDER.indexOf(b.quadrant) || b.ratio - a.ratio; });
   var rows = sorted.map(function(s){
     return '<tr class="' + (_rrgSel === s.symbol ? 'rr-sel' : '') + '" style="cursor:pointer" onclick="rrgSelect(\'' + s.symbol + '\')"><td><span class="rr-dot" style="background:' + s._col + '"></span><b>' + s.symbol + '</b> <span class="mk-dim">' + s.name + '</span></td>' +
-      '<td><span class="mk-chip" style="color:' + RRG_QCOL[s.quadrant] + ';border-color:' + RRG_QCOL[s.quadrant] + '">' + s.quadrant.toUpperCase() + '</span></td><td>' + s.ratio.toFixed(2) + '</td><td>' + s.momentum.toFixed(2) + '</td>' +
-      '<td>' + mkSigned(s.chg1d, '%') + '</td><td>' + mkSigned(s.chg1w, '%') + '</td><td>' + mkSigned(s.chg1m, '%') + '</td><td>' + mkSigned(s.chg3m, '%', 1) + '</td></tr>';
+      '<td><span class="mk-chip" style="color:' + RRG_QCOL[s.quadrant] + ';border-color:' + RRG_QCOL[s.quadrant] + '">' + s.quadrant.toUpperCase() + '</span></td><td data-l="Ratio">' + s.ratio.toFixed(2) + '</td><td data-l="Mom">' + s.momentum.toFixed(2) + '</td>' +
+      '<td data-l="1D">' + mkSigned(s.chg1d, '%') + '</td><td data-l="1S">' + mkSigned(s.chg1w, '%') + '</td><td data-l="1M">' + mkSigned(s.chg1m, '%') + '</td><td data-l="3M">' + mkSigned(s.chg3m, '%', 1) + '</td></tr>';
   }).join('');
   var byQ = {}; sorted.forEach(function(s){ (byQ[s.quadrant] = byQ[s.quadrant] || []).push(s.symbol); });
   var sum = RRG_ORDER.filter(function(q){ return byQ[q]; }).map(function(q){ return '<span style="color:' + RRG_QCOL[q] + '"><b>' + q + ':</b> ' + byQ[q].join(', ') + '</span>'; }).join('<br>');
@@ -4699,7 +4743,9 @@ function exportCSV(){
 
 // ── TRADINGVIEW MODAL ─────────────────────────────
 function openTVChart(sym) {
-  document.getElementById('tvModalSym').textContent = sym;
+  var rawSym = String(sym);
+  if (/\.BA$/i.test(rawSym)) sym = 'BCBA:' + rawSym.replace(/\.BA$/i, '');   // TradingView usa BCBA:GGAL
+  document.getElementById('tvModalSym').textContent = rawSym.replace(/\.BA$/i, '');
   document.getElementById('tvOpenLink').href = 'https://www.tradingview.com/chart/?symbol=' + sym;
   var body = document.getElementById('tvModalBody');
   body.innerHTML = '';
@@ -4720,15 +4766,17 @@ function openTVChart(sym) {
   document.getElementById('tvModalOverlay').classList.add('open');
 }
 
+function closeTVNow() {
+  document.getElementById('tvModalOverlay').classList.remove('open');
+  var b = document.getElementById('tvModalBody'); if (b) b.innerHTML = '';
+}
 function closeTVModal(e) {
-  if (e.target === document.getElementById('tvModalOverlay')) {
-    document.getElementById('tvModalOverlay').classList.remove('open');
-  }
+  if (e.target === document.getElementById('tvModalOverlay')) closeTVNow();
 }
 
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
-    document.getElementById('tvModalOverlay').classList.remove('open');
+    closeTVNow();
     pfCloseSellModalForce();
   }
 });
@@ -8648,7 +8696,7 @@ var alBusy = false;
 async function alertsPoll() {
   if (alBusy) return; alBusy = true;
   try {
-    var st = lsGet(AL_STATE, {fg: null, q: {}, init: false}), log = lsGet(AL_LOG, []), fresh = [], first = !st.init;
+    var st = lsGet(AL_STATE, {fg: null, q: {}, init: false}), log = lsGet(AL_LOG, []).filter(function (x) { return x.k !== 'sector'; }), fresh = [], first = !st.init; st.q = {};
     try {
       var fg = await getJ('/feargreed', 40000), s = fg && fg.score;
       if (s != null) {
@@ -8656,17 +8704,6 @@ async function alertsPoll() {
         st.fg = s;
       }
     } catch (e) {}
-    var mk = [['us', ''], ['ar', '&market=ar'], ['idx', '&market=idx']];
-    for (var i = 0; i < mk.length; i++) {
-      try {
-        var r = await getJ('/rrg?period=daily&trail=5' + mk[i][1], 60000);
-        (r.sectors || []).forEach(function (sec) {
-          var key = mk[i][0] + ':' + sec.symbol, prev = st.q[key];
-          if (prev && prev !== sec.quadrant) fresh.push({k: 'sector', t: Date.now(), title: (mk[i][0] === 'ar' ? '🇦🇷 ' : mk[i][0] === 'idx' ? '🌎 ' : '🇺🇸 ') + sec.name + ' (' + sec.symbol + ') cambió de cuadrante', detail: prev + ' → ' + sec.quadrant, sev: sec.quadrant === 'Líder' ? 'green' : sec.quadrant === 'Rezagado' ? 'red' : 'cyan', from: prev, to: sec.quadrant});
-          st.q[key] = sec.quadrant; st.names = st.names || {}; st.names[key] = sec.name;
-        });
-      } catch (e) {}
-    }
     st.init = true; st.t = Date.now(); lsSet(AL_STATE, st);
     if (fresh.length && !first) {
       log = fresh.concat(log).slice(0, 60); lsSet(AL_LOG, log);
@@ -8683,23 +8720,19 @@ window.dzAlertsClear = function () { lsSet(AL_LOG, []); alertsRender(); };
 window.dzAlertsCheck = function () { alertsPoll(); };
 function alertsRender() {
   var el = $('mkAlerts'); if (!el) return;
-  var st = lsGet(AL_STATE, {fg: null, q: {}}), log = lsGet(AL_LOG, []);
+  var st = lsGet(AL_STATE, {fg: null, q: {}}), log = lsGet(AL_LOG, []).filter(function (x) { return x.k !== 'sector'; });
   var perm = ('Notification' in window) ? Notification.permission : 'unsupported';
   var notifBtn = perm === 'granted' ? '<span class="mk-src" style="color:var(--green)">🔔 notificaciones del navegador activas</span>' : perm === 'denied' ? '<span class="mk-src">🔕 notificaciones bloqueadas en el navegador</span>' : perm === 'default' ? '<button class="btn btn-g btn-sm" onclick="dzAlertsEnable()">🔔 Activar notificaciones</button>' : '';
   var fgTxt = st.fg == null ? '--' : Math.round(st.fg);
-  var chips = ['us', 'ar', 'idx'].map(function (m) {
-    var by = {}; Object.keys(st.q || {}).forEach(function (k) { if (k.indexOf(m + ':') === 0) (by[st.q[k]] = by[st.q[k]] || []).push(k.slice(k.indexOf(':') + 1)); });
-    var txt = ['Líder', 'Mejorando', 'Debilitándose', 'Rezagado'].filter(function (q) { return by[q]; }).map(function (q) { return '<span style="color:' + Q_COL[q] + '"><b>' + q + ':</b> ' + by[q].join(', ') + '</span>'; }).join(' · ');
-    return '<div class="dz-al-line"><b>' + (m === 'ar' ? '🇦🇷 Merval' : m === 'idx' ? '🌎 Países' : '🇺🇸 EEUU') + '</b> ' + (txt || '<span class="mk-dim">esperando primer cálculo…</span>') + '</div>';
-  }).join('');
+  var chips = '';
   var rows = log.slice(0, 12).map(function (a) {
     var col = {red: 'var(--red)', green: 'var(--green)', yellow: 'var(--yellow)', cyan: 'var(--accent)'}[a.sev] || 'var(--text)';
     return '<div class="dz-al-row"><span class="mk-dim">' + new Date(a.t).toLocaleString('es-AR', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'}) + '</span><span style="color:' + col + '"><b>' + esc(a.title) + '</b> — ' + esc(a.detail) + '</span></div>';
   }).join('');
-  el.innerHTML = '<div class="mk-title">🔔 ALERTAS <span class="mk-src">cambio de cuadrante de un sector o país · Fear &amp; Greed cruza 25 o 75</span>' + notifBtn + '<button class="btn btn-g btn-sm" onclick="dzAlertsCheck()">Revisar ahora</button>' + (log.length ? '<button class="btn btn-r btn-sm" onclick="dzAlertsClear()">Borrar historial</button>' : '') + '</div>' +
+  el.innerHTML = '<div class="mk-title">🔔 ALERTAS <span class="mk-src">Fear &amp; Greed cruza 25 o 75</span>' + notifBtn + '<button class="btn btn-g btn-sm" onclick="dzAlertsCheck()">Revisar ahora</button>' + (log.length ? '<button class="btn btn-r btn-sm" onclick="dzAlertsClear()">Borrar historial</button>' : '') + '</div>' +
     '<div class="dz-al-line"><b>Fear &amp; Greed:</b> ' + fgTxt + (st.fg != null ? ' · ' + (typeof fgLabel === 'function' ? fgLabel(st.fg) : '') : '') + ' <span class="mk-dim">(alerta al cruzar 25 o 75)</span></div>' + chips +
     '<div style="margin-top:8px">' + (rows || '<div class="mk-empty" style="padding:8px 0">Todavía no hubo cambios. Te avisamos acá, con un cartel en pantalla y, si lo activás, con una notificación del navegador.</div>') + '</div>' +
-    '<div class="mk-note" style="margin-top:8px">Se evalúa cada 5 minutos <b>mientras DUBZ esté abierto</b> en el navegador (en cualquier pestaña). Si lo cerrás, no hay aviso hasta que lo vuelvas a abrir. Las alertas usan la rotación diaria; un sector puede entrar y salir de un cuadrante cerca del límite, por eso a veces aparecen cambios seguidos.</div>';
+    '<div class="mk-note" style="margin-top:8px">Se evalúa cada 5 minutos <b>mientras DUBZ esté abierto</b> en el navegador (en cualquier pestaña). Si lo cerrás, no hay aviso hasta que lo vuelvas a abrir.</div>';
 }
 
 /* ═══════════════ 10. ROTACIÓN: nota con la composición de sectores ═ */
@@ -8736,6 +8769,93 @@ setTimeout(alertsPoll, 20000);
 setInterval(alertsPoll, 5 * 60000);
 })();
 
+</script>
+
+<script>
+/* ═══ ALERTAS DE PRECIO POR TICKER (opcionales, se guardan en este navegador) ═══ */
+(function () {
+  var KEY = 'dubz_price_alerts_v1';
+  function load() { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { return {}; } }
+  function save(a) { try { localStorage.setItem(KEY, JSON.stringify(a)); } catch (e) {} }
+  var alerts = load();
+  function esc2(x) { return String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function find(sym) { for (var i = 0; i < allData.length; i++) if (allData[i].symbol === sym) return allData[i]; return null; }
+  function fmt(v) { return typeof fp === 'function' ? fp(v) : Number(v).toFixed(2); }
+  function shown(sym) { return String(sym).replace(/\.BA$/i, ''); }
+  function say(title, detail) {
+    var c = document.getElementById('dzToasts');
+    if (c) {
+      var t = document.createElement('div'); t.className = 'dz-toast yellow';
+      t.innerHTML = '<b>' + esc2(title) + '</b><br>' + esc2(detail); c.appendChild(t);
+      setTimeout(function () { t.style.opacity = '0'; setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 400); }, 12000);
+      t.onclick = function () { if (t.parentNode) t.parentNode.removeChild(t); };
+    }
+    try { if ('Notification' in window && Notification.permission === 'granted') new Notification(title, {body: detail}); } catch (e) {}
+  }
+  function refreshUI() { if (typeof renderTech === 'function' && document.getElementById('techBody')) renderTech(); }
+
+  window.priceAlertBtn = function (sym) {
+    var n = (alerts[sym] || []).length;
+    return '<span onclick="openPriceAlert(\'' + sym + '\')" style="cursor:pointer;font-size:14px;' + (n ? '' : 'opacity:.35;filter:grayscale(1)') + '" title="' + (n ? n + ' alerta(s) de precio activa(s)' : 'Poner alerta de precio') + '">🔔' + (n > 1 ? '<sup style="font-size:9px;color:var(--yellow)">' + n + '</sup>' : '') + '</span>';
+  };
+
+  window.openPriceAlert = function (sym) {
+    var old = document.getElementById('priceAlertOverlay'); if (old) old.remove();
+    var d = find(sym), cur = d && d.price != null ? d.price : null;
+    var list = (alerts[sym] || []).map(function (a, i) {
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--border);font-family:var(--mono);font-size:12px"><span>' + (a.dir === 'up' ? '<span style="color:var(--green)">▲ sube a</span>' : '<span style="color:var(--red)">▼ baja a</span>') + ' <b>' + fmt(a.p) + '</b></span><button onclick="delPriceAlert(\'' + sym + '\',' + i + ')" style="background:none;border:1px solid var(--red2);color:var(--red);font-family:var(--mono);font-size:11px;padding:3px 9px;border-radius:2px;cursor:pointer">Borrar</button></div>';
+    }).join('');
+    var ov = document.createElement('div'); ov.id = 'priceAlertOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:3000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+    ov.innerHTML = '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:4px;width:360px;max-width:95vw;padding:20px;box-shadow:0 0 40px rgba(0,212,255,.15)">' +
+      '<div style="font-family:var(--head);font-weight:900;font-size:16px;letter-spacing:3px;color:var(--accent);margin-bottom:4px">🔔 ALERTA — ' + esc2(shown(sym)) + '</div>' +
+      '<div style="font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:12px">' + (cur != null ? 'Precio actual: <b style="color:var(--text-bright)">' + fmt(cur) + '</b>. ' : '') + 'Te avisa una sola vez cuando llegue al precio que pongas (la dirección se detecta sola).</div>' +
+      '<input id="paInput" type="number" step="any" inputmode="decimal" placeholder="Precio objetivo" style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text-bright);font-family:var(--mono);font-size:15px;padding:10px;border-radius:2px;outline:none">' +
+      '<div style="display:flex;gap:10px;margin-top:12px;justify-content:flex-end"><button onclick="document.getElementById(\'priceAlertOverlay\').remove()" style="background:none;border:1px solid var(--border2);color:var(--text-dim);font-family:var(--mono);font-size:12px;padding:7px 14px;border-radius:2px;cursor:pointer">Cerrar</button><button onclick="addPriceAlert(\'' + sym + '\')" style="background:var(--accent);border:1px solid var(--accent);color:var(--bg);font-family:var(--mono);font-size:12px;font-weight:700;padding:7px 14px;border-radius:2px;cursor:pointer">AGREGAR</button></div>' +
+      (list ? '<div style="margin-top:14px">' + list + '</div>' : '') + '</div>';
+    ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
+    document.body.appendChild(ov);
+    setTimeout(function () { var i = document.getElementById('paInput'); if (i) i.focus(); }, 50);
+  };
+
+  window.addPriceAlert = function (sym) {
+    var inp = document.getElementById('paInput'), p = inp ? parseFloat(String(inp.value).replace(',', '.')) : NaN;
+    if (!isFinite(p) || p <= 0) { if (inp) inp.style.borderColor = 'var(--red)'; return; }
+    var d = find(sym), cur = d && d.price != null ? d.price : null;
+    if (cur == null) { say('Sin precio todavía', 'Esperá a que cargue el precio de ' + shown(sym) + ' y probá de nuevo.'); return; }
+    if (p === cur) { if (inp) inp.style.borderColor = 'var(--red)'; return; }
+    (alerts[sym] = alerts[sym] || []).push({p: p, dir: p > cur ? 'up' : 'down', t: Date.now()});
+    save(alerts);
+    try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch (e) {}
+    var ov = document.getElementById('priceAlertOverlay'); if (ov) ov.remove();
+    refreshUI();
+    say('Alerta creada', shown(sym) + ' ' + (p > cur ? 'sube a ' : 'baja a ') + fmt(p));
+  };
+
+  window.delPriceAlert = function (sym, i) {
+    if (!alerts[sym]) return;
+    alerts[sym].splice(i, 1); if (!alerts[sym].length) delete alerts[sym];
+    save(alerts);
+    var ov = document.getElementById('priceAlertOverlay'); if (ov) ov.remove();
+    refreshUI();
+    if (alerts[sym]) window.openPriceAlert(sym);
+  };
+
+  window.dzCheckPriceAlerts = function () {
+    var changed = false;
+    Object.keys(alerts).forEach(function (sym) {
+      var d = find(sym); if (!d || d.price == null) return;
+      alerts[sym] = alerts[sym].filter(function (a) {
+        var hit = a.dir === 'up' ? d.price >= a.p : d.price <= a.p;
+        if (hit) { changed = true; say('🔔 ' + shown(sym) + (a.dir === 'up' ? ' llegó a ' : ' bajó a ') + fmt(a.p), 'Precio actual: ' + fmt(d.price)); }
+        return !hit;
+      });
+      if (!alerts[sym].length) delete alerts[sym];
+    });
+    if (changed) { save(alerts); refreshUI(); }
+  };
+  setInterval(function () { try { dzCheckPriceAlerts(); } catch (e) {} }, 10000);
+})();
 </script>
 </body>
 </html>
