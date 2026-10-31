@@ -2757,20 +2757,63 @@ window.initApp = function() {
 setInterval(function(){ document.getElementById('clk').textContent=new Date().toLocaleTimeString('es-AR'); },1000);
 
 // ── SERVER CHECK ──────────────────────────────────
-async function checkServer() {
+// Un solo ping al /health (el timeout largo evita falsos "sin servidor" cuando Railway está ocupado o despertando)
+async function pingOnce(ms) {
   try {
-    var r = await fetch(API+'/health', {signal: AbortSignal.timeout(2000)});
-    if (r.ok) {
-      serverOk = true;
-      document.getElementById('serverBanner').style.display = 'none';
-      setStatus('live','LIVE — Yahoo Finance');
-      return true;
-    }
-  } catch(e) {}
-  serverOk = false;
-  setStatus('err','SIN SERVIDOR');
-  return false;
+    var r = await fetch(API + '/health?_=' + Date.now(), {signal: AbortSignal.timeout(ms), cache: 'no-store'});
+    return r.ok;
+  } catch (e) { return false; }
 }
+// Dispara un ping nuevo cada 1.2 s SIN esperar al anterior, y se queda con el primero que responda.
+// Así conecta apenas el servidor despierta, en vez de esperar un timeout fijo.
+function waitServer(maxMs) {
+  return new Promise(function(resolve) {
+    var done = false, t0 = Date.now(), iv;
+    function finish(v) { if (done) return; done = true; clearInterval(iv); resolve(v); }
+    function attempt() { pingOnce(8000).then(function(ok) { if (ok) finish(true); }); }
+    attempt();
+    iv = setInterval(function() {
+      if (done) return;
+      if (Date.now() - t0 > maxMs) { finish(false); return; }
+      attempt();
+    }, 1200);
+  });
+}
+var _connecting = null, _reconnectTimer = null;
+function serverIsUp() {
+  serverOk = true;
+  var b = document.getElementById('serverBanner'); if (b) b.style.display = 'none';
+  setStatus('live', 'LIVE — Yahoo Finance');
+}
+// quick=true: para el refresco periódico (no bloquea tanto); sin quick: arranque de la app (reintenta hasta ~20 s)
+async function checkServer(quick) {
+  if (_connecting) return _connecting;
+  _connecting = (async function() {
+    if (!serverOk) setStatus('loading', 'CONECTANDO CON EL SERVIDOR...');
+    var ok = await waitServer(quick ? 5000 : 20000);
+    if (ok) { serverIsUp(); return true; }
+    serverOk = false;
+    setStatus('err', 'SIN SERVIDOR — reintentando solo...');
+    startReconnect();
+    return false;
+  })();
+  try { return await _connecting; } finally { _connecting = null; }
+}
+// Si no hay servidor, sigue intentando solo cada 4 s y, apenas vuelve, carga todo sin que tengas que recargar la página
+function startReconnect() {
+  if (_reconnectTimer) return;
+  _reconnectTimer = setInterval(async function() {
+    if (document.hidden) return;
+    if (!(await pingOnce(6000))) return;
+    clearInterval(_reconnectTimer); _reconnectTimer = null;
+    serverIsUp();
+    var ls = document.getElementById('loadStatus'); if (ls) ls.textContent = '';
+    if (!window._fullLoadDone) { if (typeof loadAndRefresh === 'function') loadAndRefresh(); }
+    else if (typeof doRefresh === 'function') doRefresh();
+  }, 4000);
+}
+window.addEventListener('online', function() { if (!serverOk) startReconnect(); });
+document.addEventListener('visibilitychange', function() { if (!document.hidden && !serverOk) startReconnect(); });
 
 function setStatus(st, txt) {
   var dot = document.getElementById('dot');
@@ -2946,11 +2989,12 @@ async function cargarCompleto() {
 
   var ok = await checkServer();
   if (!ok) {
-    document.getElementById('loadStatus').textContent = 'Servidor no disponible. Iniciá server.py';
+    document.getElementById('loadStatus').textContent = 'Servidor no disponible. Reintentando solo...';
     if (!cached) return;
-    setStatus('err','SIN SERVIDOR (mostrando cache)');
+    setStatus('err','SIN SERVIDOR (mostrando cache) — reintentando solo...');
     return;
   }
+  window._fullLoadDone = true;
 
   setStatus('loading', cached ? 'ACTUALIZANDO...' : 'CARGANDO...');
   if (!cached) document.getElementById('progressWrap').style.display = 'block';
@@ -3013,8 +3057,8 @@ async function doRefresh() {
   if (!allData.length) return;
   if (refreshInFlight) { startCountdown(); return; } // el anterior todavía no terminó, esperamos al próximo tick
   refreshInFlight = true;
-  var ok = await checkServer();
-  if (!ok) { setStatus('err','SIN SERVIDOR'); refreshInFlight = false; return; }
+  var ok = await checkServer(true);
+  if (!ok) { refreshInFlight = false; return; }
   setStatus('loading', 'ACTUALIZANDO PRECIOS...');
 
   refreshCount++;
