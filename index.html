@@ -8953,7 +8953,7 @@ setInterval(alertsPoll, 5 * 60000);
   setInterval(function () { try { dzCheckPriceAlerts(); } catch (e) {} }, 10000);
 })();
 </script>
-<style>.arg-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.arg-2 .mk-card{margin-bottom:12px}@media(max-width:900px){.arg-2{grid-template-columns:minmax(0,1fr)}}.arg-g{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px 14px}.arg-l{font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:4px}.arg-i{width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text-bright);font-family:var(--mono);font-size:13px;padding:7px 8px;border-radius:2px;outline:none;text-align:right}.arg-i:focus{border-color:var(--accent)}@media(max-width:900px){.arg-g{grid-template-columns:repeat(2,minmax(0,1fr))}}</style>
+<style>.arg-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.arg-2 .mk-card{margin-bottom:12px}@media(max-width:900px){.arg-2{grid-template-columns:minmax(0,1fr)}}.arg-tt{position:absolute;pointer-events:none;background:#141c26;border:1px solid var(--accent);border-radius:3px;padding:5px 8px;font:11px/1.45 var(--mono);color:var(--text-bright);box-shadow:0 4px 14px rgba(0,0,0,.5);white-space:nowrap;z-index:5}.arg-g{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px 14px}.arg-l{font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:4px}.arg-i{width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text-bright);font-family:var(--mono);font-size:13px;padding:7px 8px;border-radius:2px;outline:none;text-align:right}.arg-i:focus{border-color:var(--accent)}@media(max-width:900px){.arg-g{grid-template-columns:repeat(2,minmax(0,1fr))}}</style>
 <script>
 /* ═══ 🇦🇷 ARGENTINA: bonos hard dólar (curva, TIR, paridad, calculadora, calendario) + acciones ═══ */
 (function(){
@@ -9079,21 +9079,38 @@ function sr(re,yrs){
   return bj('/'+v.idVariable+'?desde='+iso(Date.now()-yrs*365*DAY)+'&hasta='+iso(Date.now())+'&limit=3000').then(function(j){return rw(j.results)}).catch(function(){return []})};
  return VR?Promise.resolve(go()):bj('').then(function(j){VR=j.results||[];return go()}).catch(function(){return []})}
 function ad(path,n){return fj('https://api.argentinadatos.com'+path).then(function(a){return rw(a).slice(-n)}).catch(function(){return []})}
+var LCD={};
+function nice(y0,y1,zero){var r=(y1-y0)||1,raw=r/4,m=Math.pow(10,Math.floor(Math.log(raw)/Math.LN10)),st=[1,2,2.5,5,10].filter(function(k){return k*m>=raw})[0]*m;return {a:zero?Math.min(0,Math.floor(y0/st)*st):Math.floor(y0/st)*st,b:Math.ceil(y1/st)*st,st:st}}
 function lc(id,S,o){
  var el=$(id);if(!el)return 0;S=S.filter(function(s){return s.p&&s.p.length});if(!S.length){el.parentNode.style.display='none';return 0}
- el.parentNode.style.display='';
- var W=520,H=210,L=44,Rr=10,T=10,Bt=22,a=[];S.forEach(function(s){a=a.concat(s.p)});
- var xs=a.map(function(p){return p[0]}),ys=a.map(function(p){return p[1]/(o.div||1)}),x0=Math.min.apply(0,xs),x1=Math.max.apply(0,xs),y0=Math.min.apply(0,ys),y1=Math.max.apply(0,ys),pd=(y1-y0)*.1||1;
- y0=o.zero?Math.min(0,y0):y0-pd;y1+=pd;
+ el.parentNode.style.display='';var dv=o.div||1;
+ var W=520,H=220,L=46,Rr=12,T=8,Bt=22,a=[];S.forEach(function(s){a=a.concat(s.p)});
+ var xs=a.map(function(p){return p[0]}),ys=a.map(function(p){return p[1]/dv}),x0=Math.min.apply(0,xs),x1=Math.max.apply(0,xs),n=nice(Math.min.apply(0,ys),Math.max.apply(0,ys),o.zero),y0=n.a,y1=n.b;
  var sx=function(v){return L+(v-x0)/((x1-x0)||1)*(W-L-Rr)},sy=function(v){return T+(1-(v-y0)/(y1-y0))*(H-T-Bt)},g='',i,u=o.suf||'';
- for(i=0;i<=4;i++){var v=y0+(y1-y0)*i/4;g+='<line x1="'+L+'" x2="'+(W-Rr)+'" y1="'+sy(v)+'" y2="'+sy(v)+'" stroke="#26303d"/><text x="4" y="'+(sy(v)+4)+'" fill="#6b7a8d" font-size="10">'+nf(v,o.d==null?1:o.d)+u+'</text>'}
- for(i=0;i<=3;i++){var t=x0+(x1-x0)*i/3,dt=new Date(t);g+='<text x="'+sx(t)+'" y="'+(H-6)+'" fill="#6b7a8d" font-size="10" text-anchor="middle">'+('0'+(dt.getUTCMonth()+1)).slice(-2)+'/'+String(dt.getUTCFullYear()).slice(2)+'</text>'}
+ for(var v=y0;v<=y1+n.st/2;v+=n.st){g+='<line x1="'+L+'" x2="'+(W-Rr)+'" y1="'+sy(v).toFixed(1)+'" y2="'+sy(v).toFixed(1)+'" stroke="#1d2631" stroke-width=".7"/><text x="'+(L-5)+'" y="'+(sy(v)+3.5).toFixed(1)+'" fill="#6b7a8d" font-size="9.5" text-anchor="end">'+nf(v,n.st<1?1:0)+u+'</text>'}
+ for(i=0;i<=3;i++){var t=x0+(x1-x0)*i/3,dt=new Date(t);g+='<text x="'+sx(t).toFixed(1)+'" y="'+(H-6)+'" fill="#6b7a8d" font-size="9.5" text-anchor="'+(i==0?'start':i==3?'end':'middle')+'">'+('0'+(dt.getUTCMonth()+1)).slice(-2)+'/'+String(dt.getUTCFullYear()).slice(2)+'</text>'}
  var leg='';
- S.forEach(function(s,k){var pts=s.p.map(function(p){return [sx(p[0]),sy(p[1]/(o.div||1))]});
-  if(o.bar&&k==0){var bw=Math.max(2,(W-L-Rr)/s.p.length-2);pts.forEach(function(q){g+='<rect x="'+(q[0]-bw/2).toFixed(1)+'" y="'+Math.min(q[1],sy(0)).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.abs(sy(0)-q[1]).toFixed(1)+'" fill="'+s.c+'" opacity=".85"/>'})}
-  else g+='<polyline fill="none" stroke="'+s.c+'" stroke-width="1.8" points="'+pts.map(function(q){return q[0].toFixed(1)+','+q[1].toFixed(1)}).join(' ')+'"/>';
-  var l=s.p[s.p.length-1];leg+='<span style="color:'+s.c+';margin-right:12px">● '+s.n+' <b>'+nf(l[1]/(o.div||1),o.d==null?1:o.d)+u+'</b> <span class="mk-dim">'+fd(l[0])+'</span></span>'});
- el.innerHTML='<div style="font-family:var(--mono);font-size:11px;margin-bottom:4px">'+leg+'</div><svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;font-family:var(--mono)">'+g+'</svg>';return 1}
+ S.forEach(function(s,k){var pts=s.p.map(function(p){return [sx(p[0]),sy(p[1]/dv)]});
+  if(o.bar&&k==0){var bw=Math.max(1.6,(W-L-Rr)/s.p.length*.62);pts.forEach(function(q){g+='<rect x="'+(q[0]-bw/2).toFixed(1)+'" y="'+Math.min(q[1],sy(0)).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.max(.5,Math.abs(sy(0)-q[1])).toFixed(1)+'" fill="'+s.c+'" opacity=".8"/>'})}
+  else g+='<polyline fill="none" stroke="'+s.c+'" stroke-width="1.3" stroke-linejoin="round" points="'+pts.map(function(q){return q[0].toFixed(1)+','+q[1].toFixed(1)}).join(' ')+'"/>';
+  var l=s.p[s.p.length-1];leg+='<span style="color:'+s.c+';margin-right:12px">● '+s.n+' <b>'+nf(l[1]/dv,o.td==null?2:o.td)+u+'</b> <span class="mk-dim">'+fd(l[0])+'</span></span>'});
+ LCD[id]={S:S,o:o,W:W,H:H,L:L,Rr:Rr,T:T,Bt:Bt,x0:x0,x1:x1,sx:sx,sy:sy,dv:dv};
+ el.innerHTML='<div style="font-family:var(--mono);font-size:11px;margin-bottom:4px">'+leg+'</div><div style="position:relative"><svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block;font-family:var(--mono);cursor:crosshair" onmousemove="argHv(event,\''+id+'\')" onmouseleave="argHo(\''+id+'\')">'+g+'<g id="hv_'+id+'" pointer-events="none"></g><rect x="'+L+'" y="'+T+'" width="'+(W-L-Rr)+'" height="'+(H-T-Bt)+'" fill="transparent"/></svg><div class="arg-tt" id="tt_'+id+'" style="display:none"></div></div>';return 1}
+var MN=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+window.argHo=function(id){var h=$('hv_'+id),t=$('tt_'+id);if(h)h.innerHTML='';if(t)t.style.display='none'};
+window.argHv=function(e,id){
+ var c=LCD[id],svg=e.currentTarget,r=svg.getBoundingClientRect(),h=$('hv_'+id),tt=$('tt_'+id);if(!c||!h)return;
+ var mx=(e.clientX-r.left)/r.width*c.W,t=c.x0+(mx-c.L)/(c.W-c.L-c.Rr)*(c.x1-c.x0),g='',rows='',xa=null,o=c.o,u=o.suf||'',dt;
+ c.S.forEach(function(s,k){var b=null,bd=1e18;s.p.forEach(function(p){var d=Math.abs(p[0]-t);if(d<bd){bd=d;b=p}});if(!b)return;
+  var X=c.sx(b[0]),Y=c.sy(b[1]/c.dv);if(xa==null||Math.abs(X-mx)<Math.abs(xa-mx)){xa=X;dt=b[0]}
+  if(o.bar&&k==0){var bw=Math.max(1.6,(c.W-c.L-c.Rr)/s.p.length*.62);g+='<rect x="'+(X-bw/2-1).toFixed(1)+'" y="'+Math.min(Y,c.sy(0)).toFixed(1)+'" width="'+(bw+2).toFixed(1)+'" height="'+Math.max(.5,Math.abs(c.sy(0)-Y)).toFixed(1)+'" fill="#fff" opacity=".35"/>'}
+  else g+='<circle cx="'+X.toFixed(1)+'" cy="'+Y.toFixed(1)+'" r="3.5" fill="'+s.c+'" stroke="#0d1318" stroke-width="1.2"/>';
+  var d=new Date(b[0]);rows+='<div style="color:'+s.c+'">● '+s.n+': <b>'+nf(b[1]/c.dv,o.td==null?2:o.td)+u+'</b>'+(o.mon&&0?'':'')+'</div>'});
+ if(xa==null)return;
+ g='<line x1="'+xa.toFixed(1)+'" x2="'+xa.toFixed(1)+'" y1="'+c.T+'" y2="'+(c.H-c.Bt)+'" stroke="#8a97a8" stroke-width=".7" stroke-dasharray="3 3"/>'+g;h.innerHTML=g;
+ var d=new Date(dt),lbl=o.mon?MN[d.getUTCMonth()]+' '+d.getUTCFullYear():fd(dt);
+ tt.innerHTML='<div class="mk-dim" style="margin-bottom:2px">'+lbl+'</div>'+rows;tt.style.display='block';
+ var px=xa/c.W*r.width,w=tt.offsetWidth;tt.style.left=Math.max(0,Math.min(r.width-w,px+12>r.width-w?px-w-12:px+12))+'px';tt.style.top='6px'};
 function macro(force){
  if(!force&&Date.now()-MCt<30*60000)return;MCt=Date.now();
  Promise.all([sr(/^Inflaci[oó]n mensual/i,3),sr(/^Inflaci[oó]n interanual/i,3),sr(/REM.*pr[oó]ximos 12 meses/i,3),sr(/TAMAR.*\(en % n\.a\.\)/i,1),sr(/BADLAR.*\(en % n\.a\.\)/i,1),sr(/pol[ií]tica monetaria.*n\.a/i,1),sr(/^Reservas Internacionales/i,2),
@@ -9102,10 +9119,10 @@ function macro(force){
   if(dp.length&&Math.max.apply(0,dp.map(function(x){return x[1]}))<2)dp=dp.map(function(x){return [x[0],x[1]*100]});
   var ts=[{n:'TAMAR',c:'#00e676',p:r[3]},{n:'BADLAR',c:'#ffd600',p:r[4]},{n:'Pol. monetaria',c:'#b47eff',p:r[5]}];
   if(!r[3].length&&!r[4].length&&!r[5].length)ts=[{n:'Depósitos 30d',c:'#ffd600',p:dp}];
-  n+=lc('mcIm',[{n:'Inflación mensual',c:'#ff9100',p:im}],{suf:'%',d:1,bar:1,zero:1});
-  n+=lc('mcIi',[{n:'Interanual',c:'#ff3d5a',p:ii},{n:'REM 12m',c:'#00d4ff',p:r[2]}],{suf:'%',d:1});
-  n+=lc('mcTs',ts,{suf:'%',d:1});
-  n+=lc('mcRs',[{n:'Reservas (miles de M US$)',c:'#00d4ff',p:r[6]}],{div:1000,d:1});
+  n+=lc('mcIm',[{n:'Inflación mensual',c:'#ff9100',p:im}],{suf:'%',bar:1,zero:1,mon:1,td:2});
+  n+=lc('mcIi',[{n:'Interanual',c:'#ff3d5a',p:ii},{n:'REM 12m',c:'#00d4ff',p:r[2]}],{suf:'%',mon:1,td:2});
+  n+=lc('mcTs',ts,{suf:'%',td:2});
+  n+=lc('mcRs',[{n:'Reservas (miles de M US$)',c:'#00d4ff',p:r[6]}],{div:1000,td:2});
   var h=$('mcH');if(h)h.style.display=n?'':'none';if(!n)MCt=0}).catch(function(){MCt=0})}
 window.argMacro=function(){macro(true)};
 function build(){
