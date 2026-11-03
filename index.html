@@ -1452,6 +1452,7 @@ a.dz-news:hover{background:var(--bg3)}
       <div class="tab active" onclick="switchTab('scanner',this)">SCANNER</div>
       <div class="tab" onclick="switchTab('sectors',this)">SECTORES</div>
       <div class="tab" onclick="switchTab('market',this)">🌡 MERCADO</div>
+      <div class="tab" onclick="switchTab('arg',this)">🇦🇷 ARGENTINA</div>
       <div class="tab" onclick="switchTab('rotation',this)">🔄 ROTACIÓN</div>
       <div class="tab" onclick="switchTab('technical',this)">TÉCNICO</div>
       <div class="tab" onclick="switchTab('all',this)">TODOS</div>
@@ -1529,7 +1530,6 @@ a.dz-news:hover{background:var(--bg3)}
       <div class="mk-toolbar"><button class="btn btn-a btn-sm" onclick="loadMarketTab(true)">↺ ACTUALIZAR</button><span id="mkStatus"></span></div>
       <div class="mk-grid"><div class="mk-card" id="mkFG"></div><div class="mk-card" id="mkIdx"></div></div>
       <div class="mk-card" id="mkMacro" style="display:block"></div>
-      <div class="mk-card" id="mkAR"></div>
       <div class="mk-card" id="mkAlerts"></div>
       <div class="mk-card" id="mkEarn"></div>
       <div class="mk-card" id="mkOpt"></div>
@@ -1539,11 +1539,14 @@ a.dz-news:hover{background:var(--bg3)}
         <div class="mk-title">🗺️ MAPA DE CALOR <span class="mk-src">tamaño = √capitalización · clic en un cuadro abre el gráfico</span></div>
         <div class="mk-toolbar">
           <select class="sel" id="hmMetric" onchange="renderHeatmap()"><option value="chgPct">Color: % Día</option><option value="mom3m">Color: Momentum 3M</option><option value="mom12m">Color: Momentum 12M</option><option value="distEma200">Color: vs EMA200</option><option value="rsi">Color: RSI</option></select>
-          <select class="sel" id="hmUniverse" onchange="renderHeatmap()"><option value="all">Todos</option><option value="us">Global (USD)</option><option value="ar">Merval</option></select>
+          <select class="sel" id="hmUniverse" style="display:none"><option value="us">Global (USD)</option></select>
         </div>
         <div class="hm-wrap" id="hmWrap"></div>
       </div>
     </div>
+
+    <!-- ARGENTINA TAB -->
+    <div class="tab-panel" id="tab-arg"></div>
 
     <!-- ROTACIÓN TAB -->
     <div class="tab-panel" id="tab-rotation">
@@ -4502,7 +4505,7 @@ function renderMarketIdx() {
   var el = document.getElementById('mkIdx'); if (!el) return;
   var mk = _mktData;
   if (!mk || !mk.indexes || !mk.indexes.length) { el.innerHTML = '<div class="mk-title">🧭 DIRECCIÓN DEL MERCADO</div><div class="mk-empty">Sin datos.</div>'; return; }
-  var rows = mk.indexes.map(function(i){
+  var rows = mk.indexes.filter(function(i){ return !/merval|\.ba\b|^\^mer/i.test((i.symbol||'') + ' ' + (i.name||'')); }).map(function(i){
     return '<tr><td><b>' + i.name + '</b> <span class="mk-dim">' + i.symbol + '</span></td><td>' + (+i.price).toLocaleString('es-AR') + '</td><td>' + mkSigned(i.chgPct, '%') + '</td>' +
       '<td>' + mkSigned(i.distEma50, '%', 1) + '</td><td>' + mkSigned(i.distEma200, '%', 1) + '</td>' +
       '<td title="Ruedas con caída ≥0,2% y más volumen que la anterior, en las últimas 25. 5 o más = presión vendedora institucional.">' +
@@ -4525,13 +4528,13 @@ function renderMarketIdx() {
   }
   el.innerHTML = '<div class="mk-title">🧭 DIRECCIÓN DEL MERCADO <span class="mk-src">la “M” de CANSLIM</span></div>' +
     '<div class="tbl-wrap"><table class="dt mk-tbl"><thead><tr><th>Índice</th><th>Precio</th><th>% Día</th><th>vs EMA50</th><th>vs EMA200</th><th title="Días de distribución en las últimas 25 ruedas">Dist.</th><th>Estado</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
-    '<div class="mk-mline">' + mline('M EEUU', m.us) + mline('M Argentina', m.ar) + '</div>' + uniLine;
+    '<div class="mk-mline">' + mline('M EEUU', m.us) + '</div>' + uniLine;
 }
 
 function renderMacro() {
   var el = document.getElementById('mkMacro'); if (!el) return;
   var items = (_mktData && _mktData.macro) ? _mktData.macro.slice() : [];
-  if (cclRate) items.push({name: 'Dólar CCL', price: cclRate, chgPct: null, symbol: 'CCL', mom1m: null});
+  items = items.filter(function(m){ return !/merval|ars|argent|riesgo|ccl|mep|\.ba\b|^\^mer/i.test((m.symbol||'') + ' ' + (m.name||'')); });
   if (!items.length) { el.innerHTML = ''; return; }
   el.innerHTML = '<div class="mk-title">🌐 MACRO</div><div class="mk-macro">' + items.map(function(m){
     var vixCol = m.symbol === '^VIX' ? (m.price >= 30 ? 'var(--red)' : m.price >= 20 ? 'var(--yellow)' : 'var(--green)') : 'var(--text)';
@@ -4557,10 +4560,10 @@ function renderBreadth() {
   var el = document.getElementById('mkBreadth'); if (!el) return;
   var all = (allData || []).filter(function(d){ return d && d.price != null && d.chgPct != null && d.sector !== 'ETF'; });
   if (!all.length) { el.innerHTML = '<div class="mk-title">📊 AMPLITUD (tu lista)</div><div class="mk-empty">Cargá tickers en el scanner para ver la amplitud.</div>'; return; }
-  var ar = all.filter(function(d){ return isArgentineTicker(d.symbol); }), us = all.filter(function(d){ return !isArgentineTicker(d.symbol); });
-  el.innerHTML = '<div class="mk-title">📊 AMPLITUD <span class="mk-src">calculada con los tickers de tu lista (sin ETFs)</span></div>' +
+  var us = all.filter(function(d){ return !isArgentineTicker(d.symbol); }); all = us;
+  el.innerHTML = '<div class="mk-title">📊 AMPLITUD <span class="mk-src">calculada con los tickers de EEUU/exterior de tu lista (sin ETFs)</span></div>' +
     '<div class="tbl-wrap"><table class="dt mk-tbl"><thead><tr><th>Universo</th><th>Suben / bajan</th><th>% sobre EMA50</th><th>% sobre EMA200</th><th title="A menos de 2% de su máximo de 52 semanas">Cerca máx 52s</th><th title="A menos de 2% de su mínimo de 52 semanas">Cerca mín 52s</th><th>RSI prom</th><th>Squeeze ON</th></tr></thead><tbody>' +
-    breadthRow('Todos', all) + breadthRow('🌎 Global', us) + breadthRow('🇦🇷 Merval', ar) + '</tbody></table></div>';
+    breadthRow('Todos', all) + breadthRow('🌎 Global', us) + '</tbody></table></div>';
 }
 
 // ── Mapa de calor (treemap): tamaño = √capitalización, color = métrica elegida ──
@@ -4604,7 +4607,7 @@ function renderHeatmap() {
   var arr = (allData || []).filter(function(d){
     if (!d || d.price == null || d[mKey] == null || d.sector === 'ETF') return false;
     var ar = isArgentineTicker(d.symbol);
-    return uni === 'all' || (uni === 'ar' ? ar : !ar);
+    return !ar;
   });
   if (!arr.length) { wrap.innerHTML = '<div class="mk-empty">Sin datos para el mapa de calor.</div>'; return; }
   function capUsd(d) { if (!d.marketCap) return null; var ars = d.currency === 'ARS' || (!d.currency && isArgentineTicker(d.symbol)); return ars ? (cclRate ? d.marketCap / cclRate : null) : d.marketCap; }
@@ -4757,6 +4760,7 @@ function switchTab(id,el){
   if (id === 'all' && _dirty.all) renderAllTab();
   if (id === 'market') { _dirty.market = false; loadMarketTab(false); }
   if (id === 'rotation') loadRotation(false);
+  if (id === 'arg' && typeof argStart === 'function') argStart();
   if (id === 'cartera' && typeof pfInit === 'function') { pfInit(); pfRefreshLivePrices(); }
   if (id === 'ia' && typeof window.aiUpdateQuotaBadge === 'function') { window.aiUpdateQuotaBadge(); }
 }
@@ -8221,7 +8225,7 @@ function mepTick(force) {
       if (changed && window._pfInited) { try { pfRenderAll(); } catch (e) {} }
     }
     mepUi(d);
-    if ($('mkAR') && $('tab-market') && $('tab-market').classList.contains('active')) arRender();
+    if ($('mkAR') && $('tab-arg') && $('tab-arg').classList.contains('active')) arRender();
   }).catch(function () { mepUi(null, true); });
 }
 window.pfFetchMepAuto = function () { return mepTick(true); };   // reemplaza la versión vieja (que nunca se llamaba)
@@ -8595,6 +8599,7 @@ function arLoad() {
   });
 }
 
+DZ.arLoad = arLoad;
 /* ═══════════════ 6. MERCADO: CALENDARIO DE EARNINGS ════════════════ */
 var earn = {all: {}, loadedAt: 0, busy: false, mode: lsGet('dubz_earn_mode', 'w0'), n: 0};
 function isEtf(s) { return typeof SECTORS !== 'undefined' && SECTORS[s] === 'ETF'; }
@@ -8825,7 +8830,7 @@ document.addEventListener('DOMContentLoaded', function () {
 mepUi(null);
 setTimeout(function () { mepTick(true); }, 2500);
 setInterval(function () { mepTick(false); }, 60000);
-setInterval(function () { var p = $('tab-market'); if (p && p.classList.contains('active') && !document.hidden) arLoad(); }, 60000);
+/* el refresco de dólar/riesgo país ahora lo maneja la pestaña ARGENTINA */
 setInterval(function () { if (cartActive() && !document.hidden) { ensureNews(holdings().map(function (h) { return h.sym; }).sort(), false).then(newsRenderList); } }, 5 * 60000);
 setTimeout(alertsPoll, 20000);
 setInterval(alertsPoll, 5 * 60000);
@@ -8947,6 +8952,132 @@ setInterval(alertsPoll, 5 * 60000);
   };
   setInterval(function () { try { dzCheckPriceAlerts(); } catch (e) {} }, 10000);
 })();
+</script>
+<style>.arg-g{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px 14px}.arg-l{font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:4px}.arg-i{width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text-bright);font-family:var(--mono);font-size:13px;padding:7px 8px;border-radius:2px;outline:none;text-align:right}.arg-i:focus{border-color:var(--accent)}@media(max-width:900px){.arg-g{grid-template-columns:repeat(2,minmax(0,1fr))}}</style>
+<script>
+/* ═══ 🇦🇷 ARGENTINA: bonos hard dólar (curva, TIR, paridad, calculadora, calendario) + acciones ═══ */
+(function(){
+'use strict';
+var $=function(i){return document.getElementById(i)},DAY=864e5;
+var D=function(s){return Date.UTC(+s.slice(0,4),+s.slice(5,7)-1,+s.slice(8,10))};
+var iso=function(t){return new Date(t).toISOString().slice(0,10)};
+var fd=function(t){var s=iso(t);return s.slice(8)+'/'+s.slice(5,7)+'/'+s.slice(2,4)};
+var nf=function(v,d){return v==null||isNaN(v)?'--':Number(v).toLocaleString('es-AR',{minimumFractionDigits:d==null?2:d,maximumFractionDigits:d==null?2:d})};
+var sg=function(v,s,d){return v==null?'--':'<span style="color:'+(v>=0?'var(--green)':'var(--red)')+'">'+(v>=0?'+':'')+nf(v,d==null?2:d)+(s||'')+'</span>'};
+function semi(st,n){var o=[],y=+st.slice(0,4),m=+st.slice(5,7);for(var i=0;i<n;i++){o.push(Date.UTC(y,m-1,9));m+=6;if(m>12){m-=12;y++}}return o}
+function eq(st,n){return semi(st,n).map(function(d){return [d,100/n]})}
+var A30=[[D('2024-07-09'),4]].concat(semi('2025-01-09',12).map(function(d){return [d,8]}));
+// Condiciones: Decreto 676/2020 (Bonares/Globales). AO: bullet, cupón 6% mensual (verificar con prospecto)
+var R30=function(p){return p<D('2027-07-09')?0.75:1.75},R35=function(p){return p<D('2026-07-09')?4.125:4.75},R41=function(p){return p<D('2029-07-09')?3.5:4.875};
+var B=[
+{t:'AO27',n:'Bonar 2027 6%',f:'AO',ley:'Arg',m:'2027-10-29',ao:1,cp:'6% mensual'},
+{t:'AO28',n:'Bonar 2028 6%',f:'AO',ley:'Arg',m:'2028-10-31',ao:1,cp:'6% mensual'},
+{t:'AO29',n:'Bonar 2029 6%',f:'AO',ley:'Arg',m:'2029-10-31',ao:1,cp:'6% mensual'},
+{t:'AL29',n:'Bonar 2029 1%',f:'B',ley:'Arg',m:'2029-07-09',am:eq('2025-01-09',10),r:function(){return 1}},
+{t:'AL30',n:'Bonar 2030 step-up',f:'B',ley:'Arg',m:'2030-07-09',am:A30,r:R30},
+{t:'AL35',n:'Bonar 2035 step-up',f:'B',ley:'Arg',m:'2035-07-09',am:eq('2031-01-09',10),r:R35},
+{t:'AE38',n:'Bonar 2038 step-up',f:'B',ley:'Arg',m:'2038-01-09',am:eq('2027-07-09',22),r:function(){return 5}},
+{t:'AL41',n:'Bonar 2041 step-up',f:'B',ley:'Arg',m:'2041-07-09',am:eq('2028-01-09',28),r:R41},
+{t:'GD29',n:'Global 2029 1%',f:'G',ley:'NY',m:'2029-07-09',am:eq('2025-01-09',10),r:function(){return 1}},
+{t:'GD30',n:'Global 2030 step-up',f:'G',ley:'NY',m:'2030-07-09',am:A30,r:R30},
+{t:'GD35',n:'Global 2035 step-up',f:'G',ley:'NY',m:'2035-07-09',am:eq('2031-01-09',10),r:R35},
+{t:'GD38',n:'Global 2038 step-up',f:'G',ley:'NY',m:'2038-01-09',am:eq('2027-07-09',22),r:function(){return 5}},
+{t:'GD41',n:'Global 2041 step-up',f:'G',ley:'NY',m:'2041-07-09',am:eq('2028-01-09',28),r:R41},
+{t:'GD46',n:'Global 2046 step-up',f:'G',ley:'NY',m:'2046-07-09',am:eq('2025-01-09',44),r:function(){return 4.125}}];
+var BY={};B.forEach(function(b){BY[b.t]=b;b.mm=D(b.m)});
+function flows(b){
+ if(b.fl)return b.fl;var o=[],i;
+ if(b.ao){var y=2025,m=9;for(;;){var d=Date.UTC(y,m+1,0);if(d>b.mm)d=b.mm;o.push({d:d,i:0.5,a:0,res:100});if(d>=b.mm)break;m++;if(m>11){m=0;y++}}
+  o.forEach(function(f,k){f.prev=k?o[k-1].d:D('2025-09-30');if(k==o.length-1)f.a=100})}
+ else{var ds=semi('2025-01-09',60).filter(function(d){return d<=b.mm});
+  ds.forEach(function(d,k){var prev=k?ds[k-1]:D('2024-07-09'),done=0,a=0;b.am.forEach(function(x){if(x[0]<d)done+=x[1];if(x[0]==d)a=x[1]});
+   var res=100-done;o.push({d:d,prev:prev,res:res,i:res*b.r(prev)/200,a:a})})}
+ return b.fl=o}
+function calc(b,px,st){
+ var fl=flows(b).filter(function(f){return f.d>st});if(!fl.length)return null;
+ var n=fl[0],ac=n.i*(st-n.prev)/(n.d-n.prev),vt=n.res+ac,dirty=px+ac;
+ function pv(r){var s=0;fl.forEach(function(f){s+=(f.i+f.a)/Math.pow(1+r,(f.d-st)/DAY/365)});return s}
+ var lo=-0.9,hi=5,r;for(var k=0;k<90;k++){r=(lo+hi)/2;if(pv(r)>dirty)lo=r;else hi=r}
+ var sw=0,s=0;fl.forEach(function(f){var t=(f.d-st)/DAY/365,v=(f.i+f.a)/Math.pow(1+r,t);sw+=t*v;s+=v});
+ var dur=sw/s;return{tir:r*100,par:px/vt*100,ac:ac,vt:vt,vr:n.res,dur:dur,md:dur/(1+r),yrs:(b.mm-st)/DAY/365,next:n,fl:fl,dirty:dirty}}
+var P={},MEP=null,ST=[],lastOk=0,busy=0;
+function fj(u){return fetch(u,{cache:'no-store',signal:AbortSignal.timeout(8000)}).then(function(r){if(!r.ok)throw 0;return r.json()})}
+function get(p){var u='https://data912.com'+p;return fj(u).catch(function(){return fj('https://corsproxy.io/?url='+encodeURIComponent(u))})}
+function px(t){var q=P[t+'D'],o=q&&(q.c||(q.px_bid&&q.px_ask?(q.px_bid+q.px_ask)/2:0));if(o>0)return{p:o,ch:q.pct_change,bid:q.px_bid,ask:q.px_ask};
+ q=P[t];var m=MEP||window.pfMepRate;if(q&&q.c>0&&m)return{p:q.c/m,ch:q.pct_change,est:1};return null}
+function tick(){
+ if(busy)return;busy=1;
+ Promise.all([get('/live/arg_bonds'),get('/live/arg_stocks').catch(function(){return null})]).then(function(r){
+  P={};(r[0]||[]).forEach(function(x){P[x.symbol]=x});ST=r[1]||ST;lastOk=Date.now();
+  var dz=window.DZ&&DZ.dolar;MEP=(dz&&dz.mep)||window.pfMepRate||MEP;
+  paint()}).catch(function(){var s=$('argSt');if(s)s.innerHTML='<span style="color:var(--red)">⚠ sin datos de mercado (reintentando)</span>'}).then(function(){busy=0})}
+var cx='dur';
+function rows(){var st=Date.now(),o=[];B.forEach(function(b){var q=px(b.t);if(!q)return;var c=calc(b,q.p,D(iso(st)));if(c)o.push({b:b,q:q,c:c})});return o}
+function paint(){
+ var s=$('argSt');if(s)s.innerHTML='<span style="color:var(--green)">●</span> en vivo · '+new Date(lastOk).toLocaleTimeString('es-AR')+' · refresco 5 s'+(MEP?' · MEP $'+nf(MEP,0):'');
+ var R=rows();chart(R);table(R);stocks();
+ var sel=$('cbT');if(sel&&!$('cbP').value&&px(sel.value))$('cbP').value=px(sel.value).p.toFixed(2)}
+function chart(R){
+ var el=$('argCh');if(!el)return;if(!R.length){el.innerHTML='<div class="mk-empty">Cargando precios…</div>';return}
+ var W=760,H=320,L=48,Bt=34,T=14,Rr=16,X=function(r){return cx=='dur'?r.c.md:r.c.yrs},xs=R.map(X),ys=R.map(function(r){return r.c.tir});
+ var x0=0,x1=Math.ceil(Math.max.apply(0,xs)+.5),y0=Math.floor(Math.min.apply(0,ys)-1),y1=Math.ceil(Math.max.apply(0,ys)+1);
+ var sx=function(v){return L+(v-x0)/(x1-x0)*(W-L-Rr)},sy=function(v){return T+(1-(v-y0)/(y1-y0))*(H-T-Bt)},g='',i;
+ for(i=y0;i<=y1;i+=Math.max(1,Math.round((y1-y0)/6))){g+='<line x1="'+L+'" x2="'+(W-Rr)+'" y1="'+sy(i)+'" y2="'+sy(i)+'" stroke="#26303d"/><text x="6" y="'+(sy(i)+4)+'" fill="#6b7a8d" font-size="10">'+i+'%</text>'}
+ for(i=x0;i<=x1;i+=x1>12?4:2)g+='<text x="'+sx(i)+'" y="'+(H-14)+'" fill="#6b7a8d" font-size="10" text-anchor="middle">'+i+'</text>';
+ g+='<text x="'+(W/2)+'" y="'+(H-2)+'" fill="#6b7a8d" font-size="10" text-anchor="middle">'+(cx=='dur'?'Duration modificada (años)':'Años al vencimiento')+'</text>';
+ var fam={AO:['#00e676','Bonares AO (Tesoro)'],B:['#00d4ff','Bonares AL/AE'],G:['#ff9100','Globales GD']};
+ ['B','G'].forEach(function(f){var a=R.filter(function(r){return r.b.f==f||(f=='B'&&r.b.f=='AO')}).sort(function(p,q){return X(p)-X(q)});
+  g+='<polyline fill="none" stroke="'+fam[f][0]+'" stroke-width="1.8" points="'+a.map(function(r){return sx(X(r)).toFixed(1)+','+sy(r.c.tir).toFixed(1)}).join(' ')+'"/>'});
+ R.forEach(function(r){var c=fam[r.b.f][0],x=sx(X(r)),y=sy(r.c.tir),ao=r.b.f=='AO';
+  g+='<g><title>'+r.b.t+' · TIR '+nf(r.c.tir)+'% · paridad '+nf(r.c.par,1)+'% · MD '+nf(r.c.md)+'</title><circle cx="'+x+'" cy="'+y+'" r="'+(ao?6:4.5)+'" fill="'+c+'" stroke="#0d1318" stroke-width="1.5"/><text x="'+x+'" y="'+(y-9)+'" fill="'+(ao?'#00e676':'#e8eef5')+'" font-size="'+(ao?11:10)+'" font-weight="'+(ao?700:400)+'" text-anchor="middle">'+r.b.t+'</text></g>'});
+ el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;font-family:var(--mono)">'+g+'</svg>'}
+function table(R){
+ var el=$('argTb');if(!el)return;R=R.slice().sort(function(a,b){return a.b.mm-b.b.mm});
+ el.innerHTML=R.map(function(r){var b=r.b,c=r.c,q=r.q;
+  return '<tr style="cursor:pointer" onclick="argPick(\''+b.t+'\')"><td><b>'+b.t+'</b> <span class="mk-dim">'+b.ley+'</span></td><td>'+fd(b.mm)+'</td><td>'+nf(q.p)+(q.est?'*':'')+'</td><td>'+sg(q.ch,'%')+'</td><td><b>'+nf(c.tir)+'%</b></td><td>'+nf(c.par,1)+'%</td><td>'+nf(c.md)+'</td><td>'+nf(c.vr,1)+'</td><td>'+nf(c.ac,3)+'</td><td>'+fd(c.next.d)+' <span class="mk-dim">'+nf(c.next.i+c.next.a,2)+'</span></td></tr>'}).join('')}
+window.argPick=function(t){$('cbT').value=t;$('cbP').value=px(t)?px(t).p.toFixed(2):'';$('argCalc').scrollIntoView({behavior:'smooth'});cbRun()};
+function cbRun(){
+ var b=BY[$('cbT').value],st=D($('cbF').value||iso(Date.now())),p=parseFloat($('cbP').value),q=parseFloat($('cbQ').value),m=$('cbM').value=='ars',tc=parseFloat($('cbX').value)||MEP||1,o=$('cbR');
+ if(!(p>0)||!(q>0)){o.innerHTML='<div class="mk-empty">Completá precio y '+($('cbK').value=='q'?'cantidad':'monto')+'.</div>';return}
+ var c=calc(b,p,st);if(!c){o.innerHTML='<div class="mk-empty">El bono ya venció a esa fecha.</div>';return}
+ var unit=c.dirty/100*(m?tc:1),vn=$('cbK').value=='q'?q:q/unit,inv=vn*unit,k=vn/100;
+ var cell=function(n,v){return '<div class="mk-mc"><div class="mk-mc-n">'+n+'</div><div class="mk-mc-v" style="font-size:15px">'+v+'</div></div>'};
+ var tot=0,rs=c.fl.map(function(f){var v=(f.i+f.a)*k;tot+=v;return '<tr><td>'+fd(f.d)+'</td><td>'+nf(f.i*k)+'</td><td>'+nf(f.a*k)+'</td><td>'+nf(v)+'</td>'+(m?'<td>'+nf(v*tc,0)+'</td>':'')+'</tr>'}).join('');
+ o.innerHTML='<div class="mk-macro">'+cell('NOMINALES',nf(vn,0))+cell('INVERSIÓN',(m?'$ ':'US$ ')+nf(inv,m?0:2))+cell('TIR',nf(c.tir)+'%')+cell('PARIDAD',nf(c.par,1)+'%')+cell('DURATION MOD.',nf(c.md))+cell('VALOR TÉCNICO',nf(c.vt,3))+cell('INT. CORRIDOS',nf(c.ac,3))+cell('COBRO TOTAL',"US$ "+nf(tot))+'</div>'+
+ '<div class="tbl-wrap" style="margin-top:10px;max-height:300px;overflow:auto"><table class="dt mk-tbl"><thead><tr><th>Fecha</th><th>Renta US$</th><th>Amort. US$</th><th>Total US$</th>'+(m?'<th>Total $</th>':'')+'</tr></thead><tbody>'+rs+'</tbody></table></div>'+
+ '<div class="mk-note">Precio limpio por 100 VN (en dólares MEP) + intereses corridos. TIR efectiva anual (base 365) sin comisiones ni impuestos. Los flujos se calcularon con las condiciones de emisión: verificalos contra el prospecto antes de operar.</div>'}
+function cal(){
+ var el=$('calB');if(!el)return;var f=$('calF').value,h=+$('calH').value,now=D(iso(Date.now())),o=[];
+ B.forEach(function(b){if(f&&b.t!=f)return;flows(b).forEach(function(x){if(x.d>now&&x.d<=now+h*30*DAY)o.push({b:b,x:x})})});
+ o.sort(function(a,b){return a.x.d-b.x.d||(a.b.t<b.b.t?-1:1)});
+ el.innerHTML=o.map(function(r){return '<tr><td>'+fd(r.x.d)+'</td><td><b>'+r.b.t+'</b></td><td>'+nf(r.x.i)+'</td><td>'+(r.x.a?nf(r.x.a):'--')+'</td><td><b>'+nf(r.x.i+r.x.a)+'</b></td></tr>'}).join('')||'<tr><td colspan="5" class="mk-dim">Sin pagos en el período</td></tr>'}
+function stocks(){
+ var el=$('stB');if(!el||!ST.length)return;var o=$('stO').value,a=ST.filter(function(x){return x.c>0}).slice();
+ a.sort(o=='v'?function(x,y){return y.v*y.c-x.v*x.c}:o=='up'?function(x,y){return y.pct_change-x.pct_change}:function(x,y){return x.pct_change-y.pct_change});
+ el.innerHTML=a.slice(0,25).map(function(x){return '<tr><td><b>'+x.symbol+'</b></td><td>$ '+nf(x.c)+'</td><td>'+sg(x.pct_change,'%')+'</td><td>'+nf(x.v,0)+'</td></tr>'}).join('')}
+function build(){
+ var p=$('tab-arg');if(!p||p.dataset.b)return;p.dataset.b=1;
+ var opts=B.map(function(b){return '<option value="'+b.t+'">'+b.t+' · '+b.n+'</option>'}).join('');
+ var L=function(l,h){return '<div><div class="arg-l">'+l+'</div>'+h+'</div>'};
+ p.innerHTML='<div class="mk-toolbar"><button class="btn btn-a btn-sm" onclick="argTick()">↺ ACTUALIZAR</button><span id="argSt">Cargando…</span></div>'+
+ '<div class="mk-card" id="mkAR"></div>'+
+ '<div class="mk-card"><div class="mk-title">📈 CURVA HARD DÓLAR <span class="mk-src">Bonares AL/AE/AO vs Globales GD · TIR efectiva anual</span><select class="sel" id="cxS" style="width:auto;margin-left:auto" onchange="argCx(this.value)"><option value="dur">Eje: duration modificada</option><option value="yrs">Eje: años al vencimiento</option></select></div><div id="argCh"></div></div>'+
+ '<div class="mk-card"><div class="mk-title">🏦 BONOS ARGENTINOS <span class="mk-src">precio en US$ (MEP) · clic en una fila = abrir en la calculadora · * precio estimado desde la línea en pesos</span></div><div class="tbl-wrap"><table class="dt mk-tbl"><thead><tr><th>Bono</th><th>Vto.</th><th>Precio</th><th>% día</th><th>TIR</th><th title="Precio / valor técnico">Paridad</th><th title="Duration modificada, años">Dur. mod.</th><th title="Capital residual por 100 VN">Residual</th><th>Int. corridos</th><th title="Próximo pago por 100 VN original">Próx. pago</th></tr></thead><tbody id="argTb"></tbody></table></div></div>'+
+ '<div class="mk-card" id="argCalc"><div class="mk-title">🧮 CALCULADORA DE RENTA FIJA</div><div class="arg-g">'+
+ L('Título','<select class="sel" id="cbT" style="grid-column:span 2" onchange="argPick(this.value)">'+opts+'</select>')+L('Fecha de liquidación','<input class="arg-i" type="date" id="cbF" value="'+iso(Date.now())+'">')+
+ L('Tipo de cálculo','<select class="sel" id="cbK" onchange="$(\'cbQl\').textContent=this.value==\'q\'?\'Cantidad de títulos\':\'Monto a invertir\'"><option value="q">Cantidad de títulos</option><option value="m">Monto a invertir</option></select>')+
+ L('<span id="cbQl">Cantidad de títulos</span>','<input class="arg-i" type="number" id="cbQ" placeholder="0" value="1000">')+L('Precio (por 100 nominales, US$)','<input class="arg-i" type="number" step="0.01" id="cbP" placeholder="0">')+
+ L('Moneda','<select class="sel" id="cbM"><option value="usd">Dólares</option><option value="ars">Pesos</option></select>')+L('Tipo de cambio (MEP)','<input class="arg-i" type="number" id="cbX" placeholder="auto">')+
+ '<button class="btn btn-a" style="align-self:end" onclick="argCb()">Calcular</button></div><div id="cbR" style="margin-top:12px"></div></div>'+
+ '<div class="mk-card"><div class="mk-title">📅 CALENDARIO DE PAGOS <span class="mk-src">por 100 VN original (renta + amortización)</span><select class="sel" id="calF" style="width:auto;margin-left:auto" onchange="argCal()"><option value="">Todos los bonos</option>'+opts+'</select><select class="sel" id="calH" style="width:auto" onchange="argCal()"><option value="3">3 meses</option><option value="6">6 meses</option><option value="12" selected>12 meses</option><option value="36">3 años</option></select></div><div class="tbl-wrap" style="max-height:340px;overflow:auto"><table class="dt mk-tbl"><thead><tr><th>Fecha</th><th>Bono</th><th>Renta</th><th>Amort.</th><th>Total</th></tr></thead><tbody id="calB"></tbody></table></div></div>'+
+ '<div class="mk-card"><div class="mk-title">🇦🇷 ACCIONES ARGENTINAS <span class="mk-src">BYMA · en pesos</span><select class="sel" id="stO" style="width:auto;margin-left:auto" onchange="argSt()"><option value="v">Mayor monto operado</option><option value="up">Mayores subas</option><option value="dn">Mayores caídas</option></select></div><div class="tbl-wrap"><table class="dt mk-tbl"><thead><tr><th>Ticker</th><th>Precio</th><th>% día</th><th>Volumen</th></tr></thead><tbody id="stB"></tbody></table></div></div>';
+ window.$=window.$||$;cal()}
+window.argCx=function(v){cx=v;paint()};window.argCb=cbRun;window.argCal=cal;window.argSt=stocks;window.argTick=function(){tick();if(window.DZ&&DZ.arLoad)DZ.arLoad()};
+window.argStart=function(){build();argTick()};
+setInterval(function(){var p=$('tab-arg');if(p&&p.classList.contains('active')&&!document.hidden)tick()},5000);
+setInterval(function(){var p=$('tab-arg');if(p&&p.classList.contains('active')&&!document.hidden&&window.DZ&&DZ.arLoad)DZ.arLoad()},60000);
+})();
+
 </script>
 </body>
 </html>
