@@ -45,12 +45,13 @@ except Exception:
 # trimestre, así que se cachean horas; el historial técnico, minutos.
 # "Single-flight": si 5 requests piden el mismo ticker a la vez, solo uno va a
 # Yahoo y los otros esperan ese resultado (antes cada uno hacía su propio pedido).
-TECH_TTL     = int(os.environ.get('TECH_TTL', '120'))        # seg — historial + indicadores
+TECH_TTL     = int(os.environ.get('TECH_TTL', '300'))        # seg — historial + indicadores
 FUND_TTL     = int(os.environ.get('FUND_TTL', str(6*3600)))  # seg — fundamentals (EPS, ROE, institucional)
 MARKET_TTL   = int(os.environ.get('MARKET_TTL', '300'))      # seg — SPY/QQQ/VIX/Merval/macro
 FG_TTL       = int(os.environ.get('FG_TTL', '600'))          # seg — Fear & Greed
 RRG_TTL      = int(os.environ.get('RRG_TTL', '900'))         # seg — rotación sectorial
-PRECIO_TTL   = int(os.environ.get('PRECIO_TTL', '15'))       # seg — /precio (auto-refresh)
+PRECIO_TTL   = int(os.environ.get('PRECIO_TTL', '45'))       # seg — /precio con mercado abierto (auto-refresh)
+PRECIO_CLOSED_TTL = int(os.environ.get('PRECIO_CLOSED_TTL', '900'))  # seg — /precio con mercado cerrado (no cambia nada)
 
 _CACHE = {}
 _CACHE_LOCK = threading.Lock()
@@ -1301,6 +1302,25 @@ def _market_in_session(mk, now_utc=None):
     return (mk[1] * 60 + mk[2]) <= mins <= (mk[3] * 60 + 30)
 
 
+def _precio_cached(sym):
+    """Precio cacheado. Con el mercado cerrado se reutiliza hasta 15 min (no cambia nada);
+    si se guardó con el mercado cerrado y ya abrió, se renueva en el acto."""
+    mk = _sym_market(sym)
+    en_rueda = bool(mk and _market_in_session(mk))
+    ttl = PRECIO_TTL if (en_rueda or mk is None) else PRECIO_CLOSED_TTL
+    c = cache_get('precio:' + sym, ttl)
+    if c is not None and en_rueda and not c.get('_en_rueda'):
+        return None
+    return c
+
+
+def _precio_store(sym, r):
+    mk = _sym_market(sym)
+    r['_en_rueda'] = bool(mk and _market_in_session(mk))
+    cache_set('precio:' + sym, r)
+    return r
+
+
 def _last_row_date(df):
     try:
         return pd.Timestamp(df.index[-1]).date()
@@ -2365,7 +2385,7 @@ import io
 import bisect
 
 UNIVERSE_ENABLED = os.environ.get('UNIVERSE_ENABLED', '1') != '0'
-UNI_TTL          = int(os.environ.get('UNIVERSE_TTL', str(12 * 3600)))
+UNI_TTL          = int(os.environ.get('UNIVERSE_TTL', str(24 * 3600)))
 UNI_URL          = os.environ.get('UNIVERSE_URL', 'https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv')
 UNI_EXTRA_FILE   = os.environ.get('UNIVERSE_EXTRA_FILE', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'universe_extra.txt'))
 STATS_TTL        = 3600
@@ -3243,64 +3263,6 @@ def rrg_route():
     return jsonify(d)
 
 
-@app.route('/squeeze1h', methods=['GET'])
-def get_squeeze_1h():
-    """Endpoint liviano: SOLO el TTM Squeeze Momentum calculado en velas de 1 hora.
-    A diferencia de /quote, acá NO se descarga 1 año de historial diario ni
-    ticker.info/financials (que es lo que hace lento a /quote) — solo se
-    piden ~10 días de velas horarias, lo mínimo para el cálculo (length=20).
-    Pensado para llamarse en paralelo y ANTES que /quote, así la columna
-    de squeeze aparece primero y el resto de los datos se completa después.
-    """
-    symbol = request.args.get('symbol', '').upper().strip()
-    if not symbol:
-        return jsonify({'error': 'No symbol provided'}), 400
-    try:
-        def _calc1h():
-            h = yf.Ticker(symbol).history(period='10d', interval='60m', auto_adjust=True)
-            if h.empty or len(h) < 25:
-                return None
-            return calc_squeeze_momentum(h) or None
-        sqz = cached_call('sqz1h:' + symbol, 300, _calc1h)
-        if not sqz:
-            return jsonify({'error': 'No data'}), 404
-        return jsonify({'symbol': symbol, 'sqzOn': sqz.get('sqzOn'), 'sqzOff': sqz.get('sqzOff'),
-                        'sqzMom': sqz.get('sqzMom'), 'sqzMomPrev': sqz.get('sqzMomPrev')})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/squeeze1hbatch', methods=['POST'])
-def get_squeeze_1h_batch():
-    """Squeeze en velas de 1h para MUCHOS tickers con una sola descarga a Yahoo
-    (antes: un request y un pedido a Yahoo por ticker)."""
-    data = request.get_json(silent=True) or {}
-    symbols = []
-    for s in (data.get('symbols') or []):
-        s = str(s or '').upper().strip()
-        if s and re.match(r'^[A-Z0-9.^=\-]{1,14}$', s) and s not in symbols:
-            symbols.append(s)
-    symbols = symbols[:80]
-    out, missing = {}, []
-    for s in symbols:
-        c = cache_get('sqz1h:' + s, 300)
-        if c:
-            out[s] = dict(c, symbol=s)
-        else:
-            missing.append(s)
-    if missing:
-        for s, h in _download_many(missing, period='10d', interval='60m').items():
-            try:
-                if len(h) >= 25:
-                    r = calc_squeeze_momentum(h)
-                    if r:
-                        cache_set('sqz1h:' + s, r)
-                        out[s] = dict(r, symbol=s)
-            except Exception:
-                pass
-    return jsonify({'results': out})
-
-
 @app.route('/squeezeD', methods=['GET'])
 def get_squeeze_daily():
     """Endpoint liviano: SOLO el TTM Squeeze Momentum calculado en velas
@@ -3370,7 +3332,7 @@ def get_precio_batch():
     symbols = symbols[:80]
     out, missing = {}, []
     for s in symbols:
-        c = cache_get('precio:' + s, PRECIO_TTL)
+        c = _precio_cached(s)
         if c:
             out[s] = c
         else:
@@ -3385,8 +3347,7 @@ def get_precio_batch():
                 r = {'symbol': s, 'price': round(cl[-1], 4), 'prevClose': round(cl[-2], 4),
                      'chgPct': round((cl[-1] - cl[-2]) / cl[-2] * 100, 2) if cl[-2] else 0,
                      'volume': int(vol[-1]) if vol else 0}
-                cache_set('precio:' + s, r)
-                out[s] = r
+                out[s] = _precio_store(s, r)
             except Exception:
                 pass
     return jsonify({'results': out})
@@ -3427,7 +3388,7 @@ def get_precio():
     if not symbol:
         return jsonify({'error': 'No symbol'}), 400
     try:
-        cp = cache_get('precio:' + symbol, PRECIO_TTL)
+        cp = _precio_cached(symbol)
         if cp:
             return jsonify(cp)
         ticker = yf.Ticker(symbol)
@@ -3449,7 +3410,7 @@ def get_precio():
             'chgPct':    chg_pct,
             'volume':    volume,
         }
-        cache_set('precio:' + symbol, out)
+        _precio_store(symbol, out)
         return jsonify(out)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
