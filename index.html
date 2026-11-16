@@ -1061,6 +1061,19 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 .pf-input::placeholder{color:var(--text-dim)}
 .pf-input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.5)}
 
+/* Liquidez — movimientos */
+.pf-liq-bal{display:flex;gap:14px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;color:var(--text-dim);margin-bottom:14px;padding:8px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:2px}
+.pf-liq-bal b{color:var(--text-bright)}
+.pf-liq-list{margin-top:14px;max-height:190px;overflow-y:auto;border-top:1px solid var(--border)}
+.pf-liq-row{display:grid;grid-template-columns:62px 1fr auto 24px;gap:8px;align-items:center;padding:6px 2px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text-dim)}
+.pf-liq-row .amt{font-weight:700;white-space:nowrap}
+.pf-liq-row .amt.in{color:var(--green)}
+.pf-liq-row .amt.out{color:var(--red)}
+.pf-liq-row .nota{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pf-liq-empty{padding:10px 2px;font-family:var(--mono);font-size:11px;color:var(--text-dim)}
+.pf-cur-sel-btn.in.active{background:rgba(0,230,118,0.12);color:var(--green);border-color:var(--green2)}
+.pf-cur-sel-btn.out.active{background:rgba(255,61,90,0.12);color:var(--red);border-color:var(--red2)}
+
 /* ── RENDI AI ── */
 .ai-wrap{max-width:720px;margin:0 auto;display:flex;flex-direction:column;height:calc(100vh - 220px);min-height:420px}
 .ai-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px}
@@ -1641,6 +1654,7 @@ a.dz-news:hover{background:var(--bg3)}
           <button class="btn btn-a btn-sm" onclick="pfOpenAddModal()">＋ Nueva operación</button>
           <button class="btn btn-g btn-sm" onclick="pfOpenImportModal()">⇪ Importar CSV del broker</button>
           <button class="btn btn-y btn-sm" id="pfRefreshBtn" onclick="pfRefreshAllPrices()">⟳ Refrescar</button>
+          <button class="btn btn-a btn-sm" id="pfLiqBtn" onclick="pfOpenLiqModal()" title="Agregar o retirar liquidez en pesos o dólares">💧 Liquidez</button>
         </div>
         <div class="pf-toolbar-right">
           <input class="pf-search-input" id="pfSearch" placeholder="Buscar ticker..." oninput="pfApplyFilters()">
@@ -1870,6 +1884,44 @@ a.dz-news:hover{background:var(--bg3)}
     <div class="pf-modal-footer">
       <button class="btn btn-r btn-sm" onclick="pfCloseModalForce()">Cancelar</button>
       <button class="btn btn-a btn-sm" onclick="pfSavePosition()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL LIQUIDEZ ═══ -->
+<div class="pf-modal-overlay" id="pfLiqOverlay" onclick="pfCloseLiqModal(event)">
+  <div class="pf-modal">
+    <div class="pf-modal-header">
+      <div class="pf-modal-title">💧 LIQUIDEZ</div>
+      <button class="pf-action-btn" onclick="pfCloseLiqModalForce()">✕</button>
+    </div>
+    <div class="pf-modal-body">
+      <div class="pf-liq-bal" id="pfLiqBal"></div>
+      <div class="pf-field" style="margin-bottom:12px">
+        <label>Operación</label>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="pf-cur-sel-btn in active" id="pfLqBtnIn" onclick="pfLiqSetTipo('in')">＋ Ingresar</button>
+          <button type="button" class="pf-cur-sel-btn out" id="pfLqBtnOut" onclick="pfLiqSetTipo('out')">− Retirar</button>
+        </div>
+      </div>
+      <div class="pf-field" style="margin-bottom:12px">
+        <label>Moneda</label>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="pf-cur-sel-btn active" id="pfLqBtnARS" onclick="pfLiqSetCur('ARS')">ARS (pesos)</button>
+          <button type="button" class="pf-cur-sel-btn" id="pfLqBtnUSD" onclick="pfLiqSetCur('USD')">USD (dólares)</button>
+        </div>
+      </div>
+      <div class="pf-form-grid">
+        <div class="pf-field"><label>Monto</label><input class="pf-input" id="pfLqMonto" type="number" step="any" min="0" placeholder="0" onkeydown="if(event.key==='Enter')pfLiqSave()"></div>
+        <div class="pf-field"><label>Fecha</label><input class="pf-input" id="pfLqFecha" type="date"></div>
+      </div>
+      <div class="pf-field" style="margin-top:12px"><label>Nota (opcional)</label><input class="pf-input" id="pfLqNota" maxlength="60" placeholder="Ej: depósito, aguinaldo, retiro"></div>
+      <div id="pfLqError" style="display:none;color:var(--red);font-family:var(--mono);font-size:12px;margin-top:10px"></div>
+      <div class="pf-liq-list" id="pfLiqList"></div>
+    </div>
+    <div class="pf-modal-footer">
+      <button class="btn btn-r btn-sm" onclick="pfCloseLiqModalForce()">Cerrar</button>
+      <button class="btn btn-a btn-sm" onclick="pfLiqSave()">Guardar</button>
     </div>
   </div>
 </div>
@@ -6058,6 +6110,137 @@ function pfUpdateLiquidez() {
   pfRenderSummary();
 }
 
+// ── LIQUIDEZ: AGREGAR / RETIRAR (ARS o USD) ──────────────
+// Cada movimiento se guarda en la cuenta activa (a.liqMovs) y ajusta
+// a.liqARS / a.liqUSD, así que no hay que recargar nada desde cero.
+var pfLqCur  = 'ARS';
+var pfLqTipo = 'in';
+
+function pfLiqToday() {
+  var d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function pfLiqSetTipo(t) {
+  pfLqTipo = (t === 'out') ? 'out' : 'in';
+  var i = document.getElementById('pfLqBtnIn'), o = document.getElementById('pfLqBtnOut');
+  if (i) i.classList.toggle('active', pfLqTipo === 'in');
+  if (o) o.classList.toggle('active', pfLqTipo === 'out');
+}
+
+function pfLiqSetCur(c) {
+  pfLqCur = (c === 'USD') ? 'USD' : 'ARS';
+  var a = document.getElementById('pfLqBtnARS'), u = document.getElementById('pfLqBtnUSD');
+  if (a) a.classList.toggle('active', pfLqCur === 'ARS');
+  if (u) u.classList.toggle('active', pfLqCur === 'USD');
+}
+
+function pfLiqError(msg) {
+  var e = document.getElementById('pfLqError');
+  if (!e) return;
+  e.textContent = msg || '';
+  e.style.display = msg ? 'block' : 'none';
+}
+
+function pfOpenLiqModal() {
+  if (!pfActiveAcct()) { alert('Primero creá o seleccioná una cuenta.'); return; }
+  pfLiqSetTipo('in');
+  pfLiqSetCur(pfViewCurrency === 'USD' ? 'USD' : 'ARS');
+  var m = document.getElementById('pfLqMonto'), n = document.getElementById('pfLqNota'), f = document.getElementById('pfLqFecha');
+  if (m) m.value = '';
+  if (n) n.value = '';
+  if (f) f.value = pfLiqToday();
+  pfLiqError('');
+  pfLiqRenderModal();
+  document.getElementById('pfLiqOverlay').classList.add('open');
+  if (m) setTimeout(function(){ m.focus(); }, 50);
+}
+
+function pfCloseLiqModal(e) { if (e && e.target === document.getElementById('pfLiqOverlay')) pfCloseLiqModalForce(); }
+function pfCloseLiqModalForce() { document.getElementById('pfLiqOverlay').classList.remove('open'); }
+
+function pfLiqRenderModal() {
+  var bal = document.getElementById('pfLiqBal');
+  if (bal) bal.innerHTML = 'Saldo actual: <b>$ ' + pfFmt(pfLiqARS, 2) + '</b> &nbsp;·&nbsp; <b>U$D ' + pfFmt(pfLiqUSD_val, 2) + '</b>';
+
+  var list = document.getElementById('pfLiqList');
+  if (!list) return;
+  list.innerHTML = '';
+  var a = pfActiveAcct();
+  var movs = (a && Array.isArray(a.liqMovs)) ? a.liqMovs.slice().reverse().slice(0, 40) : [];
+  if (!movs.length) {
+    var empty = document.createElement('div');
+    empty.className = 'pf-liq-empty';
+    empty.textContent = 'Sin movimientos de liquidez registrados.';
+    list.appendChild(empty);
+    return;
+  }
+  movs.forEach(function(mv) {
+    var row = document.createElement('div');
+    row.className = 'pf-liq-row';
+    var f = mv.fecha ? (mv.fecha.slice(8,10) + '/' + mv.fecha.slice(5,7) + '/' + mv.fecha.slice(2,4)) : '';
+    var d1 = document.createElement('span'); d1.textContent = f;
+    var d2 = document.createElement('span'); d2.className = 'nota'; d2.textContent = mv.nota || '';
+    var d3 = document.createElement('span');
+    d3.className = 'amt ' + (mv.tipo === 'out' ? 'out' : 'in');
+    d3.textContent = (mv.tipo === 'out' ? '− ' : '+ ') + (mv.moneda === 'USD' ? 'U$D ' : '$ ') + pfFmt(mv.monto, 2);
+    var d4 = document.createElement('button');
+    d4.className = 'pf-action-btn del'; d4.textContent = '✕'; d4.title = 'Eliminar este movimiento';
+    d4.onclick = function(){ pfLiqDelete(mv.id); };
+    row.appendChild(d1); row.appendChild(d2); row.appendChild(d3); row.appendChild(d4);
+    list.appendChild(row);
+  });
+}
+
+function pfLiqApply(moneda, delta) {
+  if (moneda === 'USD') pfLiqUSD_val = Math.round((pfLiqUSD_val + delta) * 100) / 100;
+  else                  pfLiqARS     = Math.round((pfLiqARS + delta) * 100) / 100;
+}
+
+function pfLiqSave() {
+  var a = pfActiveAcct();
+  if (!a) { pfLiqError('No hay cuenta activa.'); return; }
+  var monto = parseFloat(document.getElementById('pfLqMonto').value);
+  if (!(monto > 0)) { pfLiqError('Ingresá un monto mayor a 0.'); return; }
+  var saldo = pfLqCur === 'USD' ? pfLiqUSD_val : pfLiqARS;
+  if (pfLqTipo === 'out' && monto > saldo + 0.005) {
+    pfLiqError('No podés retirar más de lo que tenés: saldo ' + (pfLqCur === 'USD' ? 'U$D ' : '$ ') + pfFmt(saldo, 2) + '.');
+    return;
+  }
+  var mov = {
+    id:     'lq_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
+    fecha:  document.getElementById('pfLqFecha').value || pfLiqToday(),
+    moneda: pfLqCur,
+    tipo:   pfLqTipo,
+    monto:  Math.round(monto * 100) / 100,
+    nota:   (document.getElementById('pfLqNota').value || '').trim().slice(0, 60)
+  };
+  if (!Array.isArray(a.liqMovs)) a.liqMovs = [];
+  a.liqMovs.push(mov);
+  pfLiqApply(mov.moneda, mov.tipo === 'out' ? -mov.monto : mov.monto);
+  pfSave();
+  pfRenderSummary();
+  pfLiqError('');
+  pfCloseLiqModalForce();
+  if (typeof toast === 'function') toast('💧 Liquidez ' + (mov.tipo === 'out' ? 'retirada' : 'agregada') + ': ' + (mov.moneda === 'USD' ? 'U$D ' : '$ ') + pfFmt(mov.monto, 2), 'ok');
+}
+
+function pfLiqDelete(id) {
+  var a = pfActiveAcct();
+  if (!a || !Array.isArray(a.liqMovs)) return;
+  var idx = a.liqMovs.findIndex(function(m){ return m.id === id; });
+  if (idx < 0) return;
+  var mv = a.liqMovs[idx];
+  var delta = mv.tipo === 'out' ? mv.monto : -mv.monto; // revertir el efecto
+  var actual = mv.moneda === 'USD' ? pfLiqUSD_val : pfLiqARS;
+  if (actual + delta < -0.005 && !confirm('Al eliminar este movimiento el saldo quedaría negativo. ¿Eliminar igual?')) return;
+  a.liqMovs.splice(idx, 1);
+  pfLiqApply(mv.moneda, delta);
+  pfSave();
+  pfRenderSummary();
+  pfLiqRenderModal();
+}
+
 // ── DÓLAR MEP AUTOMÁTICO ──────────────────────────────────
 function pfFetchMepAuto() {
   var mepEl  = document.getElementById('pfMepRate');
@@ -6269,7 +6452,8 @@ function pfRenderCauciones(totalValView) {
 
   var saldoV = toV(cau.saldo), abV = toV(cau.abiertaMonto);
   var dispV  = saldoV - abV;
-  var netoV  = (totalValView || 0) + dispV;
+  var liqManV = pfToView(pfLiqARS || 0, 'ARS') + pfToView(pfLiqUSD_val || 0, 'USD'); // liquidez cargada a mano (💧)
+  var netoV  = (totalValView || 0) + dispV + liqManV;
 
   var fin = cau.fechaFin ? cau.fechaFin.slice(8,10) + '/' + cau.fechaFin.slice(5,7) + '/' + cau.fechaFin.slice(2,4) : '';
   setT('pfCauAsOf', fin ? 'según el archivo del broker al ' + fin : '');
@@ -6295,7 +6479,7 @@ function pfRenderCauciones(totalValView) {
   setT('pfCauMesSub', cau.nUltMes + ' toma' + (cau.nUltMes===1?'':'s') + ' en 30 días');
 
   setT('pfCauNeto', sgn(netoV), netoV < 0 ? 'var(--red)' : 'var(--text-bright)');
-  setT('pfCauNetoSub', 'posiciones ' + pfFmtDisplay(totalValView || 0) + ' ' + (dispV < 0 ? '−' : '+') + ' ' + pfFmtDisplay(Math.abs(dispV)));
+  setT('pfCauNetoSub', 'posiciones ' + pfFmtDisplay(totalValView || 0) + ' ' + (dispV < 0 ? '−' : '+') + ' ' + pfFmtDisplay(Math.abs(dispV)) + (Math.abs(liqManV) > 0.004 ? ' + liquidez ' + pfFmtDisplay(liqManV) : ''));
 }
 
 // ── DISTRIBUCIÓN ──────────────────────────────────────────
