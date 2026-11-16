@@ -1699,6 +1699,15 @@ a.dz-news:hover{background:var(--bg3)}
         </div>
       </div>
 
+      <div class="pf-cau-panel" id="pfTotPanel" style="border-color:rgba(0,229,255,0.28);background:linear-gradient(135deg,rgba(0,229,255,0.05),transparent)">
+        <div class="pf-cau-head"><div class="pf-cau-title" style="color:var(--accent)">📊 Invertido vs. total con liquidez</div><div class="pf-cau-asof" id="pfTotAsOf"></div></div>
+        <div class="pf-cau-grid">
+          <div class="pf-cau-item"><div class="pf-sum-lbl">Invertido en activos</div><div class="pf-sum-val" id="pfTotInv">—</div><div class="pf-sum-sub" id="pfTotInvSub">—</div></div>
+          <div class="pf-cau-item"><div class="pf-sum-lbl">Liquidez total</div><div class="pf-sum-val" id="pfTotLiq">—</div><div class="pf-sum-sub" id="pfTotLiqSub">—</div></div>
+          <div class="pf-cau-item"><div class="pf-sum-lbl">Total (activos + liquidez)</div><div class="pf-sum-val" id="pfTotAll" style="color:var(--text-bright)">—</div><div class="pf-sum-sub" id="pfTotAllSub">—</div></div>
+        </div>
+      </div>
+
       <div class="pf-cau-panel" id="pfCauPanel" style="display:none">
         <div class="pf-cau-head">
           <div class="pf-cau-title">🏦 Cauciones y disponible real</div>
@@ -6431,7 +6440,34 @@ function pfRenderSummary() {
   if (buEl) buEl.classList.toggle('active', pfViewCurrency==='USD');
   if (baEl) baEl.classList.toggle('active', pfViewCurrency==='ARS');
 
+  pfRenderTotals(totalValView);
   pfRenderCauciones(totalValView);
+}
+
+// ── RESUMEN: INVERTIDO vs TOTAL CON LIQUIDEZ ──────────────
+// liquidez total = liquidez cargada a mano (ARS + USD al MEP) + disponible real del broker (si hay cauciones)
+function pfRenderTotals(totalValView) {
+  var set = function(id, txt){ var e = document.getElementById(id); if (e) e.textContent = txt; };
+  var other = function(v){ // mismo valor en la otra moneda
+    return pfViewCurrency === 'ARS' ? 'U$D ' + pfFmt(v / pfMepRate, 2) : '$ ' + pfFmt(v * pfMepRate, 2);
+  };
+  var inv  = totalValView || 0;
+  var liqMan = pfToView(pfLiqARS || 0, 'ARS') + pfToView(pfLiqUSD_val || 0, 'USD');
+  var a = pfActiveAcct(), cau = a && a.cauciones, dispV = 0;
+  if (cau) {
+    var mon = cau.moneda === 'USD' ? 'USD' : 'ARS';
+    dispV = pfToView(cau.saldo || 0, mon) - pfToView(cau.abiertaMonto || 0, mon);
+  }
+  var liq = liqMan + dispV;
+  var tot = inv + liq;
+  var pInv = tot > 0 ? inv / tot * 100 : 0;
+
+  set('pfTotInv', pfFmtDisplay(inv));
+  set('pfTotInvSub', '≈ ' + other(inv) + (tot > 0 ? ' · ' + pfFmt(pInv, 1) + '% del total' : ''));
+  set('pfTotLiq', pfFmtDisplay(liq));
+  set('pfTotLiqSub', '≈ ' + other(liq) + (cau ? ' · incluye disponible del broker ' + pfFmtDisplay(dispV) : ''));
+  set('pfTotAll', pfFmtDisplay(tot));
+  set('pfTotAllSub', '≈ ' + other(tot) + ' · MEP ' + pfFmt(pfMepRate, 2));
 }
 
 // ── PANEL CAUCIONES / DISPONIBLE REAL ─────────────────────
