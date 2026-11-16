@@ -1074,6 +1074,8 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
 .pf-cur-sel-btn.in.active{background:rgba(0,230,118,0.12);color:var(--green);border-color:var(--green2)}
 .pf-cur-sel-btn.out.active{background:rgba(255,61,90,0.12);color:var(--red);border-color:var(--red2)}
 
+#dzEvKpis{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+#dzEvKpis .dz-kpi-v{white-space:nowrap;font-size:16px}
 /* ── RENDI AI ── */
 .ai-wrap{max-width:720px;margin:0 auto;display:flex;flex-direction:column;height:calc(100vh - 220px);min-height:420px}
 .ai-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px}
@@ -1765,12 +1767,18 @@ a.dz-news:hover{background:var(--bg3)}
           <div class="dz-head">
             <div class="dz-title">📈 Evolución de la cartera</div>
             <div class="dz-seg"><button id="dzEvM" class="on" onclick="dzEvMode('m')">Mensual</button><button id="dzEvA" onclick="dzEvMode('a')">Anual</button></div>
-            <select class="sel" id="dzEvRange" onchange="dzEvRange(this.value)"><option value="12">Últimos 12 meses</option><option value="24" selected>Últimos 24 meses</option><option value="36">Últimos 36 meses</option><option value="0">Todo el historial</option></select>
+            <div class="dz-seg" title="Moneda en la que se muestran los gráficos"><button id="dzEvCA" onclick="dzEvCur('ARS')">$ Pesos</button><button id="dzEvCU" onclick="dzEvCur('USD')">U$D Dólares</button></div>
+            <select class="sel" id="dzEvRange" style="width:auto" onchange="dzEvRange(this.value)"><option value="6">Últimos 6 meses</option><option value="12">Últimos 12 meses</option><option value="24" selected>Últimos 24 meses</option><option value="36">Últimos 36 meses</option><option value="ytd">Este año</option><option value="0">Todo el historial</option><option value="custom">📅 Elegir fechas…</option></select>
+            <span id="dzEvCustom" class="dz-dim" style="display:none;align-items:center;gap:6px">Desde <input type="month" class="sel" id="dzEvFrom" style="width:auto" onchange="dzEvDates()"> hasta <input type="month" class="sel" id="dzEvTo" style="width:auto" onchange="dzEvDates()"></span>
             <span class="dz-dim" id="dzEvStatus"></span>
           </div>
-          <div class="dz-body dz-two">
-            <div><div class="dz-sub">Rendimiento en %</div><div id="dzChartPct"><div class="mk-empty">Abrí la pestaña para calcular…</div></div></div>
-            <div><div class="dz-sub">Resultado nominal</div><div id="dzChartNom"></div></div>
+          <div class="dz-body">
+            <div class="dz-kpis" id="dzEvKpis" style="margin-bottom:14px"></div>
+            <div class="dz-two">
+              <div><div class="dz-sub" id="dzSubPct">Rendimiento de cada mes</div><div id="dzChartPct"><div class="mk-empty">Abrí la pestaña para calcular…</div></div></div>
+              <div><div class="dz-sub" id="dzSubNom">Ganancia o pérdida de cada mes</div><div id="dzChartNom"></div></div>
+            </div>
+            <div style="margin-top:14px"><div class="dz-sub" id="dzSubVal">Valor de la cartera</div><div id="dzChartVal"></div></div>
           </div>
           <div class="dz-note" id="dzEvNote"></div>
         </div>
@@ -8339,6 +8347,9 @@ window.pfToggleClosed = function () { lsSet('dubz_pf_closed_hidden', !lsGet('dub
 /* ═══════════════ 3. EVOLUCIÓN DE LA CARTERA ════════════════════════ */
 var hist = {series: {}, mep: null, sig: '', busy: false, lastErr: null, failAt: 0};
 var evMode = lsGet('dubz_ev_mode', 'm'), evRange = lsGet('dubz_ev_range', 24);
+var evCur = lsGet('dubz_ev_cur', null);                       // null = sigue la moneda del selector de arriba (USD/ARS)
+var evFrom = lsGet('dubz_ev_from', ''), evTo = lsGet('dubz_ev_to', '');
+function evCurNow() { return (evCur === 'ARS' || evCur === 'USD') ? evCur : (window.pfViewCurrency || 'USD'); }
 
 function ymOf(d) { return String(d).slice(0, 7); }
 function dayOf(d) { return parseInt(String(d).slice(8, 10), 10) || 1; }
@@ -8372,7 +8383,7 @@ function fxFor(ym, mepM, isCur) {
   return window.pfMepRate || 1;
 }
 function toView(v, mon, fx) {
-  var view = window.pfViewCurrency || 'USD';
+  var view = evCurNow();
   if (mon === view) return v;
   return view === 'ARS' ? v * fx : v / fx;     // mon=USD→ARS: ×fx ; mon=ARS→USD: ÷fx
 }
@@ -8484,45 +8495,191 @@ function evLabel(ym, annual) {
   if (annual) return ym === String(new Date().getFullYear()) ? ym + ' YTD' : ym;
   return MES[+ym.slice(5, 7) - 1] + ' ' + ym.slice(2, 4);
 }
-function evRender() {
-  var host1 = $('dzChartPct'), host2 = $('dzChartNom'), note = $('dzEvNote'), st = $('dzEvStatus');
-  if (!host1 || !host2) return;
-  var c = collectLots();
-  if (!c.lots.length) {
-    host1.innerHTML = host2.innerHTML = '<div class="mk-empty">Cargá operaciones con fecha de compra para ver la evolución.</div>';
-    if (note) note.textContent = ''; return;
+function evSym() { return evCurNow() === 'ARS' ? '$' : 'U$D'; }
+// ejes con valores redondos (1, 2, 5, 10 × 10^n) que siempre incluyen el 0 si hay barras
+function evTicks(lo, hi) {
+  var span = (hi - lo) || 1, raw = span / 4, mag = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10)), f = raw / mag;
+  var step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * mag;
+  var mn = Math.floor(lo / step + 1e-9) * step, mx = Math.ceil(hi / step - 1e-9) * step, t = [], v;
+  for (v = mn; v <= mx + step / 2; v += step) t.push(Math.abs(v) < step / 1e6 ? 0 : v);
+  return {min: mn, max: mx, step: step, ticks: t};
+}
+function evSigned(v, d) { return (v >= 0 ? '+' : '−') + num(Math.abs(v), d); }
+function evK(v) { return (v > 0 ? '+' : '') + kfmt(v); }
+
+// Barras con etiqueta de valor, mejor/peor período resaltados y un solo eje (fácil de leer)
+function evBars(items, o) {
+  var W = 560, H = 250, L = 50, R = 12, T = 24, B = 34, pw = W - L - R, ph = H - T - B, n = items.length, i;
+  if (!n) return '<div class="mk-empty">Sin datos suficientes.</div>';
+  var vmin = 0, vmax = 0, bestI = -1, worstI = -1;
+  items.forEach(function (it, k) {
+    if (it.v == null) return;
+    vmin = Math.min(vmin, it.v); vmax = Math.max(vmax, it.v);
+    if (bestI < 0 || it.v > items[bestI].v) bestI = k;
+    if (worstI < 0 || it.v < items[worstI].v) worstI = k;
+  });
+  if (vmax === vmin) vmax = vmin + 1;
+  var sp0 = vmax - vmin, tk = evTicks(vmin < 0 ? vmin - sp0 * 0.1 : 0, vmax > 0 ? vmax + sp0 * 0.1 : 0);
+  vmin = tk.min; vmax = tk.max;
+  function y(v) { return T + (1 - (v - vmin) / (vmax - vmin)) * ph; }
+  var id = o.id, svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="dz-svg">' +
+    '<defs><linearGradient id="' + id + 'g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#00f08a"/><stop offset="1" stop-color="#00a85a" stop-opacity=".75"/></linearGradient>' +
+    '<linearGradient id="' + id + 'r" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff6b81" stop-opacity=".75"/><stop offset="1" stop-color="#ff3d5a"/></linearGradient></defs>';
+  tk.ticks.forEach(function (gv) {
+    var gy = y(gv);
+    svg += '<line x1="' + L + '" x2="' + (L + pw) + '" y1="' + gy.toFixed(1) + '" y2="' + gy.toFixed(1) + '" stroke="#26303d" stroke-width="0.6" stroke-dasharray="3 4"/>' +
+           '<text x="' + (L - 6) + '" y="' + (gy + 3).toFixed(1) + '" text-anchor="end" font-size="10" fill="#6b7a8d" font-family="var(--mono)">' + o.af(gv, tk.step) + '</text>';
+  });
+  svg += '<line x1="' + L + '" x2="' + (L + pw) + '" y1="' + y(0).toFixed(1) + '" y2="' + y(0).toFixed(1) + '" stroke="#8a99ad" stroke-width="1"/>';
+  var slot = pw / n, bw = Math.max(6, Math.min(40, slot * 0.62)), step = Math.max(1, Math.ceil(n / Math.max(4, Math.floor(pw / 50))));
+  items.forEach(function (it, k) {
+    var cx = L + (k + 0.5) * slot;
+    if (it.v == null) {
+      svg += '<circle cx="' + cx.toFixed(1) + '" cy="' + y(0).toFixed(1) + '" r="2.5" fill="#6b7a8d"><title>' + esc(it.tip) + '</title></circle>';
+    } else {
+      var y0 = y(0), y1 = y(it.v), top = Math.min(y0, y1), h = Math.max(1.5, Math.abs(y1 - y0)), pos = it.v >= 0, hot = (k === bestI || k === worstI);
+      svg += '<rect x="' + (cx - bw / 2).toFixed(1) + '" y="' + top.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="3" fill="url(#' + id + (pos ? 'g' : 'r') + ')"' +
+             (hot ? ' stroke="' + (pos ? '#00e676' : '#ff3d5a') + '" stroke-width="1.4"' : '') + '><title>' + esc(it.tip) + '</title></rect>';
+      if (n <= 12 || hot) {
+        svg += '<text x="' + cx.toFixed(1) + '" y="' + (pos ? top - 5 : top + h + 12).toFixed(1) + '" text-anchor="middle" font-size="10.5" font-weight="700" fill="' + (pos ? '#00e676' : '#ff5d75') + '" font-family="var(--mono)">' + o.lf(it.v) + '</text>';
+      }
+    }
+    if (k % step === 0 || k === n - 1) svg += '<text x="' + cx.toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle" font-size="10" fill="#8a99ad" font-family="var(--mono)">' + esc(it.l) + '</text>';
+  });
+  return svg + '</svg>';
+}
+
+// Línea + área del valor de la cartera al cierre de cada período
+function evArea(items, o) {
+  var W = 1120, H = 230, L = 62, R = 24, T = 26, B = 34, pw = W - L - R, ph = H - T - B, n = items.length, i;
+  if (!n) return '<div class="mk-empty">Sin datos suficientes.</div>';
+  var vmin = Infinity, vmax = -Infinity, iMax = 0, iMin = 0;
+  items.forEach(function (it, k) { if (it.v > vmax) { vmax = it.v; iMax = k; } if (it.v < vmin) { vmin = it.v; iMin = k; } });
+  if (vmax === vmin) { vmax += 1; vmin -= 1; }
+  var sp1 = vmax - vmin, tk = evTicks(Math.max(0, vmin - sp1 * 0.15), vmax + sp1 * 0.18);
+  vmin = tk.min; vmax = tk.max;
+  function y(v) { return T + (1 - (v - vmin) / (vmax - vmin)) * ph; }
+  function x(k) { return n === 1 ? L + pw / 2 : L + (k + 0.5) * (pw / n); }
+  var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="dz-svg"><defs><linearGradient id="' + o.id + 'a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#00d4ff" stop-opacity=".38"/><stop offset="1" stop-color="#00d4ff" stop-opacity="0"/></linearGradient></defs>';
+  tk.ticks.forEach(function (gv) {
+    var gy = y(gv);
+    svg += '<line x1="' + L + '" x2="' + (L + pw) + '" y1="' + gy.toFixed(1) + '" y2="' + gy.toFixed(1) + '" stroke="#26303d" stroke-width="0.6" stroke-dasharray="3 4"/>' +
+           '<text x="' + (L - 8) + '" y="' + (gy + 3).toFixed(1) + '" text-anchor="end" font-size="10.5" fill="#6b7a8d" font-family="var(--mono)">' + kfmt(gv) + '</text>';
+  });
+  var pts = items.map(function (it, k) { return x(k).toFixed(1) + ',' + y(it.v).toFixed(1); });
+  if (n > 1) {
+    svg += '<polygon points="' + x(0).toFixed(1) + ',' + (T + ph) + ' ' + pts.join(' ') + ' ' + x(n - 1).toFixed(1) + ',' + (T + ph) + '" fill="url(#' + o.id + 'a)"/>' +
+           '<polyline points="' + pts.join(' ') + '" fill="none" stroke="#00d4ff" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>';
   }
-  if (hist.lastErr && !hist.sig) { host1.innerHTML = host2.innerHTML = '<div class="mk-empty">⚠ No se pudo traer el historial de precios (' + esc(hist.lastErr.message) + ').</div>'; return; }
-  if (!hist.sig) { host1.innerHTML = host2.innerHTML = '<div class="mk-empty">Calculando evolución…</div>'; return; }
+  var step = Math.max(1, Math.ceil(n / Math.max(4, Math.floor(pw / 70))));
+  items.forEach(function (it, k) {
+    var key = (k === 0 || k === n - 1 || k === iMax || k === iMin);
+    svg += '<circle cx="' + x(k).toFixed(1) + '" cy="' + y(it.v).toFixed(1) + '" r="' + (key ? 4.2 : 2.8) + '" fill="' + (key ? '#04121a' : '#00d4ff') + '" stroke="#00d4ff" stroke-width="2"><title>' + esc(it.tip) + '</title></circle>';
+    if (key && n <= 40) svg += '<text x="' + x(k).toFixed(1) + '" y="' + (y(it.v) - 10).toFixed(1) + '" text-anchor="' + (k === 0 && n > 1 ? 'start' : (k === n - 1 && n > 1 ? 'end' : 'middle')) + '" font-size="11" font-weight="700" fill="#e8eef5" font-family="var(--mono)">' + kfmt(it.v) + '</text>';
+    if (k % step === 0 || k === n - 1) svg += '<text x="' + x(k).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle" font-size="10.5" fill="#8a99ad" font-family="var(--mono)">' + esc(it.l) + '</text>';
+  });
+  return svg + '</svg>';
+}
+
+function evPick(rows) {
+  if (evRange === 'custom') return rows.filter(function (r) { return (!evFrom || r.ym >= evFrom) && (!evTo || r.ym <= evTo); });
+  if (evRange === 'ytd') { var yr = String(new Date().getFullYear()); return rows.filter(function (r) { return r.ym.slice(0, 4) === yr; }); }
+  var n = parseInt(evRange, 10) || 0;
+  return n > 0 ? rows.slice(-n) : rows;
+}
+function evKpi(label, val, sub, cls) {
+  return '<div class="dz-kpi"><div class="dz-kpi-l">' + label + '</div><div class="dz-kpi-v"' + (cls ? ' style="color:var(--' + cls + ')"' : '') + '>' + val + '</div><div class="dz-dim">' + sub + '</div></div>';
+}
+
+function evRender() {
+  var host1 = $('dzChartPct'), host2 = $('dzChartNom'), host3 = $('dzChartVal'), note = $('dzEvNote'), st = $('dzEvStatus'), kp = $('dzEvKpis');
+  if (!host1 || !host2) return;
+  var all3 = function (h) { host1.innerHTML = host2.innerHTML = h; if (host3) host3.innerHTML = ''; if (kp) kp.innerHTML = ''; };
+  var c = collectLots();
+  if (!c.lots.length) { all3('<div class="mk-empty">Cargá operaciones con fecha de compra para ver la evolución.</div>'); if (note) note.textContent = ''; return; }
+  if (hist.lastErr && !hist.sig) { all3('<div class="mk-empty">⚠ No se pudo traer el historial de precios (' + esc(hist.lastErr.message) + ').</div>'); return; }
+  if (!hist.sig) { all3('<div class="mk-empty">Calculando evolución…</div>'); return; }
+
   var months = buildMonthly(c.lots, hist.series, hist.mep), annual = (evMode === 'a');
   var noSeries = {}; c.lots.forEach(function (l) { if (!hist.series[l.sym]) noSeries[baseTk(l.sym)] = 1; });
   var noSeriesN = Object.keys(noSeries);
-  var rows = annual ? aggAnnual(months) : months;
-  if (!annual && evRange > 0) rows = rows.slice(-evRange);
-  var cum = 1, sym = (typeof pfSym === 'function') ? pfSym() : '$';
-  var items = rows.map(function (r) {
-    if (r.ret != null) cum *= (1 + r.ret);
-    var lab = evLabel(r.ym, annual);
-    return {l: lab, rawRet: r.ret, pnl: r.pnl, vEnd: r.vEnd, cum: cum - 1,
-            tip: lab + ' · ' + (r.ret == null ? 'rend. n/d' : (r.ret >= 0 ? '+' : '') + (r.ret * 100).toFixed(2) + '%') + ' · resultado ' + sym + ' ' + num(r.pnl, 0) + ' · valor ' + sym + ' ' + num(r.vEnd, 0) + ' · acumulado ' + ((cum - 1) * 100).toFixed(1) + '%'};
-  });
-  host1.innerHTML = comboChart(items.map(function (x) { return {l: x.l, b: x.rawRet == null ? null : x.rawRet * 100, ln: x.cum * 100, tip: x.tip}; }),
-    {bf: function (v) { return v.toFixed(0) + '%'; }, lf: function (v) { return v.toFixed(0) + '%'; }});
-  host2.innerHTML = comboChart(items.map(function (x) { return {l: x.l, b: x.pnl, ln: x.vEnd, tip: x.tip}; }),
-    {bf: kfmt, lf: kfmt});
-  var m1 = $('dzEvM'), a1 = $('dzEvA'), rg = $('dzEvRange');
+  var allRows = annual ? aggAnnual(months) : months;
+  var rows = annual ? allRows : evPick(allRows);
+  var cur = evCurNow(), sym = evSym(), unit = annual ? 'año' : 'mes';
+
+  // estado de los controles
+  var m1 = $('dzEvM'), a1 = $('dzEvA'), rg = $('dzEvRange'), cu = $('dzEvCustom'), ca = $('dzEvCA'), cb = $('dzEvCU');
   if (m1) m1.classList.toggle('on', !annual); if (a1) a1.classList.toggle('on', annual);
+  if (ca) ca.classList.toggle('on', cur === 'ARS'); if (cb) cb.classList.toggle('on', cur === 'USD');
   if (rg) { rg.style.display = annual ? 'none' : ''; rg.value = String(evRange); }
+  if (cu) {
+    cu.style.display = (!annual && evRange === 'custom') ? 'inline-flex' : 'none';
+    var fi = $('dzEvFrom'), ti = $('dzEvTo');
+    if (fi && ti && allRows.length) {
+      fi.min = ti.min = allRows[0].ym; fi.max = ti.max = allRows[allRows.length - 1].ym;
+      if (fi.value !== evFrom) fi.value = evFrom || ''; if (ti.value !== evTo) ti.value = evTo || '';
+    }
+  }
+  var t1 = $('dzSubPct'), t2 = $('dzSubNom'), t3 = $('dzSubVal');
+  if (t1) t1.textContent = 'Rendimiento de cada ' + unit + ' (%)';
+  if (t2) t2.textContent = 'Ganancia o pérdida de cada ' + unit + ' (' + sym + ')';
+  if (t3) t3.textContent = 'Valor de la cartera al cierre de cada ' + unit + ' (' + sym + ')';
+
+  if (!rows.length) { all3('<div class="mk-empty">No hay datos en ese rango de fechas. Probá con otro período.</div>'); if (st) st.textContent = ''; return; }
+
+  var firstIdx = allRows.indexOf(rows[0]), startV = firstIdx > 0 ? allRows[firstIdx - 1].vEnd : 0;
+  var cum = 1, totPnl = 0, anyRet = false, pos = 0, cnt = 0, best = null, worst = null;
+  var items = rows.map(function (r) {
+    if (r.ret != null) {
+      cum *= (1 + r.ret); anyRet = true; cnt++; if (r.ret >= 0) pos++;
+      if (!best || r.ret > best.ret) best = r; if (!worst || r.ret < worst.ret) worst = r;
+    }
+    totPnl += r.pnl;
+    var lab = evLabel(r.ym, annual);
+    return {l: lab, rawRet: r.ret, pnl: r.pnl, vEnd: r.vEnd,
+            tip: lab + ' · ' + (r.ret == null ? 'rendimiento n/d' : 'rendimiento ' + evSigned(r.ret * 100, 2) + '%') + ' · resultado ' + (r.pnl < 0 ? '−' : '+') + sym + ' ' + num(Math.abs(r.pnl), 0) +
+                 ' · valor de la cartera ' + sym + ' ' + num(r.vEnd, 0) + ' · acumulado del período ' + evSigned((cum - 1) * 100, 1) + '%'};
+  });
+  var endV = rows[rows.length - 1].vEnd, perRet = (cum - 1) * 100;
+
+  host1.innerHTML = evBars(items.map(function (x) { return {l: x.l, v: x.rawRet == null ? null : x.rawRet * 100, tip: x.tip}; }),
+    {id: 'dzp', af: function (v, st) { return v.toFixed(st < 1 ? 1 : 0) + '%'; }, lf: function (v) { return evSigned(v, 1) + '%'; }});
+  host2.innerHTML = evBars(items.map(function (x) { return {l: x.l, v: x.pnl, tip: x.tip}; }),
+    {id: 'dzn', af: kfmt, lf: evK});
+  if (host3) host3.innerHTML = evArea(items.map(function (x) { return {l: x.l, v: x.vEnd, tip: x.tip}; }), {id: 'dzv'});
+
+  if (kp) kp.innerHTML =
+    evKpi('RENDIMIENTO DEL PERÍODO', anyRet ? evSigned(perRet, 1) + '%' : 'n/d', evLabel(rows[0].ym, annual) + ' → ' + evLabel(rows[rows.length - 1].ym, annual), anyRet ? (perRet >= 0 ? 'green' : 'red') : '') +
+    evKpi('RESULTADO EN ' + (cur === 'ARS' ? 'PESOS' : 'DÓLARES'), (totPnl < 0 ? '−' : '+') + sym + ' ' + num(Math.abs(totPnl), 0), 'ganancia o pérdida del período', totPnl >= 0 ? 'green' : 'red') +
+    evKpi('VALOR DE LA CARTERA', sym + ' ' + num(endV, 0), startV > 0 ? 'al inicio: ' + sym + ' ' + num(startV, 0) : 'al cierre del período') +
+    evKpi('MEJOR ' + unit.toUpperCase(), best ? evSigned(best.ret * 100, 1) + '%' : 'n/d', best ? evLabel(best.ym, annual) : '', best ? 'green' : '') +
+    evKpi('PEOR ' + unit.toUpperCase(), worst ? evSigned(worst.ret * 100, 1) + '%' : 'n/d', worst ? evLabel(worst.ym, annual) : '', worst ? 'red' : '') +
+    evKpi((annual ? 'AÑOS' : 'MESES') + ' EN POSITIVO', cnt ? pos + ' de ' + cnt : 'n/d', cnt ? Math.round(pos / cnt * 100) + '% del período' : '');
+
   if (st) st.textContent = items.length + (annual ? ' años' : ' meses');
-  if (note) note.innerHTML = 'Barras: ' + (annual ? 'rendimiento y resultado de cada año' : 'rendimiento y resultado de cada mes') + ' · línea celeste: ' + 'rendimiento acumulado (izq.) y valor de la cartera (der.) en ' + (window.pfViewCurrency || 'USD') +
-    '. Rendimiento por método Modified Dietz (descuenta aportes y retiros según el día en que ocurrieron). ' +
+  if (note) note.innerHTML = 'Pasá el cursor (o tocá) cada barra o punto para ver el detalle. Verde = ganó, rojo = perdió. Rendimiento por método Modified Dietz (descuenta aportes y retiros según el día en que ocurrieron). ' +
+    'Montos en ' + (cur === 'ARS' ? 'pesos' : 'dólares') + '. ' +
     (hist.mep && Object.keys(hist.mep).length ? 'Cada mes se valúa con el MEP de fin de mes.' : '<span style="color:var(--yellow)">Sin MEP histórico: se usa el MEP actual para todos los meses.</span>') +
-    ' Precios sin ajustar por dividendos; los dividendos cobrados no se incluyen.' +
+    ' Precios sin ajustar por dividendos; los dividendos cobrados no se incluyen. No incluye la liquidez, solo los activos.' +
     (c.skipped ? ' <span style="color:var(--yellow)">' + c.skipped + ' operación(es) sin fecha o sin precio quedaron afuera.</span>' : '') +
     (noSeriesN.length ? ' <span style="color:var(--yellow)">Sin historial de precios en Yahoo para ' + esc(noSeriesN.join(', ')) + ': se valuaron a su precio de compra.</span>' : '');
 }
 window.dzEvMode = function (m) { evMode = m; lsSet('dubz_ev_mode', m); evRender(); };
-window.dzEvRange = function (v) { evRange = parseInt(v, 10) || 0; lsSet('dubz_ev_range', evRange); evRender(); };
+window.dzEvCur = function (cc) { evCur = (cc === 'USD') ? 'USD' : 'ARS'; lsSet('dubz_ev_cur', evCur); evRender(); };
+window.dzEvRange = function (v) {
+  evRange = (v === 'custom' || v === 'ytd') ? v : (parseInt(v, 10) || 0);
+  lsSet('dubz_ev_range', evRange);
+  if (evRange === 'custom' && (!evFrom || !evTo)) {            // por defecto: último año
+    var t = curYM(), f = t, i; for (i = 0; i < 11; i++) f = prevYM(f);
+    evFrom = f; evTo = t; lsSet('dubz_ev_from', evFrom); lsSet('dubz_ev_to', evTo);
+  }
+  evRender();
+};
+window.dzEvDates = function () {
+  var f = ($('dzEvFrom') || {}).value || '', t = ($('dzEvTo') || {}).value || '';
+  if (f && t && f > t) { var x = f; f = t; t = x; }
+  evFrom = f; evTo = t; lsSet('dubz_ev_from', f); lsSet('dubz_ev_to', t); evRender();
+};
 DZ._t = {buildMonthly: buildMonthly, aggAnnual: aggAnnual, comboChart: comboChart};
 
 /* ═══════════════ 4. EVENTOS, NOTICIAS Y FUNDAMENTALES ══════════════ */
