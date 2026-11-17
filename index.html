@@ -2962,9 +2962,7 @@ document.addEventListener('visibilitychange', function() {
 async function cargarCompleto() {
   if (!tickers.length) return;
 
-  // ── Desarbitraje CEDEAR: ratios + CCL en paralelo, sin bloquear el resto ──
-  if (!cedearRatiosLoaded) fetchCedearRatios();
-  fetchCclAuto();
+  // (ratios CEDEAR, CCL, /market y /universe se piden DESPUÉS de los técnicos: así no compiten con /techbatch por el servidor)
 
   // ⚡ Squeeze Diario: se dispara YA, en paralelo, sin esperar
   // (fire-and-forget). Son endpoints livianos que llegan mucho antes que
@@ -2972,9 +2970,6 @@ async function cargarCompleto() {
   // resto (RSI, ADX, fundamentals, etc.) va llegando después con el loop
   // pesado de abajo.
   // (el squeeze diario ya viene dentro de /techbatch)
-  loadMarketState();   // dirección real del mercado (M de CANSLIM)
-  loadUniverse();      // RS Rating contra universo fijo, grupos y amplitud (L de CANSLIM)
-  setTimeout(function(){ canslimLogDaily(); }, 90000);   // admin: guarda el puntaje del día para medir resultados
 
   // ── Mostrar cache inmediatamente (incluyendo IDB como fallback) ──
   await new Promise(function(resolve) {
@@ -3047,8 +3042,14 @@ async function cargarCompleto() {
   buildTape();
   startCountdown();
   document.getElementById('expInfo').textContent = allData.length+' tickers | Cargado: '+new Date().toLocaleTimeString('es-AR');
+  // FASE 1b — extras livianos recién ahora que los precios ya están en pantalla
+  if (!cedearRatiosLoaded) fetchCedearRatios();
+  fetchCclAuto();
+  loadMarketState();   // dirección real del mercado (M de CANSLIM)
+  setTimeout(function(){ loadUniverse(); }, 4000);   // RS Rating / grupos / amplitud (L de CANSLIM): el más pesado, va último
+  setTimeout(function(){ canslimLogDaily(); }, 90000);   // admin: guarda el puntaje del día para medir resultados
   // FASE 2 — fundamentals de CANSLIM (EPS, ROE, institucional): el server los cachea 6 h
-  loadFundamentals(allData).then(function(){ saveTickerCache(allData); });
+  setTimeout(function(){ loadFundamentals(allData).then(function(){ saveTickerCache(allData); }); }, 2000);
   // Cargar fechas de earnings en background
   var symsParaEarnings = allData.map(function(d){return d.symbol;}).filter(function(s){return SECTORS[s]!=='ETF';});
   fetchEarnings(symsParaEarnings).then(function(){ renderAllTab(); renderEarningsTab(); });
@@ -4345,7 +4346,11 @@ async function fetchTechBatch(symList) {
   var fetchSyms = symList.map(resolveYahooSymbol);
   var res = {};
   try { res = (await postJSON('/techbatch', {symbols: fetchSyms}, 45000)).results || {}; }
-  catch (e) { console.warn('techbatch falló, uso /quote por ticker:', e.message); }
+  catch (e) {
+    console.warn('techbatch falló, reintento una vez:', e.message);
+    try { res = (await postJSON('/techbatch', {symbols: fetchSyms}, 45000)).results || {}; }   // 1 reintento antes de caer a 40 pedidos /quote individuales (que saturan el server)
+    catch (e2) { console.warn('techbatch falló de nuevo, uso /quote por ticker:', e2.message); }
+  }
   return Promise.all(symList.map(function(sym, i) {
     var t = res[fetchSyms[i]];
     if (t && !t.error) return Promise.resolve(finalizeQuote(sym, Object.assign({}, t)));
