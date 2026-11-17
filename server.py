@@ -1460,8 +1460,22 @@ def _download_many(symbols, period='1y', interval='1d', auto_adjust=True, live=F
     return out
 
 
+_TECH_BUSY = [0]            # /techbatch en curso: el armado del universo (S&P 500) espera a que este en 0
+_TECH_BUSY_LOCK = threading.Lock()
+
+
 @app.route('/techbatch', methods=['POST'])
 def get_tech_batch():
+    with _TECH_BUSY_LOCK:
+        _TECH_BUSY[0] += 1
+    try:
+        return _get_tech_batch_impl()
+    finally:
+        with _TECH_BUSY_LOCK:
+            _TECH_BUSY[0] -= 1
+
+
+def _get_tech_batch_impl():
     """Indicadores técnicos de MUCHOS tickers en un solo request (y una sola
     descarga a Yahoo). Es la carga rápida del scanner: precio, RSI, ADX, EMAs,
     volumen, momentum, Máx/Mín 52s, fuerza relativa... Los fundamentals de CANSLIM
@@ -2676,11 +2690,16 @@ def _load_constituents():
     return meta
 
 
-def _closes_many(symbols, period='1y', chunk_size=100, pause=0.4, min_len=130):
-    """{ticker: Serie de cierres con fecha} bajando de a tandas (sin el parche de 'vela de hoy')."""
+def _closes_many(symbols, period='1y', chunk_size=50, pause=1.5, min_len=130):
+    """{ticker: Serie de cierres con fecha} bajando de a tandas (sin el parche de 'vela de hoy').
+    Es una tarea de fondo: antes de cada tanda espera (máx 90 s) a que no haya /techbatch en curso,
+    así la carga del scanner tiene prioridad sobre el armado del universo."""
     out = {}
     for i in range(0, len(symbols), chunk_size):
         chunk = symbols[i:i + chunk_size]
+        _w = 0
+        while _TECH_BUSY[0] > 0 and _w < 90:
+            time.sleep(1); _w += 1
         try:
             df = yf.download(tickers=chunk, period=period, interval='1d', auto_adjust=True, group_by='ticker',
                              threads=True, progress=False)
@@ -2819,7 +2838,7 @@ def universe_route():
 
 
 if UNIVERSE_ENABLED:
-    _t = threading.Timer(25, get_universe)      # precalienta al arrancar el server
+    _t = threading.Timer(int(os.environ.get('UNIVERSE_PREWARM_S', '120')), get_universe)      # precalienta DESPUÉS de que arranque y atienda la primera carga
     _t.daemon = True
     _t.start()
 
