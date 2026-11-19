@@ -1221,6 +1221,45 @@ table.dt th.sort-asc .sort-icon,table.dt th.sort-desc .sort-icon{opacity:1;color
   #rrgTable table.mk-tbl td:nth-child(n+3)::before{content:attr(data-l);display:block;font-size:9px;letter-spacing:.5px;color:var(--text-dim);margin-bottom:1px}
   .mk-card{padding:10px 10px}
 }
+/* ═══ DESARBITRAJES TAB ═══ */
+.ds-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.ds-ttl{font-family:var(--head);font-weight:900;font-size:14px;letter-spacing:3px;color:var(--accent)}
+.ds-sub{font-family:var(--mono);font-weight:400;font-size:11px;letter-spacing:0;color:var(--text-dim);margin-left:8px}
+.ds-ctrl{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ds-lbl{font-family:var(--mono);font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:6px}
+.ds-sel{width:auto!important;padding:4px 6px!important}
+.ds-in{background:var(--bg3);border:1px solid var(--border2);color:var(--text);padding:7px 9px;border-radius:2px;font-family:var(--mono);font-size:13px;width:100%;outline:none;box-sizing:border-box}
+.ds-in:focus{border-color:var(--accent)}
+.ds-in.ds-sm{padding:4px 7px;font-size:12px;width:auto}
+.ds-in.ds-locked{border-color:var(--accent);background:rgba(0,212,255,0.08);font-weight:700;color:var(--accent)}
+.ds-note{font-family:var(--mono);font-size:11px;color:var(--text-dim);margin:6px 0 10px}
+.ds-card{background:var(--bg2);border:1px solid var(--border);border-radius:2px;padding:12px 14px;margin-bottom:12px;min-width:0}
+.ds-card-h{font-family:var(--head);font-weight:900;font-size:13px;letter-spacing:2px;color:var(--accent);margin-bottom:10px}
+.ds-sec-t{font-family:var(--head);font-weight:700;font-size:11px;letter-spacing:1.5px;color:var(--text-dim);margin-bottom:6px;text-transform:uppercase}
+.ds-scroll{overflow:auto;max-height:520px}
+table.ds-tbl{min-width:1000px;table-layout:auto}
+table.ds-tbl thead th{position:sticky;top:0;z-index:2}
+.ds-two{display:grid;grid-template-columns:1.15fr 1fr;gap:12px;align-items:start}
+@media(max-width:1000px){.ds-two{grid-template-columns:1fr}}
+.ds-calc{display:grid;grid-template-columns:minmax(0,0.9fr) minmax(0,1.1fr);gap:12px}
+@media(max-width:700px){.ds-calc{grid-template-columns:1fr}}
+.ds-opts{display:flex;flex-direction:column;gap:6px}
+.ds-opt{text-align:left;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:3px;cursor:pointer;display:flex;flex-direction:column;gap:3px;font-family:var(--mono)}
+.ds-opt b{font-size:13px}.ds-opt small{font-size:11px;color:var(--text-dim);line-height:1.35}
+.ds-opt:hover{border-color:var(--accent2)}
+.ds-opt.on{border-color:var(--accent);background:rgba(0,212,255,0.08)}
+.ds-form-h{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;font-family:var(--head);font-size:13px}
+.ds-lock{font-family:var(--mono);font-size:10px;border:1px solid var(--accent2);color:var(--accent);padding:2px 8px;border-radius:999px}
+.ds-grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ds-fld label{display:block;font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-bottom:3px}
+.ds-howto{margin-top:10px;padding:9px 11px;border:1px solid var(--border);border-radius:3px;background:var(--bg3);font-family:var(--mono);font-size:11px;line-height:1.55;color:var(--text-dim)}
+.ds-howto b{color:var(--text)}
+.ds-tag{font-family:var(--mono);font-size:10px;padding:1px 7px;border-radius:999px;border:1px solid var(--border2)}
+.ds-hi{color:var(--green);border-color:var(--green2)}.ds-lo{color:var(--red);border-color:var(--red2)}.ds-flat{color:var(--text-dim)}
+.ds-dim{color:var(--text-dim)}
+.ds-rad{display:grid;grid-template-columns:70px 70px 1fr auto;gap:8px;align-items:center;padding:5px 6px;border-bottom:1px solid rgba(30,45,61,0.5);font-family:var(--mono);font-size:12px;cursor:pointer}
+.ds-rad:hover{background:rgba(0,212,255,0.05)}
+.tk-sym.ds-pick{cursor:pointer}
 </style>
 <style>
 /* ═══ DUBZ v2 ═══ */
@@ -1468,6 +1507,7 @@ a.dz-news:hover{background:var(--bg3)}
       <div class="tab" onclick="switchTab('rotation',this)">🔄 ROTACIÓN</div>
       <div class="tab" onclick="switchTab('technical',this)">TÉCNICO</div>
       <div class="tab" onclick="switchTab('all',this)">TODOS</div>
+      <div class="tab" onclick="switchTab('desarb',this)">⚖ DESARBITRAJES</div>
       <div class="tab" onclick="switchTab('cartera',this)">CARTERA</div>
       <div class="tab" onclick="switchTab('ia',this)">🤖 IA</div>
     </div>
@@ -1631,6 +1671,75 @@ a.dz-news:hover{background:var(--bg3)}
         </div>
       </div>
 
+    </div>
+
+    <!-- ⚖ DESARBITRAJES TAB -->
+    <div class="tab-panel" id="tab-desarb">
+      <div class="ds-top">
+        <div class="ds-ttl">⚖ DESARBITRAJES <span class="ds-sub">CEDEARs vs CCL · teórico = (USD ÷ ratio) × CCL</span></div>
+        <div class="ds-ctrl">
+          <input class="ds-in ds-sm" id="dsQ" placeholder="Buscar ticker…" style="width:120px" oninput="dsState.q=this.value.trim().toUpperCase();dsRender()">
+          <label class="ds-lbl">Mín. |desarb.
+            <select class="sel ds-sel" id="dsMin" onchange="dsState.minAbs=+this.value;dsRender()">
+              <option value="0">todos</option><option value="1">≥ 1%</option><option value="2">≥ 2%</option><option value="3">≥ 3%</option><option value="5">≥ 5%</option>
+            </select></label>
+          <label class="ds-lbl">Costo ida y vuelta %
+            <input class="ds-in ds-sm" id="dsCost" value="0.6" style="width:56px" oninput="dsCostChange(this.value)"></label>
+          <button class="btn btn-g btn-sm" onclick="dsRefresh(true)">↻ Actualizar</button>
+        </div>
+      </div>
+      <div class="sum-grid" id="dsSummary"></div>
+      <div class="ds-note" id="dsStatus"></div>
+
+      <div class="ds-card" style="padding:0">
+        <div class="ds-scroll">
+          <table class="dt ds-tbl">
+            <thead><tr id="dsHead"></tr></thead>
+            <tbody id="dsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="ds-two">
+        <div class="ds-card" id="dsCalcCard">
+          <div class="ds-card-h">🧮 CALCULADORA MANUAL <span class="ds-sub">elegí qué calcular y completá el resto</span></div>
+          <div class="ds-calc">
+            <div class="ds-opts">
+              <button class="ds-opt" data-t="ccl" onclick="dsSetTarget('ccl')"><b>CCL</b><small>CCL implícito a partir del CEDEAR, ratio y acción/ADR.</small></button>
+              <button class="ds-opt" data-t="usd" onclick="dsSetTarget('usd')"><b>Acción USA / ADR</b><small>Precio de la acción o ADR usando CCL, ratio y CEDEAR.</small></button>
+              <button class="ds-opt" data-t="cedear" onclick="dsSetTarget('cedear')"><b>CEDEAR local</b><small>Qué precio local debería tener el CEDEAR.</small></button>
+              <button class="ds-opt" data-t="ratio" onclick="dsSetTarget('ratio')"><b>Ratio</b><small>Ratio entre acción/ADR y CEDEAR.</small></button>
+              <button class="btn btn-g btn-sm" style="align-self:center" onclick="dsCalcReset()">Reiniciar</button>
+            </div>
+            <div class="ds-form">
+              <div class="ds-form-h"><div>Calculando: <b id="dsCalcName">CCL</b></div><span class="ds-lock">Resultado bloqueado</span></div>
+              <div class="ds-fld" style="margin-bottom:8px"><label>Ticker (opcional · autocompleta con datos en vivo)</label>
+                <input id="dsTk" list="dsTkList" class="ds-in" placeholder="AAPL" onchange="dsCalcFill()"><datalist id="dsTkList"></datalist></div>
+              <div class="ds-grid2">
+                <div class="ds-fld"><label>CCL</label><input class="ds-in" id="dsIn_ccl" inputmode="decimal" placeholder="0" oninput="dsCalc()"></div>
+                <div class="ds-fld"><label>Acción USA / ADR</label><input class="ds-in" id="dsIn_usd" inputmode="decimal" placeholder="0" oninput="dsCalc()"></div>
+                <div class="ds-fld"><label>CEDEAR local</label><input class="ds-in" id="dsIn_cedear" inputmode="decimal" placeholder="0" oninput="dsCalc()"></div>
+                <div class="ds-fld"><label>Ratio del CEDEAR</label><input class="ds-in" id="dsIn_ratio" inputmode="decimal" placeholder="0" oninput="dsCalc()"></div>
+              </div>
+              <div class="ds-howto" id="dsCalcNote"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ds-card">
+          <div class="ds-card-h">⚡ CONTADO INMEDIATO <span class="ds-sub">detección de desarbitrajes</span></div>
+          <div class="ds-sec-t">1 · Radar vs CCL (automático)</div>
+          <div id="dsRadar"></div>
+          <div class="ds-sec-t" style="margin-top:14px">2 · CI vs 24hs (manual)</div>
+          <div class="ds-grid2">
+            <div class="ds-fld"><label>Precio CI</label><input class="ds-in" id="dsCi_pci" inputmode="decimal" placeholder="0" oninput="dsCiCalc()"></div>
+            <div class="ds-fld"><label>Precio 24hs</label><input class="ds-in" id="dsCi_p24" inputmode="decimal" placeholder="0" oninput="dsCiCalc()"></div>
+            <div class="ds-fld"><label>Tasa caución TNA %</label><input class="ds-in" id="dsCi_tna" inputmode="decimal" placeholder="0" oninput="dsCiCalc()"></div>
+            <div class="ds-fld"><label>Plazo</label><select class="sel" id="dsCi_days" onchange="dsCiCalc()"><option value="1">1 día corrido</option><option value="3">3 días (viernes → lunes)</option></select></div>
+          </div>
+          <div class="ds-howto" id="dsCiOut"></div>
+        </div>
+      </div>
     </div>
 
     <div class="exp-bar">
@@ -2698,7 +2807,7 @@ async function refreshCedearArsPrices(symbols) {
       var res = (await postJSON('/preciobatch', {symbols: batch.map(function(s){ return s+'.BA'; })}, 45000)).results || {};
       batch.forEach(function(s){
         var r = res[s+'.BA'];
-        if (r && r.price) cedearArsPrices[s] = { price: r.price, ts: new Date() };
+        if (r && r.price) cedearArsPrices[s] = { price: r.price, chgPct: r.chgPct, prevClose: r.prevClose, ts: new Date() };
       });
     } catch(e) {}
   }
@@ -3058,7 +3167,7 @@ async function cargarCompleto() {
   var symsFaltanHL = allData.filter(function(d){ return d.dayHigh == null || d.yearHigh == null; }).map(function(d){ return d.symbol; });
   if (symsFaltanHL.length) fetchHighLow52Supplement(symsFaltanHL).then(applyHighLowSupplement);
   // Precio real ARS de los CEDEARs (para el desarbitraje) — best-effort, en background
-  refreshCedearArsPrices(symsParaHL).then(function(){ renderAllTab(); });
+  refreshCedearArsPrices(symsParaHL).then(function(){ renderAllTab(); if (typeof dsRender==='function') dsRender(); });
 }
 
 // ── AUTO-REFRESH ──────────────────────────────────
@@ -3105,7 +3214,7 @@ async function doRefresh() {
     allData.length+' tickers | Precios: '+new Date().toLocaleTimeString('es-AR');
   // Refrescar CCL y precios reales de CEDEARs (desarbitraje) en cada ciclo de refresh
   fetchCclAuto().then(function(){ renderAllTab(); });
-  refreshCedearArsPrices(allData.map(function(d){ return d.symbol; })).then(function(){ renderAllTab(); refreshInFlight = false; });
+  refreshCedearArsPrices(allData.map(function(d){ return d.symbol; })).then(function(){ renderAllTab(); if (typeof dsRender==='function') dsRender(); refreshInFlight = false; });
 }
 
 async function fetchPrecio(sym) {
@@ -3976,7 +4085,6 @@ function renderAllTab() {
         '<td>'+fcap(d.marketCap)+'</td>' +
         '<td>'+momCell(d.mom12m != null ? d.mom12m : d.mom6m)+'</td>' +
         '<td>'+canslimCell(d)+'</td>' +
-        cedearDesarbCells(d) +
         '<td style="text-align:center"><button class="tv-btn" onclick="openTVChart(\''+d.symbol+'\')">&#128200;</button></td>' +
         '</tr>';
     }).join('');
@@ -4002,9 +4110,6 @@ function renderAllTab() {
             '<th style="width:62px" onclick="tsMkt(\'gl\',\'marketCap\',this)">Cap<span class="sort-icon">⇅</span></th>' +
             '<th style="width:60px" onclick="tsMkt(\'gl\',\'mom12m\',this)">Mom12M<span class="sort-icon">⇅</span></th>' +
             '<th style="width:108px" ondblclick="window.canslimStats&&window.canslimStats()" title="CANSLIM ponderado (verde / amarillo / rojo). Doble clic: resultados históricos (admin)">&#9670; CANSLIM</th>' +
-            '<th style="width:82px" title="Precio teorico del CEDEAR en pesos: (precio USD de la accion / ratio de conversion) x dolar CCL. Sirve como precio de referencia para no comprar/vender el CEDEAR muy lejos de su valor justo.">CEDEAR Teor.</th>' +
-            '<th style="width:82px" title="Ultimo precio real del CEDEAR operado en BYMA, en pesos (via Yahoo Finance, con el mismo delay que el resto de la app).">CEDEAR Merc.</th>' +
-            '<th style="width:70px" title="Desarbitraje: diferencia % entre el precio real del CEDEAR y su precio teorico. Positivo = el CEDEAR cotiza mas caro que lo que justifica el CCL (cuidado al comprar). Negativo = cotiza mas barato (cuidado al vender).">Desarb.%</th>' +
             '<th style="width:44px;text-align:center">Chart</th>' +
           '</tr></thead>' +
           '<tbody>'+rows+'</tbody>' +
@@ -4708,6 +4813,7 @@ function switchTab(id,el){
   if (id === 'sectors' && _dirty.sectors) renderSectors();
   if (id === 'technical' && _dirty.technical) renderTech();
   if (id === 'all' && _dirty.all) renderAllTab();
+  if (id === 'desarb') dsOpen();
   if (id === 'market') { _dirty.market = false; loadMarketTab(false); }
   if (id === 'rotation') loadRotation(false);
   if (id === 'arg' && typeof argStart === 'function') argStart();
@@ -5844,6 +5950,271 @@ function cedearDesarbCells(d) {
     desarbCell = '<td style="color:var(--text-dim);text-align:right">—</td>';
   }
   return teoricoCell + realCell + desarbCell;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ── PESTAÑA DESARBITRAJES ──────────────────────────────────────────
+// Tabla de CEDEARs (USD, ARS, teórico, desarbitraje, CCL implícito),
+// calculadora manual y radar de contado inmediato.
+// Reutiliza: CEDEAR_RATIOS, cclRate, cedearArsPrices, allData.
+// ═══════════════════════════════════════════════════════════════════
+var dsState = { target:'ccl', q:'', minAbs:0, cost:0.6, sortF:'desarb', sortD:-1, ticker:'' };
+var DS_COLS = [
+  ['symbol','Ticker',70,'Ticker del CEDEAR (clic para cargarlo en la calculadora).'],
+  ['priceUsd','Acción USD',84,'Precio de la acción en EEUU (Yahoo Finance).'],
+  ['chgUsd','% Día USD',74,'Variación del día de la acción en EEUU.'],
+  ['ratio','Ratio',54,'Ratio de conversión CEDEAR : acción.'],
+  ['teorico','CEDEAR teórico',100,'(precio USD ÷ ratio) × CCL.'],
+  ['real','CEDEAR mercado',100,'Último precio del CEDEAR en BYMA (Yahoo, .BA).'],
+  ['chgArs','% Día ARS',74,'Variación del día del CEDEAR en pesos.'],
+  ['desarb','Desarb. %',76,'Mercado vs teórico. Positivo = CEDEAR caro; negativo = CEDEAR barato.'],
+  ['cclImp','CCL implícito',100,'CEDEAR × ratio ÷ acción USD: el dólar que "paga" el CEDEAR.'],
+  ['signal','Señal',100,'Supera el costo operativo ida y vuelta configurado arriba.'],
+  ['ts','Act.',54,'Hora de la última lectura del precio local.']
+];
+
+function dsEl(id){ return document.getElementById(id); }
+function dsNum(v){
+  if (v == null) return NaN;
+  var s = String(v).trim().replace(/\s/g,'');
+  if (!s) return NaN;
+  if (s.indexOf(',') > -1) s = s.replace(/\./g,'').replace(',','.');
+  return parseFloat(s);
+}
+function dsFmt(n){
+  if (n == null || isNaN(n)) return '';
+  return String(+(+n).toFixed(Math.abs(n) >= 100 ? 2 : 4));
+}
+function dsMedian(a){
+  if (!a.length) return null;
+  a = a.slice().sort(function(x,y){ return x-y; });
+  var m = a.length >> 1;
+  return a.length % 2 ? a[m] : (a[m-1] + a[m]) / 2;
+}
+function dsBymaOpen(){
+  var n = new Date();
+  var ar = new Date(n.getTime() + n.getTimezoneOffset()*60000 - 3*3600000); // hora Argentina
+  var dow = ar.getDay(), m = ar.getHours()*60 + ar.getMinutes();
+  return dow >= 1 && dow <= 5 && m >= 660 && m < 1020; // 11:00–17:00, sin contemplar feriados
+}
+function dsHHMM(d){ return d ? ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2) : '—'; }
+
+function dsRows(){
+  return (allData || []).filter(function(d){
+    return d.price != null && CEDEAR_RATIOS[(d.symbol||'').toUpperCase()];
+  }).map(function(d){
+    var sym = d.symbol.toUpperCase(), ratio = CEDEAR_RATIOS[sym], ars = cedearArsPrices[sym];
+    var teorico = cclRate != null ? d.price / ratio * cclRate : null;
+    var real = ars ? ars.price : null;
+    var desarb = (teorico && real != null) ? (real / teorico - 1) * 100 : null;
+    var cclImp = (real != null && d.price) ? real * ratio / d.price : null;
+    var r = { symbol:sym, sector:d.sector, priceUsd:d.price, chgUsd:d.chgPct, ratio:ratio, teorico:teorico,
+              real:real, chgArs:(ars && ars.chgPct != null) ? ars.chgPct : null, desarb:desarb, cclImp:cclImp,
+              ts:ars ? ars.ts : null };
+    r.signal = desarb == null ? null : Math.abs(desarb) - dsState.cost;
+    return r;
+  });
+}
+
+function dsSignal(r){
+  if (r.desarb == null) return '<span class="ds-dim">—</span>';
+  if (Math.abs(r.desarb) - dsState.cost <= 0) return '<span class="ds-tag ds-flat">en línea</span>';
+  return r.desarb > 0 ? '<span class="ds-tag ds-hi">CEDEAR caro</span>' : '<span class="ds-tag ds-lo">CEDEAR barato</span>';
+}
+function dsChg(v){
+  if (v == null) return '<span class="ds-dim">—</span>';
+  return '<span style="color:'+(v>=0?'var(--green)':'var(--red)')+'">'+(v>=0?'+':'')+f2(v)+'%</span>';
+}
+function dsSort(f){
+  if (dsState.sortF === f) dsState.sortD *= -1; else { dsState.sortF = f; dsState.sortD = -1; }
+  dsRender();
+}
+function dsCostChange(v){
+  var n = dsNum(v); dsState.cost = isNaN(n) ? 0 : n;
+  dsRender(); dsCiCalc();
+}
+
+function dsRender(){
+  var panel = dsEl('tab-desarb');
+  if (!panel || !panel.classList.contains('active')) return;
+  var rows = dsRows();
+
+  // ── resumen ──
+  var withData = rows.filter(function(r){ return r.desarb != null; });
+  var med = dsMedian(rows.filter(function(r){ return r.cclImp != null; }).map(function(r){ return r.cclImp; }));
+  var top = withData.slice().sort(function(a,b){ return b.desarb - a.desarb; });
+  var hi = top[0], lo = top[top.length-1];
+  function card(l,v,s,c){ return '<div class="sum-card"><div class="sum-lbl">'+l+'</div><div class="sum-val"'+(c?' style="color:'+c+'"':'')+'>'+v+'</div><div class="sum-sub">'+s+'</div></div>'; }
+  dsEl('dsSummary').innerHTML =
+    card('CCL referencia', cclRate != null ? '$ '+fp(cclRate) : '…', cclUpdatedAt ? 'act. '+dsHHMM(cclUpdatedAt) : 'cargando') +
+    card('CCL implícito (mediana)', med != null ? '$ '+fp(med) : '—', med != null && cclRate ? ((med/cclRate-1)*100>=0?'+':'')+f2((med/cclRate-1)*100)+'% vs ref.' : 'según precios de CEDEARs') +
+    card('CEDEARs con dato', withData.length+' / '+rows.length, 'precio local disponible') +
+    card('Mayor prima', hi && hi.desarb > 0 ? hi.symbol+' +'+f2(hi.desarb)+'%' : '—', 'CEDEAR más caro vs teórico', 'var(--green)') +
+    card('Mayor descuento', lo && lo.desarb < 0 ? lo.symbol+' '+f2(lo.desarb)+'%' : '—', 'CEDEAR más barato vs teórico', 'var(--red)');
+
+  var open = dsBymaOpen();
+  dsEl('dsStatus').innerHTML = (open ? '🟢 BYMA abierto' : '🔴 BYMA cerrado (se comparan últimos cierres; no contempla feriados)') +
+    ' · Los precios de Yahoo llegan con demora, por eso el desarbitraje es orientativo: confirmá en tu broker antes de operar.';
+
+  // ── datalist de tickers ──
+  var dl = dsEl('dsTkList');
+  if (dl && dl.getAttribute('data-n') != String(rows.length)) {
+    dl.innerHTML = rows.map(function(r){ return '<option value="'+r.symbol+'">'; }).join('');
+    dl.setAttribute('data-n', rows.length);
+  }
+
+  // ── tabla ──
+  dsEl('dsHead').innerHTML = DS_COLS.map(function(c){
+    var on = dsState.sortF === c[0];
+    return '<th style="min-width:'+c[2]+'px" title="'+c[3]+'" onclick="dsSort(\''+c[0]+'\')"'+(on?' class="'+(dsState.sortD===-1?'sort-desc':'sort-asc')+'"':'')+'>'+c[1]+
+      '<span class="sort-icon">'+(on?(dsState.sortD===-1?'↓':'↑'):'⇅')+'</span></th>';
+  }).join('');
+
+  var f = rows.filter(function(r){
+    if (dsState.q && r.symbol.indexOf(dsState.q) === -1) return false;
+    if (dsState.minAbs > 0 && (r.desarb == null || Math.abs(r.desarb) < dsState.minAbs)) return false;
+    return true;
+  });
+  var sf = dsState.sortF, sd = dsState.sortD;
+  f.sort(function(a,b){
+    var av = a[sf], bv = b[sf];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1; if (bv == null) return -1;
+    if (sf === 'ts') { av = +av; bv = +bv; }
+    if (typeof av === 'string') return av.localeCompare(bv) * sd;
+    return (av - bv) * sd;
+  });
+  dsEl('dsBody').innerHTML = f.length ? f.map(function(r){
+    var dcol = r.desarb == null ? 'var(--text-dim)' : (Math.abs(r.desarb) < 1 ? 'var(--text-dim)' : (r.desarb > 0 ? 'var(--green)' : 'var(--red)'));
+    return '<tr>' +
+      '<td><span class="tk-sym ds-pick" title="Cargar en la calculadora" onclick="dsPick(\''+r.symbol+'\')">'+r.symbol+'</span></td>' +
+      '<td>'+fp(r.priceUsd)+'</td>' +
+      '<td>'+dsChg(r.chgUsd)+'</td>' +
+      '<td>'+r.ratio+':1</td>' +
+      '<td>'+(r.teorico != null ? '$ '+fp(r.teorico) : '<span class="ds-dim">…</span>')+'</td>' +
+      '<td>'+(r.real != null ? '$ '+fp(r.real) : '<span class="ds-dim">—</span>')+'</td>' +
+      '<td>'+dsChg(r.chgArs)+'</td>' +
+      '<td style="color:'+dcol+';font-weight:600">'+(r.desarb != null ? (r.desarb>=0?'+':'')+f2(r.desarb)+'%' : '—')+'</td>' +
+      '<td>'+(r.cclImp != null ? '$ '+fp(r.cclImp) : '<span class="ds-dim">—</span>')+'</td>' +
+      '<td>'+dsSignal(r)+'</td>' +
+      '<td class="ds-dim">'+dsHHMM(r.ts)+'</td></tr>';
+  }).join('') : '<tr><td colspan="'+DS_COLS.length+'" style="text-align:center;color:var(--text-dim);padding:22px">'+
+      (rows.length ? 'Ningún CEDEAR cumple el filtro.' : 'Sin CEDEARs todavía: esperá a que carguen los tickers, el CCL y los ratios.')+'</td></tr>';
+
+  // ── radar ──
+  var rad = withData.filter(function(r){ return Math.abs(r.desarb) - dsState.cost > 0; })
+    .sort(function(a,b){ return Math.abs(b.desarb) - Math.abs(a.desarb); }).slice(0, 8);
+  dsEl('dsRadar').innerHTML = (rad.length ? rad.map(function(r){
+    return '<div class="ds-rad" onclick="dsPick(\''+r.symbol+'\')"><b>'+r.symbol+'</b>' +
+      '<span style="color:'+(r.desarb>0?'var(--green)':'var(--red)')+'">'+(r.desarb>=0?'+':'')+f2(r.desarb)+'%</span>' +
+      '<span class="ds-dim">CCL impl. $ '+fp(r.cclImp)+'</span>'+dsSignal(r)+'</div>';
+  }).join('') : '<div class="ds-howto" style="margin-top:0">'+(withData.length ? 'Ningún CEDEAR supera el costo operativo ('+f2(dsState.cost)+'%). Todo en línea.' : 'Esperando precios locales…')+'</div>') +
+    '<div class="ds-note" style="margin-bottom:0">CCL implícito &lt; referencia ⇒ CEDEAR barato; &gt; referencia ⇒ CEDEAR caro. Yahoo no distingue plazo (CI/24hs): usalo como pista y verificá en el broker.</div>';
+}
+
+async function dsRefresh(force){
+  var st = dsEl('dsStatus'); if (st) st.textContent = 'Actualizando CCL y precios…';
+  if (force) _cedArsAt = 0;
+  try {
+    await fetchCclAuto();
+    if (!cedearRatiosLoaded) await fetchCedearRatios();
+    await refreshCedearArsPrices((allData || []).map(function(d){ return d.symbol; }));
+  } catch(e) {}
+  dsRender();
+}
+var _dsInit = false;
+function dsOpen(){
+  if (!_dsInit) { _dsInit = true; dsCalcRender(); dsCiCalc(); }
+  dsRender();
+  if (cclRate == null || !Object.keys(cedearArsPrices).length || !cedearRatiosLoaded) dsRefresh(false);
+}
+
+// ── CALCULADORA MANUAL ──
+var DS_NAMES = { ccl:'CCL', usd:'Acción USA / ADR', cedear:'CEDEAR local', ratio:'Ratio' };
+var DS_KEYS = ['ccl','usd','cedear','ratio'];
+function dsSetTarget(t){ dsState.target = t; dsCalcRender(); dsCalc(); }
+function dsCalcRender(){
+  var t = dsState.target;
+  document.querySelectorAll('.ds-opt').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t') === t); });
+  dsEl('dsCalcName').textContent = DS_NAMES[t];
+  DS_KEYS.forEach(function(k){
+    var i = dsEl('dsIn_'+k); i.readOnly = (k === t); i.classList.toggle('ds-locked', k === t);
+  });
+  dsCalc();
+}
+function dsLive(){
+  var live = { ccl: cclRate };
+  var r = dsRows().filter(function(x){ return x.symbol === dsState.ticker; })[0];
+  if (r) { live.usd = r.priceUsd; live.cedear = r.real; live.ratio = r.ratio; }
+  return live;
+}
+function dsCalc(){
+  var t = dsState.target, v = {}, note = dsEl('dsCalcNote'), tgt = dsEl('dsIn_'+t);
+  DS_KEYS.forEach(function(k){ v[k] = dsNum(dsEl('dsIn_'+k).value); });
+  var missing = DS_KEYS.filter(function(k){ return k !== t && !(v[k] > 0); });
+  if (missing.length) {
+    tgt.value = '';
+    note.innerHTML = '<b>¿Cómo usarla?</b><br>Seleccioná el dato que querés obtener. Ese campo queda bloqueado como resultado y se completa automáticamente cuando ingresás los otros tres valores.';
+    return;
+  }
+  var r;
+  if (t === 'ccl') r = v.cedear * v.ratio / v.usd;
+  else if (t === 'usd') r = v.cedear * v.ratio / v.ccl;
+  else if (t === 'cedear') r = v.usd / v.ratio * v.ccl;
+  else r = v.usd * v.ccl / v.cedear;
+  tgt.value = dsFmt(r);
+  var formulas = { ccl:'CCL = CEDEAR × ratio ÷ acción USD', usd:'Acción USD = CEDEAR × ratio ÷ CCL',
+                   cedear:'CEDEAR = (acción USD ÷ ratio) × CCL', ratio:'Ratio = acción USD × CCL ÷ CEDEAR' };
+  var ref = dsLive()[t], cmp = '';
+  if (ref != null && ref > 0) {
+    var dif = (r / ref - 1) * 100;
+    cmp = '<br>En vivo: <b>'+dsFmt(ref)+'</b> · el valor calculado está <b>'+(dif>=0?'+':'')+dif.toFixed(2)+'%</b> '+(dif>=0?'arriba':'abajo')+' del mercado.';
+  }
+  note.innerHTML = '<b>'+formulas[t]+'</b>'+cmp;
+}
+function dsCalcFill(){
+  var el = dsEl('dsTk'), sym = ((el && el.value) || '').trim().toUpperCase();
+  dsState.ticker = sym;
+  var r = dsRows().filter(function(x){ return x.symbol === sym; })[0];
+  if (!r) { dsEl('dsCalcNote').innerHTML = 'Ese ticker no tiene ratio o precio cargado todavía.'; return; }
+  var live = { ccl:cclRate, usd:r.priceUsd, cedear:r.real, ratio:r.ratio };
+  DS_KEYS.forEach(function(k){ if (live[k] != null) dsEl('dsIn_'+k).value = dsFmt(live[k]); });
+  dsCalc();
+}
+function dsPick(sym){
+  var el = dsEl('dsTk'); if (el) el.value = sym;
+  dsCalcFill();
+  var c = dsEl('dsCalcCard'); if (c && c.scrollIntoView) c.scrollIntoView({behavior:'smooth', block:'center'});
+}
+function dsCalcReset(){
+  DS_KEYS.forEach(function(k){ dsEl('dsIn_'+k).value = ''; });
+  var el = dsEl('dsTk'); if (el) el.value = '';
+  dsState.ticker = '';
+  dsCalc();
+}
+
+// ── CI vs 24hs (manual) ──
+function dsCiCalc(){
+  var out = dsEl('dsCiOut'); if (!out) return;
+  var pci = dsNum(dsEl('dsCi_pci').value), p24 = dsNum(dsEl('dsCi_p24').value);
+  var tna = dsNum(dsEl('dsCi_tna').value), days = +dsEl('dsCi_days').value;
+  if (!(pci > 0 && p24 > 0)) {
+    out.innerHTML = '<b>¿Cómo usarla?</b><br>Cargá el precio del mismo papel en contado inmediato y a 24hs. Se calcula la tasa implícita y se compara contra la caución más tus costos.';
+    return;
+  }
+  var spread = (p24 / pci - 1) * 100, tnaImp = spread * 365 / days;
+  var cau = isNaN(tna) ? 0 : tna * days / 365, cost = dsState.cost;
+  var html = 'Diferencia 24hs vs CI: <b>'+(spread>=0?'+':'')+spread.toFixed(3)+'%</b> en '+days+' día(s) · tasa implícita <b>'+tnaImp.toFixed(1)+'% TNA</b><br>';
+  var net, good;
+  if (spread >= 0) {
+    net = spread - cost - cau; good = net > 0;
+    html += 'Comprar en CI y vender a 24hs, frente a colocar en caución ('+cau.toFixed(3)+'% en el plazo) y descontando costos ('+cost.toFixed(2)+'%): ';
+  } else {
+    net = -spread - cost; good = net > 0;
+    html += 'CI cotiza <b>por encima</b> de 24hs. Si ya tenés el papel, vender en CI y recomprar a 24hs, descontando costos ('+cost.toFixed(2)+'%): ';
+  }
+  html += '<b style="color:'+(good?'var(--green)':'var(--red)')+'">'+(net>=0?'+':'')+net.toFixed(3)+'% neto → '+(good?'hay desarbitraje':'no conviene')+'</b>';
+  out.innerHTML = html;
 }
 
 // No hacer window.onload — la app se inicia desde Firebase onAuthStateChanged
