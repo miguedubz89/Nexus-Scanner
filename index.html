@@ -1712,14 +1712,14 @@ a.dz-news:hover{background:var(--bg3)}
               <button class="btn btn-g btn-sm" style="align-self:center" onclick="dsCalcReset()">Reiniciar</button>
             </div>
             <div class="ds-form">
-              <div class="ds-form-h"><div>Calculando: <b id="dsCalcName">CCL</b></div><span class="ds-lock">Resultado bloqueado</span></div>
+              <div class="ds-form-h"><div>Calculando: <b id="dsCalcName">CCL</b></div><span class="ds-lock">Resultado automático · editable</span></div>
               <div class="ds-fld" style="margin-bottom:8px"><label>Ticker (opcional · autocompleta con datos en vivo)</label>
                 <input id="dsTk" list="dsTkList" class="ds-in" placeholder="AAPL" onchange="dsCalcFill()"><datalist id="dsTkList"></datalist></div>
               <div class="ds-grid2">
-                <div class="ds-fld"><label>CCL</label><input class="ds-in" id="dsIn_ccl" inputmode="decimal" placeholder="0" oninput="dsCalc()"></div>
-                <div class="ds-fld"><label>Acción USA / ADR</label><input class="ds-in" id="dsIn_usd" inputmode="decimal" placeholder="0" oninput="dsCalc()"></div>
-                <div class="ds-fld"><label>CEDEAR local</label><input class="ds-in" id="dsIn_cedear" inputmode="decimal" placeholder="0" oninput="dsCalc()"></div>
-                <div class="ds-fld"><label>Ratio del CEDEAR</label><input class="ds-in" id="dsIn_ratio" inputmode="decimal" placeholder="0" oninput="dsCalc()"></div>
+                <div class="ds-fld"><label>CCL</label><input class="ds-in" id="dsIn_ccl" inputmode="decimal" placeholder="0" oninput="dsOnIn('ccl')"></div>
+                <div class="ds-fld"><label>Acción USA / ADR</label><input class="ds-in" id="dsIn_usd" inputmode="decimal" placeholder="0" oninput="dsOnIn('usd')"></div>
+                <div class="ds-fld"><label>CEDEAR local</label><input class="ds-in" id="dsIn_cedear" inputmode="decimal" placeholder="0" oninput="dsOnIn('cedear')"></div>
+                <div class="ds-fld"><label>Ratio del CEDEAR</label><input class="ds-in" id="dsIn_ratio" inputmode="decimal" placeholder="0" oninput="dsOnIn('ratio')"></div>
               </div>
               <div class="ds-howto" id="dsCalcNote"></div>
             </div>
@@ -6138,7 +6138,7 @@ function dsCalcRender(){
   document.querySelectorAll('.ds-opt').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-t') === t); });
   dsEl('dsCalcName').textContent = DS_NAMES[t];
   DS_KEYS.forEach(function(k){
-    var i = dsEl('dsIn_'+k); i.readOnly = (k === t); i.classList.toggle('ds-locked', k === t);
+    var i = dsEl('dsIn_'+k); i.readOnly = false; i.classList.toggle('ds-locked', k === t); if (k !== t) i.dataset.auto = '0';
   });
   dsCalc();
 }
@@ -6148,13 +6148,17 @@ function dsLive(){
   if (r) { live.usd = r.priceUsd; live.cedear = r.real; live.ratio = r.ratio; }
   return live;
 }
+function dsOnIn(k){
+  if (k === dsState.target) { dsEl('dsIn_'+k).dataset.auto = '0'; return; } // editó el resultado a mano: no lo pisamos
+  dsCalc();
+}
 function dsCalc(){
   var t = dsState.target, v = {}, note = dsEl('dsCalcNote'), tgt = dsEl('dsIn_'+t);
   DS_KEYS.forEach(function(k){ v[k] = dsNum(dsEl('dsIn_'+k).value); });
   var missing = DS_KEYS.filter(function(k){ return k !== t && !(v[k] > 0); });
   if (missing.length) {
-    tgt.value = '';
-    note.innerHTML = '<b>¿Cómo usarla?</b><br>Seleccioná el dato que querés obtener. Ese campo queda bloqueado como resultado y se completa automáticamente cuando ingresás los otros tres valores.';
+    if (tgt.dataset.auto === '1') { tgt.value = ''; tgt.dataset.auto = '0'; }
+    note.innerHTML = '<b>¿Cómo usarla?</b><br>Seleccioná el dato que querés obtener y completá los otros tres a mano (el precio de la acción también, p. ej. para un papel sin datos en vivo). El campo elegido se completa solo, pero lo podés editar cuando quieras.';
     return;
   }
   var r;
@@ -6162,7 +6166,7 @@ function dsCalc(){
   else if (t === 'usd') r = v.cedear * v.ratio / v.ccl;
   else if (t === 'cedear') r = v.usd / v.ratio * v.ccl;
   else r = v.usd * v.ccl / v.cedear;
-  tgt.value = dsFmt(r);
+  tgt.value = dsFmt(r); tgt.dataset.auto = '1';
   var formulas = { ccl:'CCL = CEDEAR × ratio ÷ acción USD', usd:'Acción USD = CEDEAR × ratio ÷ CCL',
                    cedear:'CEDEAR = (acción USD ÷ ratio) × CCL', ratio:'Ratio = acción USD × CCL ÷ CEDEAR' };
   var ref = dsLive()[t], cmp = '';
@@ -6176,7 +6180,7 @@ function dsCalcFill(){
   var el = dsEl('dsTk'), sym = ((el && el.value) || '').trim().toUpperCase();
   dsState.ticker = sym;
   var r = dsRows().filter(function(x){ return x.symbol === sym; })[0];
-  if (!r) { dsEl('dsCalcNote').innerHTML = 'Ese ticker no tiene ratio o precio cargado todavía.'; return; }
+  if (!r) { dsState.ticker = ''; dsEl('dsCalcNote').innerHTML = '<b>'+(sym||'Ese ticker')+'</b> no tiene datos en vivo todavía: cargá los valores a mano (incluido el precio de la acción en USD).'; return; }
   var live = { ccl:cclRate, usd:r.priceUsd, cedear:r.real, ratio:r.ratio };
   DS_KEYS.forEach(function(k){ if (live[k] != null) dsEl('dsIn_'+k).value = dsFmt(live[k]); });
   dsCalc();
